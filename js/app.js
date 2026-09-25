@@ -22,6 +22,7 @@
   let timerId = null;
   let paused = false;
   let calMonth = null; // { y, m } som visas i arkivet
+  let undoStack = []; // ändringar som kan ångras i det öppna korsordet
   const puzzleCache = new Map();
 
   // ---------- Lagring ----------
@@ -109,6 +110,7 @@
       });
     }
     paused = false;
+    undoStack = [];
     try { history.replaceState(null, "", `#${date}/${level}`); } catch { /* inbäddad vy */ }
     setup();
   }
@@ -140,8 +142,13 @@
   function renderHeader() {
     const isToday = state.date === todayKey();
     const yesterday = state.date === addDays(todayKey(), -1);
-    $("kicker").textContent = isToday ? "Idag" : yesterday ? "Igår" : "Arkiv";
-    $("date-title").textContent = longDate(state.date);
+    const d = fromKey(state.date);
+    const weekday = d.toLocaleDateString("sv-SE", { weekday: "long" });
+    const dateOpts = { day: "numeric", month: "long" };
+    if (d.getFullYear() !== new Date().getFullYear()) dateOpts.year = "numeric";
+    const date = d.toLocaleDateString("sv-SE", dateOpts);
+    $("date-title").textContent = isToday ? "Idag" : yesterday ? "Igår" : weekday.charAt(0).toUpperCase() + weekday.slice(1);
+    $("kicker").textContent = isToday || yesterday ? `${weekday} ${date}` : date;
     $("prev-day").disabled = state.date <= FIRST_DAY;
     $("next-day").disabled = isToday;
     const all = progressAll();
@@ -219,6 +226,8 @@
     $("cc-num").textContent = cw ? `${cw.number} ${DIR_NAME[cw.dir]}` : "";
     $("cc-clue").textContent = cw ? `${cw.clue} (${cw.word.length})` : "";
     $("btn-solve").textContent = state.done ? "Visa lösningen" : "Ge upp och visa lösningen";
+    $("btn-undo").disabled = state.done || !undoStack.length;
+    for (const id of ["btn-erase", "btn-check", "btn-letter"]) $(id).disabled = state.done;
   }
 
   function scrollClueIntoView() {
@@ -240,6 +249,7 @@
     }
     update();
     scrollClueIntoView();
+    focusInput();
   }
 
   function selectWord(i) {
@@ -252,6 +262,7 @@
     state.dir = w.dir;
     update();
     scrollClueIntoView();
+    focusInput();
   }
 
   function stepWord(delta) {
@@ -288,10 +299,33 @@
   }
 
   // ---------- Inmatning ----------
+  // Sparar hur rutorna såg ut innan en ändring, så att den kan ångras.
+  function remember(cells) {
+    undoStack.push({
+      cells: cells.map(([r, c]) => [r, c, state.entries[r][c], state.revealed[r][c], state.wrong[r][c]]),
+      sel: { ...state.sel }, dir: state.dir, hints: state.hints,
+    });
+    if (undoStack.length > 200) undoStack.shift();
+  }
+
+  function undo() {
+    if (state.done || paused || !undoStack.length) return;
+    const step = undoStack.pop();
+    for (const [r, c, entry, revealed, wrong] of step.cells) {
+      state.entries[r][c] = entry;
+      state.revealed[r][c] = revealed;
+      state.wrong[r][c] = wrong;
+    }
+    Object.assign(state, { sel: step.sel, dir: step.dir, hints: step.hints, warnedFull: false });
+    update();
+    save();
+  }
+
   function typeLetter(ch) {
     if (!playable()) return;
     const { r, c } = state.sel;
     if (!state.revealed[r][c]) {
+      if (state.entries[r][c] !== ch) remember([[r, c]]);
       state.entries[r][c] = ch;
       state.wrong[r][c] = false;
       const el = cellEls[r][c];
@@ -306,13 +340,30 @@
     if (!playable()) return;
     const { r, c } = state.sel;
     if (state.entries[r][c] && !state.revealed[r][c]) {
+      remember([[r, c]]);
       state.entries[r][c] = "";
     } else if (moveWithinWord(-1)) {
       const { r: pr, c: pc } = state.sel;
-      if (!state.revealed[pr][pc]) state.entries[pr][pc] = "";
+      if (state.entries[pr][pc] && !state.revealed[pr][pc]) {
+        remember([[pr, pc]]);
+        state.entries[pr][pc] = "";
+      }
       state.wrong[pr][pc] = false;
     }
     state.wrong[r][c] = false;
+    update();
+    save();
+  }
+
+  // Sudda: tömmer rutan, eller hela ordet om rutan redan är tom.
+  function erase() {
+    if (!playable()) return;
+    const { r, c } = state.sel;
+    const cells = (state.entries[r][c] ? [[r, c]] : cellsOf(currentWord()))
+      .filter(([rr, cc]) => state.entries[rr][cc] && !state.revealed[rr][cc]);
+    if (!cells.length) return;
+    remember(cells);
+    for (const [rr, cc] of cells) { state.entries[rr][cc] = ""; state.wrong[rr][cc] = false; }
     update();
     save();
   }
@@ -353,6 +404,7 @@
 
   function reveal(cells) {
     let changed = false;
+    remember(cells);
     for (const [r, c] of cells) {
       if (state.entries[r][c] === state.puzzle.grid[r][c]) continue;
       state.entries[r][c] = state.puzzle.grid[r][c];
@@ -361,6 +413,7 @@
       changed = true;
     }
     if (changed) state.hints++;
+    else undoStack.pop();
     update();
     afterChange();
   }
@@ -384,6 +437,7 @@
       seconds: 0, hints: 0, done: false, gaveUp: false, warnedFull: false,
     });
     boardEl.classList.remove("solved");
+    undoStack = [];
     save();
     renderHeader();
     update();
@@ -546,6 +600,7 @@
   function setPaused(value) {
     if (state.done && value) return;
     paused = value;
+    if (paused) kbInput.blur();
     renderPause();
     if (paused) { stopTimer(); save(); } else startTimer();
   }
@@ -589,25 +644,6 @@
     });
   }
 
-  function buildKeyboard() {
-    const rows = ["QWERTYUIOPÅ", "ASDFGHJKLÖÄ", "ZXCVBNM⌫"];
-    const kb = $("keyboard");
-    for (const row of rows) {
-      const rowEl = document.createElement("div");
-      rowEl.className = "kb-row";
-      for (const k of row) {
-        const b = document.createElement("button");
-        b.className = "key" + (k === "⌫" ? " wide" : "");
-        if (k === "⌫") b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5H20a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H8.5L2.5 12z"/><path d="M11.5 9.5l5 5M16.5 9.5l-5 5"/></svg>';
-        else b.textContent = k;
-        b.setAttribute("aria-label", k === "⌫" ? "Sudda" : k);
-        b.addEventListener("click", () => (k === "⌫" ? backspace() : typeLetter(k)));
-        rowEl.appendChild(b);
-      }
-      kb.appendChild(rowEl);
-    }
-  }
-
   // ---------- Tema ----------
   function applyTheme() {
     const t = prefs().theme;
@@ -634,21 +670,100 @@
     }
   }
 
-  // ---------- Händelser ----------
+  // ---------- Tangentbord (iOS-tangentbordet och externa tangentbord) ----------
+  // Ett osynligt textfält tar emot det som skrivs. Det innehåller alltid ett mellanslag,
+  // så att även radering på ett tomt fält ger en händelse på iOS.
+  const kbInput = $("kb-input");
+  const SENTINEL = " ";
+  const vv = window.visualViewport;
+
+  function resetInput() {
+    if (kbInput.value !== SENTINEL) kbInput.value = SENTINEL;
+    try { kbInput.setSelectionRange(1, 1); } catch { /* äldre webbläsare */ }
+  }
+  function focusInput() {
+    if (!state || !playable()) return;
+    if (document.activeElement !== kbInput) kbInput.focus({ preventScroll: true });
+    resetInput();
+  }
+  function toLetter(ch) {
+    const up = ch.toUpperCase();
+    if (/^[A-ZÅÄÖ]$/.test(up)) return up;
+    const base = up.normalize("NFD")[0]; // é → E, ü → U
+    return /^[A-Z]$/.test(base) ? base : null;
+  }
+  function handleText(text) {
+    for (const ch of text) {
+      if (ch === " ") selectCell(state.sel.r, state.sel.c);
+      else { const l = toLetter(ch); if (l) typeLetter(l); }
+    }
+  }
+  // Reserv för när webbläsaren inte låter oss stoppa inmatningen (t.ex. under komposition).
+  function flushInput() {
+    const v = kbInput.value;
+    if (v === SENTINEL) return;
+    if (v.length < SENTINEL.length) backspace();
+    else handleText(v.startsWith(SENTINEL) ? v.slice(SENTINEL.length) : v);
+    resetInput();
+  }
+  kbInput.addEventListener("beforeinput", (e) => {
+    const t = e.inputType || "";
+    if (t === "insertText" || t === "insertReplacementText") {
+      e.preventDefault();
+      handleText(e.data || (e.dataTransfer ? e.dataTransfer.getData("text") : ""));
+    } else if (t.startsWith("delete")) {
+      e.preventDefault();
+      backspace();
+    } else if (t === "insertLineBreak" || t === "insertParagraph") {
+      e.preventDefault();
+      stepWord(1);
+    }
+  });
+  kbInput.addEventListener("input", (e) => { if (!e.isComposing) flushInput(); });
+  kbInput.addEventListener("compositionend", flushInput);
+  kbInput.addEventListener("focus", () => { document.body.classList.add("typing"); resetInput(); syncViewport(); });
+  kbInput.addEventListener("blur", () => { document.body.classList.remove("typing"); syncViewport(); });
+
   document.addEventListener("keydown", (e) => {
-    if (document.querySelector("dialog[open]") || e.ctrlKey || e.metaKey || e.altKey || paused) return;
+    if (document.querySelector("dialog[open]") || !state) return;
     const k = e.key;
-    if (k === "Escape") return setCluesOpen(false);
-    if (/^[a-zåäö]$/i.test(k)) { typeLetter(k.toUpperCase()); e.preventDefault(); }
-    else if (k === "Backspace" || k === "Delete") { backspace(); e.preventDefault(); }
-    else if (k === "ArrowRight") { arrow(0, 1); e.preventDefault(); }
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && k.toLowerCase() === "z") { undo(); e.preventDefault(); return; }
+    if (e.ctrlKey || e.metaKey || e.altKey || paused || e.isComposing) return;
+    const fromInput = e.target === kbInput;
+    if (k === "Escape") { if (document.body.classList.contains("clues-open")) setCluesOpen(false); else kbInput.blur(); return; }
+    if (k === "ArrowRight") { arrow(0, 1); e.preventDefault(); }
     else if (k === "ArrowLeft") { arrow(0, -1); e.preventDefault(); }
     else if (k === "ArrowDown") { arrow(1, 0); e.preventDefault(); }
     else if (k === "ArrowUp") { arrow(-1, 0); e.preventDefault(); }
     else if (k === "Tab" || k === "Enter") { stepWord(e.shiftKey ? -1 : 1); e.preventDefault(); }
     else if (k === " ") { selectCell(state.sel.r, state.sel.c); e.preventDefault(); }
+    else if (!fromInput && (k === "Backspace" || k === "Delete")) { backspace(); e.preventDefault(); }
+    else if (!fromInput && k.length === 1 && toLetter(k)) { typeLetter(toLetter(k)); e.preventDefault(); }
   });
 
+  // Anpassa appens höjd efter det som syns när iOS-tangentbordet är uppe.
+  function syncViewport() {
+    const typing = document.activeElement === kbInput;
+    if (vv && Math.abs(vv.scale - 1) < 0.01) {
+      document.documentElement.style.setProperty("--app-h", Math.round(vv.height) + "px");
+      const kbOpen = typing && document.documentElement.clientHeight - vv.height > 120;
+      document.body.classList.toggle("kb-open", kbOpen);
+      document.body.classList.toggle("compact", kbOpen && vv.height < 720);
+    }
+    if (window.scrollY) window.scrollTo(0, 0);
+  }
+  if (vv) { vv.addEventListener("resize", syncViewport); vv.addEventListener("scroll", syncViewport); }
+  window.addEventListener("resize", syncViewport);
+
+  // Knappar under rutnätet ska inte ta fokus från fältet, annars stängs tangentbordet.
+  document.querySelectorAll(".tool, .cc-nav, .cc-text").forEach((b) =>
+    b.addEventListener("pointerdown", (e) => { if (document.activeElement === kbInput) e.preventDefault(); })
+  );
+  $("kb-toggle").addEventListener("click", () => (document.activeElement === kbInput ? kbInput.blur() : focusInput()));
+  // Tryck bredvid rutnätet för att fälla ner tangentbordet.
+  $("board-area").addEventListener("click", (e) => { if (!e.target.closest(".cell.letter, .paused")) kbInput.blur(); });
+
+  // ---------- Händelser ----------
   document.querySelectorAll("#difficulty button").forEach((b) =>
     b.addEventListener("click", () => b.dataset.level !== state.level && open(state.date, b.dataset.level))
   );
@@ -656,8 +771,10 @@
   $("next-day").addEventListener("click", () => state.date < todayKey() && open(addDays(state.date, 1), state.level));
   $("btn-check").addEventListener("click", () => playable() && check());
   $("btn-letter").addEventListener("click", () => playable() && reveal([[state.sel.r, state.sel.c]]));
-  $("btn-word").addEventListener("click", () => playable() && reveal(cellsOf(currentWord())));
-  $("btn-more").addEventListener("click", () => $("more-dialog").showModal());
+  $("btn-undo").addEventListener("click", undo);
+  $("btn-erase").addEventListener("click", erase);
+  $("btn-word").addEventListener("click", () => { $("more-dialog").close(); if (playable()) reveal(cellsOf(currentWord())); });
+  $("btn-more").addEventListener("click", () => { kbInput.blur(); $("more-dialog").showModal(); });
   $("btn-reset").addEventListener("click", async () => {
     $("more-dialog").close();
     if (await confirmBox("Börja om?", "Allt du fyllt i rensas och tiden nollställs.", "Börja om")) resetPuzzle();
@@ -678,8 +795,8 @@
   document.querySelectorAll("#theme-picker button").forEach((b) =>
     b.addEventListener("click", () => { setPref("theme", b.dataset.themeValue); applyTheme(); renderThemePicker(); })
   );
-  $("btn-clues").addEventListener("click", () => setCluesOpen(true));
-  $("cc-open").addEventListener("click", () => setCluesOpen(true));
+  $("btn-clues").addEventListener("click", () => { $("more-dialog").close(); setCluesOpen(true); });
+  $("cc-open").addEventListener("click", () => { kbInput.blur(); setCluesOpen(true); });
   $("clues-close").addEventListener("click", () => setCluesOpen(false));
   $("scrim").addEventListener("click", () => setCluesOpen(false));
   // Stäng ark med "Klar"/"Avbryt" eller genom att trycka utanför.
@@ -704,7 +821,6 @@
 
   // ---------- Start ----------
   applyTheme();
-  buildKeyboard();
   const firstVisit = !load(PREFS_KEY);
   const startAt = fromHash() || { date: todayKey(), level: LEVELS[prefs().level] ? prefs().level : "medium" };
   open(startAt.date, startAt.level);

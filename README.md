@@ -7,8 +7,8 @@ Ett nytt korsord varje dag med ord från högskoleprovets ORD-del – upplagt so
 - Tre nya korsord varje dag (Lätt / Medel / Svår), med pilar för att bläddra mellan dagar
 - Arkiv med kalender där du ser vilka dagar du löst och kan spela missade korsord
 - Timer med paus, och en svit (🔥 dagar i rad) i statistiken
-- Svenskt tangentbord med Å, Ä och Ö på mobilen, och vanligt tangentbord på datorn (piltangenter, Tab/Enter för nästa ord, mellanslag byter riktning)
-- Hjälp: kontrollera, visa bokstav, visa ord, rensa eller ge upp
+- Skriv med iPhonens/iPadens eget tangentbord eller ett externt tangentbord som Magic Keyboard (piltangenter, Tab/Enter för nästa ord, mellanslag byter riktning, ⌘Z ångrar)
+- Verktyg som i en sudoku-app: ångra, sudda, kontrollera, tips, visa ord, börja om eller ge upp
 - En ordlista med alla ord och deras betydelser när korsordet är klart
 - Statistik: lösta korsord, lösta utan hjälp, bästa tid och antal HP-ord
 - Sparar varje dags korsord automatiskt, även halvfärdiga

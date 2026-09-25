@@ -44,16 +44,18 @@
   <div class="app">
     <main class="play">
       <div class="dayhead">
-        <button class="chev" id="prev-day" aria-label="Föregående dag">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
-        </button>
         <div class="day-text">
-          <div class="kicker" id="kicker">Idag</div>
-          <h1 class="date-title" id="date-title"></h1>
+          <div class="kicker" id="kicker"></div>
+          <h1 class="date-title" id="date-title">Idag</h1>
         </div>
-        <button class="chev" id="next-day" aria-label="Nästa dag">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
-        </button>
+        <div class="day-nav">
+          <button class="chev" id="prev-day" aria-label="Föregående dag">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          </button>
+          <button class="chev" id="next-day" aria-label="Nästa dag">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+          </button>
+        </div>
       </div>
 
       <div class="segmented" role="tablist" aria-label="Svårighetsgrad" id="difficulty">
@@ -73,17 +75,17 @@
       </div>
 
       <div class="toolbar">
+        <button class="tool" id="btn-undo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14.5L4 9.5l5-5"/><path d="M4 9.5h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span>Ångra</span>
+        </button>
+        <button class="tool" id="btn-erase">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 20h11.5"/><path d="M13.6 5.1a2 2 0 0 1 2.8 0l3 3a2 2 0 0 1 0 2.8L11 19.4H7.3l-3-3a2 2 0 0 1 0-2.8z"/><path d="M9 9.7l5.8 5.8"/></svg><span>Sudda</span>
+        </button>
         <button class="tool" id="btn-check">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.7 2.7L16 9.5"/></svg><span>Kontrollera</span>
         </button>
         <button class="tool" id="btn-letter">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M9.3 16l2.7-8 2.7 8M10.2 13.5h3.6"/></svg><span>Bokstav</span>
-        </button>
-        <button class="tool" id="btn-word">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Visa ord</span>
-        </button>
-        <button class="tool sheet-only" id="btn-clues">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.5" cy="6.5" r=".6"/><circle cx="4.5" cy="12" r=".6"/><circle cx="4.5" cy="17.5" r=".6"/></svg><span>Ledtrådar</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.1v.1h5v-.1c0-.8.4-1.6 1.1-2.1A6 6 0 0 0 12 3z"/></svg><span>Tips</span>
         </button>
         <button class="tool" id="btn-more">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="12" r=".5"/><circle cx="12" cy="12" r=".5"/><circle cx="16" cy="12" r=".5"/></svg><span>Mer</span>
@@ -120,10 +122,17 @@
         <button class="cc-nav" id="next-clue" aria-label="Nästa ledtråd">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
         </button>
-      </div>
-      <div class="keyboard" id="keyboard" aria-label="Tangentbord"></div>
+        <button class="cc-nav kb-toggle" id="kb-toggle" aria-label="Visa tangentbord">
+          <svg class="kb-show" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M9.3 10h.01M12.6 10h.01M15.9 10h.01M18 10h.01M8 14h8"/></svg>
+          <svg class="kb-hide" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="3" width="19" height="12" rx="2.5"/><path d="M6 7h.01M9.3 7h.01M12.6 7h.01M15.9 7h.01M18 7h.01M8 11h8M9 18.5l3 2.5 3-2.5"/></svg>
+        </button>
     </div>
   </div>
+
+  <!-- Osynligt fält som tar emot text från iOS-tangentbordet och externa tangentbord. -->
+  <input id="kb-input" class="kb-input" type="text" value=" " aria-label="Skriv bokstav"
+    autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
+    inputmode="text" enterkeyhint="next" tabindex="-1">
 
   <div class="scrim" id="scrim"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -212,8 +221,9 @@
       <ul class="list help">
         <li><b>Nytt varje dag.</b> Tre korsord om dagen – Lätt, Medel och Svår. Alla får samma.</li>
         <li><b>Som på provet.</b> Ledtrådarna är synonymer eller förklaringar, precis som i ORD-delen.</li>
-        <li><b>Byt riktning.</b> Tryck på en ruta en gång till för att växla mellan vågrätt och lodrätt.</li>
-        <li><b>Tangentbord.</b> Piltangenter flyttar, Tab eller Enter går till nästa ord och mellanslag byter riktning.</li>
+        <li><b>Byt riktning.</b> Tryck på samma ruta igen för att växla mellan vågrätt och lodrätt.</li>
+        <li><b>Skriv.</b> Tryck på en ruta så kommer tangentbordet upp. Med Magic Keyboard eller annat tangentbord skriver du direkt.</li>
+        <li><b>Kortkommandon.</b> Piltangenter flyttar, Tab eller Enter går till nästa ord, mellanslag byter riktning och ⌘Z ångrar.</li>
         <li><b>Missat en dag?</b> Öppna arkivet uppe till vänster.</li>
       </ul>
       <button class="pill wide" data-close>Kör igång</button>
@@ -222,6 +232,8 @@
 
   <dialog id="more-dialog" class="sheet actionsheet">
     <div class="action-group">
+      <button class="action" id="btn-word">Visa hela ordet</button>
+      <button class="action sheet-only" id="btn-clues">Alla ledtrådar</button>
       <button class="action" id="btn-reset">Börja om korsordet</button>
       <button class="action destructive" id="btn-solve">Ge upp och visa lösningen</button>
     </div>

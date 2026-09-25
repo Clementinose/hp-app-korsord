@@ -25,15 +25,15 @@
   --thumb: #ffffff;
 
   --cell: #ffffff;
-  --block: #1c1c1e;
-  --word: #cfe4ff;
-  --selected: #ffd60a;
-  --solved: #d8f5df;
-
+  --block: #d1d1d6;
+  --grid-line: #d1d1d6;
+  --grid-edge: #3a3a3c;
+  --word: #e3eefc;
+  --selected: #b3d4ff;
+  --ink: #0a60d8;
+  --sel-ink: #0a4fb3;
+  --solved: #e4f6e9;
   --kb-bg: #d1d3d9;
-  --key: #ffffff;
-  --key-2: #abb0bc;
-  --key-shadow: #898a8d;
 
   --sheet: #f2f2f7;
   --sheet-row: #ffffff;
@@ -59,16 +59,18 @@
     --red: #ff453a;
     --orange: #ff9f0a;
     --thumb: #636366;
-    --cell: #3a3a3c;
-    --block: #161618;
-    --word: #0f3c73;
-    --solved: #133d22;
+    --cell: #2c2c2e;
+    --block: #0f0f11;
+    --grid-line: #0f0f11;
+    --grid-edge: #636366;
+    --word: #16304f;
+    --selected: #1f5fb8;
+    --ink: #64a8ff;
+    --sel-ink: #ffffff;
+    --solved: #143a22;
     --kb-bg: #1c1c1e;
     --sheet: #1c1c1e;
     --sheet-row: #2c2c2e;
-    --key: #5a5a5e;
-    --key-2: #3a3a3c;
-    --key-shadow: #000000;
     color-scheme: dark;
   }
 }
@@ -88,16 +90,18 @@
   --red: #ff453a;
   --orange: #ff9f0a;
   --thumb: #636366;
-  --cell: #3a3a3c;
-  --block: #161618;
-  --word: #0f3c73;
-  --solved: #133d22;
+  --cell: #2c2c2e;
+  --block: #0f0f11;
+  --grid-line: #0f0f11;
+  --grid-edge: #636366;
+  --word: #16304f;
+  --selected: #1f5fb8;
+  --ink: #64a8ff;
+  --sel-ink: #ffffff;
+  --solved: #143a22;
   --kb-bg: #1c1c1e;
   --sheet: #1c1c1e;
   --sheet-row: #2c2c2e;
-  --key: #5a5a5e;
-  --key-2: #3a3a3c;
-  --key-shadow: #000000;
   color-scheme: dark;
 }
 
@@ -105,7 +109,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body {
-  height: 100dvh;
+  height: var(--app-h, 100dvh);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -176,16 +180,17 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   gap: 10px;
 }
 
-/* Datum */
-.dayhead { display: flex; align-items: center; gap: 8px; }
-.day-text { flex: 1; text-align: center; min-width: 0; }
-.kicker { font-size: 13px; font-weight: 600; color: var(--tint); text-transform: uppercase; letter-spacing: .04em; }
-.date-title { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Datum: stor rubrik som i Apples appar */
+.dayhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.day-text { min-width: 0; }
+.kicker { font-size: 13px; font-weight: 600; color: var(--label-2); text-transform: uppercase; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.date-title { margin: 0; font-size: 34px; line-height: 1.1; font-weight: 700; letter-spacing: -.025em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.day-nav { display: flex; gap: 8px; flex: none; padding-bottom: 2px; }
 .chev {
-  width: 36px; height: 36px; border-radius: 18px; background: var(--fill);
+  width: 34px; height: 34px; border-radius: 17px; background: var(--fill);
   display: grid; place-items: center; color: var(--tint); flex: none;
 }
-.chev svg { width: 18px; height: 18px; stroke-width: 2.4; }
+.chev svg { width: 17px; height: 17px; stroke-width: 2.4; }
 .chev.small { width: 30px; height: 30px; background: none; }
 .chev:not(:disabled):active { opacity: .5; }
 
@@ -235,9 +240,9 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   display: grid;
   grid-template-columns: repeat(var(--cols), 1fr);
   gap: 1px;
-  padding: 1px;
-  background: var(--block);
-  border-radius: 10px;
+  background: var(--grid-line);
+  border: 2px solid var(--grid-edge);
+  border-radius: 8px;
   overflow: hidden;
   touch-action: manipulation;
   transition: filter .25s ease, opacity .25s ease;
@@ -247,6 +252,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .cell.block { background: var(--block); }
 .cell.letter {
   background: var(--cell);
+  color: var(--ink);
   display: grid; place-items: center;
   font-size: calc(100cqw / var(--cols) * .56);
   font-weight: 500;
@@ -260,8 +266,9 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   color: var(--label-2);
 }
 .cell.in-word { background: var(--word); }
-.cell.selected { background: var(--selected); color: #000; }
-.cell.selected .num { color: rgba(0, 0, 0, .55); }
+.cell.selected { background: var(--selected); color: var(--sel-ink); }
+.cell.selected .num, .cell.in-word .num { color: var(--label); }
+.cell.revealed { color: var(--label); }
 .cell.wrong .ch { color: var(--red); }
 .cell.wrong::after {
   content: ""; position: absolute; left: 12%; right: 12%; top: 50%; height: 1.5px;
@@ -274,7 +281,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 }
 .cell.pop .ch { display: inline-block; animation: pop .16s ease; }
 @keyframes pop { 50% { transform: scale(1.2); } }
-.board.solved .cell.letter { background: var(--solved); animation: settle .5s ease both; }
+.board.solved .cell.letter { background: var(--solved); color: var(--label); animation: settle .5s ease both; }
 @keyframes settle { 40% { transform: scale(.88); } }
 
 .paused {
@@ -294,10 +301,11 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .tool {
   flex: 1; min-width: 0;
   display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 4px 0; color: var(--tint);
+  padding: 4px 0; color: var(--label-2);
   font-size: 11px; font-weight: 500;
 }
-.tool svg { width: 25px; height: 25px; }
+.tool svg { width: 26px; height: 26px; color: var(--label); stroke-width: 1.6; }
+.tool:disabled { opacity: .3; }
 .tool:active { opacity: .4; }
 .tool span { white-space: nowrap; }
 
@@ -385,27 +393,28 @@ body.clues-open .scrim { opacity: 1; pointer-events: auto; }
 }
 .cc-num { font-weight: 700; margin-right: 6px; }
 
-.keyboard { display: none; }
+.kb-toggle { display: none; }
+.kb-toggle .kb-hide, body.typing .kb-toggle .kb-show { display: none; }
+body.typing .kb-toggle .kb-hide { display: block; }
 @media (pointer: coarse) {
-  .dock { background: var(--kb-bg); }
-  .current-clue { background: var(--bg-elev); }
-  .keyboard {
-    display: grid; gap: 10px;
-    max-width: 740px; margin: 8px auto 0; padding: 0 1px;
+  .kb-toggle { display: grid; }
+  .dock {
+    background: var(--bar);
+    -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+    border-top: .5px solid var(--separator);
   }
-  .kb-row { display: flex; gap: 5px; justify-content: center; }
-  .key {
-    flex: 1; max-width: 64px;
-    height: clamp(38px, 5.4dvh, 56px);
-    border-radius: 5px;
-    background: var(--key);
-    box-shadow: 0 1px 0 var(--key-shadow);
-    font-size: clamp(20px, 2.6dvh, 24px); font-weight: 400;
-  }
-  .key.wide { flex: 1.6; max-width: 96px; background: var(--key-2); display: grid; place-items: center; }
-  .key.wide svg { width: 24px; height: 24px; stroke-width: 1.7; }
-  .key:active { background: var(--key-2); }
-  .key.wide:active { background: var(--key); }
+}
+/* När tangentbordet är uppe räcker det med datum/nivå dolda – rutnätet får platsen. */
+body.kb-open .dock { padding-bottom: 6px; }
+body.compact .dayhead, body.compact .segmented, body.compact .toolbar { display: none; }
+body.compact .play { padding-top: 8px; }
+
+/* Fältet som tar emot tangentbordet: osynligt men fokuserbart, högst upp så att iOS inte scrollar. */
+.kb-input {
+  position: fixed; top: 0; left: 0;
+  width: 1px; height: 1px; padding: 0; border: 0; margin: 0;
+  opacity: 0; font-size: 16px; caret-color: transparent;
+  pointer-events: none; -webkit-user-select: text; user-select: text;
 }
 
 /* ---------- Toast ---------- */
@@ -538,8 +547,7 @@ dialog.alert[open] { animation: alert-in .2s ease; }
     column-gap: 8px;
   }
   .play { padding: 20px 20px 0 28px; gap: 14px; }
-  .date-title { font-size: 28px; }
-  .chev { width: 40px; height: 40px; border-radius: 20px; }
+  .date-title { font-size: 34px; }
   .segmented button { height: 32px; font-size: 15px; }
   .tool { font-size: 12px; }
   .tool svg { width: 27px; height: 27px; }
@@ -565,14 +573,12 @@ dialog.alert[open] { animation: alert-in .2s ease; }
   dialog.actionsheet { width: 360px; box-shadow: none; }
 }
 @keyframes pop-in { from { transform: translateY(40px); opacity: 0; } }
-/* Liggande iPad: tangentbordet under ledtrådarna så att rutnätet får hela höjden. */
+/* Liggande iPad: ledtrådsraden under ledtrådslistan så att rutnätet får hela höjden. */
 @media (min-width: 1000px) and (min-height: 560px) and (orientation: landscape) and (pointer: coarse) {
   .app {
     grid-template: "play clues" minmax(0, 1fr) "play dock" auto / minmax(0, 1fr) clamp(380px, 36vw, 460px);
   }
   .play { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
-  .dock { border-radius: 16px 16px 0 0; }
-  .key { font-size: 20px; height: clamp(40px, 5.6dvh, 50px); }
 }
 /* Datorer med mus: ingen dock behövs när ledtrådarna syns bredvid. */
 @media (min-width: 740px) and (min-height: 560px) and (pointer: fine) {
@@ -600,11 +606,9 @@ dialog.alert[open] { animation: alert-in .2s ease; }
   .board-area { grid-area: board; padding: 8px 0 calc(8px + env(safe-area-inset-bottom)) 12px; }
   .dock { align-self: end; padding: 6px 12px calc(6px + env(safe-area-inset-bottom)) 0; background: none !important; }
   .kicker { display: none; }
-  .date-title { font-size: 17px; }
-  .chev { width: 32px; height: 32px; }
+  .date-title { font-size: 22px; }
+  .chev { width: 30px; height: 30px; }
   .current-clue { min-height: 44px; }
-  .keyboard { gap: 6px !important; }
-  .key { height: 34px !important; font-size: 18px !important; }
   .navbar { min-height: calc(40px + env(safe-area-inset-top)); }
   .icon-btn { height: 40px; }
 }
@@ -612,12 +616,10 @@ dialog.alert[open] { animation: alert-in .2s ease; }
 /* ---------- Små telefoner (iPhone SE/mini) ---------- */
 @media (max-width: 380px) {
   .play { padding: 8px 12px 0; gap: 8px; }
-  .date-title { font-size: 19px; }
-  .kicker { font-size: 12px; }
+  .date-title { font-size: 28px; }
 }
 @media (max-height: 700px) and (orientation: portrait) {
-  .kicker { display: none; }
-  .date-title { font-size: 18px; }
+  .date-title { font-size: 26px; }
   .tool span { display: none; }
   .toolbar { padding-bottom: 2px; }
 }
