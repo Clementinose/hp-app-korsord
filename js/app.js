@@ -26,6 +26,8 @@
   let enterDir = ""; // "prev" / "next": från vilket håll rutnätet glider in
   let lastClue = -1;
   const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Kort vibration där enheten stöder det (Android). iOS ignorerar anropet.
+  const haptic = (pattern) => { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* ej stöd */ } };
   const puzzleCache = new Map();
 
   // ---------- Lagring ----------
@@ -43,7 +45,10 @@
     if (!state) return;
     const all = progressAll();
     const { entries, revealed, wrong, seconds, hints, done, gaveUp, mcTried, mcMistakes } = state;
-    all[puzzleId(state.date, state.level)] = { sig: state.sig, entries, revealed, wrong, seconds, hints, done, gaveUp, mcTried, mcMistakes };
+    all[puzzleId(state.date, state.level)] = {
+      sig: state.sig, entries, revealed, wrong, seconds, hints, done, gaveUp, mcTried, mcMistakes,
+      words: state.puzzle.words.length,
+    };
     store(PROGRESS_KEY, all);
     setPref("level", state.level);
   }
@@ -332,6 +337,7 @@
     } else {
       state.mcTried[w.word] = [...(state.mcTried[w.word] || []), word];
       state.mcMistakes++;
+      haptic(25);
       if (btn) { btn.classList.remove("shake"); void btn.offsetWidth; btn.classList.add("shake"); }
       setTimeout(() => { update(); save(); }, 280);
       toast(`${word.toLowerCase()} betyder ${(HP_WORDS.find(([x]) => x === word) || ["", "något annat"])[1]}`);
@@ -452,6 +458,7 @@
         state.wrong[r][c] = true;
         if (changed) state.mcMistakes++;
         animate(el, "shake", 400);
+        haptic(25);
       }
     }
     moveWithinWord(1);
@@ -470,6 +477,7 @@
       if (!cells.every(([rr, cc]) => state.entries[rr][cc])) continue;
       const right = cells.every(([rr, cc]) => state.entries[rr][cc] === state.puzzle.grid[rr][cc]);
       if (autoCheck() && !right) continue;
+      haptic(10);
       cells.forEach(([rr, cc], i) => {
         const el = cellEls[rr][cc];
         el.style.setProperty("--i", i);
@@ -616,6 +624,7 @@
     if (!gaveUp) {
       boardEl.classList.add("solved");
       confetti();
+      haptic([15, 60, 15, 60, 30]);
     }
     save();
     renderHeader();
@@ -681,7 +690,7 @@
       s.solved++;
       if (!p.hints) { s.clean++; if (s.best === null || p.seconds < s.best) s.best = p.seconds; }
       solvedDays.add(date);
-      words += puzzleFor(date, level).words.length;
+      words += p.words || puzzleFor(date, level).words.length;
     }
     let streak = 0;
     let d = solvedDays.has(todayKey()) ? todayKey() : addDays(todayKey(), -1);
@@ -1014,7 +1023,21 @@
   $("cal-next").addEventListener("click", () => shiftMonth(1));
   $("archive-today").addEventListener("click", () => { $("archive-dialog").close(); open(todayKey(), state.level); });
   window.addEventListener("pagehide", save);
-  document.addEventListener("visibilitychange", () => document.hidden && save());
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) save();
+    else if (state) renderHeader(); // "Idag"/"Igår" stämmer även om appen legat öppen över midnatt
+  });
+
+  // ---------- Tips om hemskärmen (bara i Safari på iPhone/iPad, en gång) ----------
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+  function maybeShowInstallHint(delay) {
+    if (!isIOS || standalone || prefs().installHint || window.top !== window) return;
+    setTimeout(() => { if (!document.querySelector("dialog[open]")) $("install-hint").hidden = false; }, delay);
+  }
+  maybeShowInstallHint(2500);
+  $("help-dialog").addEventListener("close", () => maybeShowInstallHint(700));
+  $("install-close").addEventListener("click", () => { $("install-hint").hidden = true; setPref("installHint", true); });
   window.addEventListener("hashchange", () => {
     const t = fromHash();
     if (t && (t.date !== state.date || t.level !== state.level)) open(t.date, t.level);

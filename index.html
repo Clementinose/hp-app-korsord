@@ -12,8 +12,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HP-Korsord">
   <link rel="manifest" href="manifest.webmanifest">
+  <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="style.css">
   <script>
     // Sätt tema innan sidan ritas, så att den inte blinkar.
@@ -135,6 +137,15 @@
   <input id="kb-input" class="kb-input" type="text" value=" " aria-label="Skriv bokstav"
     autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
     inputmode="text" enterkeyhint="next" tabindex="-1">
+
+  <div class="install-hint" id="install-hint" hidden>
+    <img src="icon-180.png" alt="" width="44" height="44">
+    <div class="install-text">
+      <b>Lägg HP-Korsord på hemskärmen</b>
+      <span>Tryck på <svg viewBox="0 0 24 24" aria-label="Dela"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg> och sedan <b>Lägg till på hemskärmen</b>. Då öppnas den i helskärm som en app och fungerar utan nät.</span>
+    </div>
+    <button class="text-btn" id="install-close">OK</button>
+  </div>
 
   <div class="scrim" id="scrim"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>

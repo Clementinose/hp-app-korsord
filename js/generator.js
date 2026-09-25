@@ -115,7 +115,8 @@
     const candidates = entries.filter(([w]) => w.length >= minLen && w.length <= maxLen && w.length <= maxSize);
     let best = null, bestScore = -Infinity;
     for (let a = 0; a < attempts; a++) {
-      const result = build(shuffle(candidates, rng), count, maxSize, rng);
+      // Ett slumpat urval räcker för ett bra korsord och håller det snabbt även med en stor ordlista.
+      const result = build(shuffle(candidates, rng).slice(0, Math.max(count * 10, 160)), count, maxSize, rng);
       const area = (result.maxR - result.minR + 1) * (result.maxC - result.minC + 1);
       const score = result.placed.length * 1000 - area;
       if (score > bestScore) { bestScore = score; best = result; }
