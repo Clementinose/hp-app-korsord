@@ -1104,7 +1104,11 @@
   }
   function renderModeSwitch() {
     const m = mode();
-    document.querySelectorAll("#mode-switch button").forEach((b) => b.setAttribute("aria-selected", b.dataset.mode === m));
+    if (m === "mek" && !prefs().seenMek) setPref("seenMek", true);
+    document.querySelectorAll("#mode-switch button").forEach((b) => {
+      b.setAttribute("aria-selected", b.dataset.mode === m);
+      b.classList.toggle("is-new", b.dataset.mode === "mek" && !prefs().seenMek);
+    });
     $("mode-switch").style.setProperty("--i", m === "mek" ? 1 : 0);
   }
   function applyMode(anim) {
