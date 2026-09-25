@@ -23,6 +23,9 @@
   let paused = false;
   let calMonth = null; // { y, m } som visas i arkivet
   let undoStack = []; // ändringar som kan ångras i det öppna korsordet
+  let enterDir = ""; // "prev" / "next": från vilket håll rutnätet glider in
+  let lastClue = -1;
+  const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   const puzzleCache = new Map();
 
   // ---------- Lagring ----------
@@ -90,8 +93,9 @@
   }
 
   // ---------- Öppna ett korsord ----------
-  function open(date, level) {
+  function open(date, level, dir) {
     if (state) { stopTimer(); save(); }
+    enterDir = dir || "";
     const puzzle = puzzleFor(date, level);
     const sig = signature(puzzle);
     const saved = progressAll()[puzzleId(date, level)];
@@ -128,6 +132,17 @@
     renderPause();
     update();
     startTimer();
+    animate(boardEl, "enter" + (enterDir ? " from-" + enterDir : ""), 900);
+  }
+
+  // Startar om en CSS-animation genom att sätta klasser på nytt.
+  function animate(el, classes, ms) {
+    const list = classes.split(" ");
+    el.classList.remove(...list, "from-prev", "from-next");
+    void el.offsetWidth;
+    el.classList.add(...list);
+    clearTimeout(el._animTimer);
+    el._animTimer = setTimeout(() => el.classList.remove(...list), ms);
   }
 
   function forEachCell(w, fn) {
@@ -175,6 +190,7 @@
       for (let c = 0; c < cols; c++) {
         const el = document.createElement("div");
         el.className = "cell";
+        el.style.setProperty("--d", (r + c) * 16 + "ms");
         if (grid[r][c]) {
           el.classList.add("letter");
           const num = numbers[r + "," + c];
@@ -227,6 +243,8 @@
     });
     $("cc-num").textContent = cw ? `${cw.number} ${DIR_NAME[cw.dir]}` : "";
     $("cc-clue").textContent = cw ? `${cw.clue} (${cw.word.length})` : "";
+    const ci = currentWordIndex();
+    if (ci !== lastClue) { lastClue = ci; animate($("cc-open"), "swap", 400); }
     $("btn-solve").textContent = state.done ? "Visa lösningen" : "Ge upp och visa lösningen";
     $("btn-undo").disabled = state.done || !undoStack.length;
     for (const id of ["btn-erase", "btn-check", "btn-letter"]) $(id).disabled = state.done;
@@ -237,6 +255,8 @@
   const LABELS = ["A", "B", "C", "D", "E"];
   const choiceCache = new Map();
   const mcOn = () => !!prefs().choices;
+  const autoCheck = () => !!prefs().autocheck;
+  const showTime = () => prefs().showTime !== false;
 
   function shuffled(arr, rng) {
     const a = arr.slice();
@@ -249,7 +269,8 @@
     if (!choiceCache.has(key)) {
       const rng = mulberry32(hashString(`${SEED_VERSION}|val|${key}`));
       const inPuzzle = new Set(state.puzzle.words.map((x) => x.word));
-      const pool = shuffled(HP_WORDS.map(([x]) => x).filter((x) => !inPuzzle.has(x)), rng)
+      // Inga ord med samma förklaring som rätt svar, annars finns två rätta alternativ.
+      const pool = shuffled(HP_WORDS.filter(([x, c]) => !inPuzzle.has(x) && c !== w.clue).map(([x]) => x), rng)
         .sort((a, b) => Math.abs(a.length - w.word.length) - Math.abs(b.length - w.word.length));
       choiceCache.set(key, shuffled([w.word, ...pool.slice(0, 4)], rng));
     }
@@ -266,10 +287,14 @@
     const html = choicesFor(w).map((word, i) => {
       const cls = word === w.word && solved ? "right" : tried.includes(word) ? "wrong" : "";
       const off = state.done || paused || solved || tried.includes(word);
-      return `<button class="choice ${cls}" data-word="${word}" ${off ? "disabled" : ""}>` +
+      return `<button class="choice ${cls}" style="--i:${i}" data-word="${word}" ${off ? "disabled" : ""}>` +
         `<span class="opt">${LABELS[i]}</span><span class="opt-word">${word.toLowerCase()}</span></button>`;
     }).join("");
-    if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+    if (box.dataset.html !== html) {
+      const newWord = box.dataset.word !== w.word;
+      box.innerHTML = html; box.dataset.html = html; box.dataset.word = w.word;
+      if (newWord) animate(box, "rise", 700);
+    }
   }
 
   function nextOpenWord() {
@@ -298,6 +323,7 @@
         el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop");
       });
       update();
+      cellsOf(w).forEach(([r, c], i) => { cellEls[r][c].style.setProperty("--i", i); animate(cellEls[r][c], "flash", 900); });
       afterChange();
       if (!state.done) {
         const next = nextOpenWord();
@@ -416,15 +442,40 @@
     if (!playable()) return;
     const { r, c } = state.sel;
     if (!state.revealed[r][c]) {
-      if (state.entries[r][c] !== ch) remember([[r, c]]);
+      const changed = state.entries[r][c] !== ch;
+      if (changed) remember([[r, c]]);
       state.entries[r][c] = ch;
       state.wrong[r][c] = false;
       const el = cellEls[r][c];
       el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop");
+      if (autoCheck() && ch !== state.puzzle.grid[r][c]) {
+        state.wrong[r][c] = true;
+        if (changed) state.mcMistakes++;
+        animate(el, "shake", 400);
+      }
     }
     moveWithinWord(1);
     update();
+    celebrateWordsAt(r, c);
     afterChange();
+  }
+
+  // När ett ord blir helt ifyllt: grön blinkning om "Visa fel direkt" är på och ordet är rätt,
+  // annars en neutral våg (så att den inte avslöjar om ordet stämmer).
+  function celebrateWordsAt(r, c) {
+    for (const dir of ["across", "down"]) {
+      const wi = cellWords[r][c][dir];
+      if (wi === undefined) continue;
+      const cells = cellsOf(state.puzzle.words[wi]);
+      if (!cells.every(([rr, cc]) => state.entries[rr][cc])) continue;
+      const right = cells.every(([rr, cc]) => state.entries[rr][cc] === state.puzzle.grid[rr][cc]);
+      if (autoCheck() && !right) continue;
+      cells.forEach(([rr, cc], i) => {
+        const el = cellEls[rr][cc];
+        el.style.setProperty("--i", i);
+        animate(el, autoCheck() ? "flash" : "ripple", 900);
+      });
+    }
   }
 
   function backspace() {
@@ -478,6 +529,15 @@
   }
 
   // ---------- Hjälp ----------
+  function markWrongSilently() {
+    const { puzzle, entries } = state;
+    for (let r = 0; r < puzzle.rows; r++)
+      for (let c = 0; c < puzzle.cols; c++)
+        if (puzzle.grid[r][c] && entries[r][c] && entries[r][c] !== puzzle.grid[r][c]) state.wrong[r][c] = true;
+    update();
+    save();
+  }
+
   function check() {
     let wrong = 0, empty = 0;
     const { puzzle, entries } = state;
@@ -555,11 +615,37 @@
     update();
     if (!gaveUp) {
       boardEl.classList.add("solved");
-      boardEl.querySelectorAll(".cell.letter").forEach((el, i) => (el.style.animationDelay = i * 12 + "ms"));
+      confetti();
     }
     save();
     renderHeader();
-    setTimeout(showWinDialog, gaveUp ? 0 : 900);
+    setTimeout(showWinDialog, gaveUp ? 0 : 1300);
+  }
+
+  function confetti() {
+    if (reduceMotion() || !document.body.animate) return;
+    const colors = ["#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#007aff", "#af52de", "#ff2d55"];
+    const layer = document.createElement("div");
+    layer.className = "confetti-layer";
+    document.body.appendChild(layer);
+    const w = innerWidth, h = innerHeight;
+    for (let i = 0; i < 90; i++) {
+      const p = document.createElement("i");
+      p.style.background = colors[i % colors.length];
+      p.style.left = w / 2 + "px";
+      p.style.top = h * 0.45 + "px";
+      if (i % 3 === 0) p.style.borderRadius = "50%";
+      layer.appendChild(p);
+      const angle = Math.random() * Math.PI * 2;
+      const force = 120 + Math.random() * Math.min(w, h) * 0.45;
+      const dx = Math.cos(angle) * force, dy = Math.sin(angle) * force - 180;
+      p.animate([
+        { transform: "translate(0,0) rotate(0) scale(1)", opacity: 1 },
+        { transform: `translate(${dx}px, ${dy}px) rotate(${Math.random() * 540}deg) scale(1)`, opacity: 1, offset: 0.45 },
+        { transform: `translate(${dx * 1.2}px, ${dy + h * 0.6}px) rotate(${Math.random() * 900}deg) scale(.6)`, opacity: 0 },
+      ], { duration: 1600 + Math.random() * 900, easing: "cubic-bezier(.2,.7,.3,1)", fill: "forwards" });
+    }
+    setTimeout(() => layer.remove(), 2800);
   }
 
   function showWinDialog() {
@@ -568,8 +654,8 @@
     const hints = state.hints ? ` med ${state.hints} ${state.hints === 1 ? "ledtråd" : "ledtrådar"}` : " helt utan hjälp";
     $("win-summary").textContent = state.gaveUp
       ? "Ingen fara – gå igenom orden nedan så sitter de nästa gång."
-      : `${LEVELS[state.level].label} · ${formatTime(state.seconds)}${hints}` +
-        (state.mcMistakes ? ` och ${state.mcMistakes} fel val.` : ".");
+      : `${LEVELS[state.level].label}${showTime() ? " · " + formatTime(state.seconds) : ""}${hints}` +
+        (state.mcMistakes ? ` och ${state.mcMistakes} fel.` : ".");
     $("win-words").innerHTML = state.puzzle.words
       .slice()
       .sort((a, b) => a.word.localeCompare(b.word, "sv"))
@@ -624,6 +710,20 @@
         <div class="stat"><div class="v">${s.best === null ? "–" : formatTime(s.best)}</div><div class="l">Bästa tid</div></div></div>`;
     }
     $("stats-body").innerHTML = html;
+    if (!reduceMotion()) {
+      $("stats-body").querySelectorAll(".stat .v").forEach((el) => {
+        const m = el.textContent.match(/^(\D*)(\d+)$/);
+        if (!m) return;
+        const [, prefix, target] = m;
+        const start = performance.now();
+        const tick = (t) => {
+          const k = Math.min(1, (t - start) / 700);
+          el.textContent = prefix + Math.round(+target * (1 - Math.pow(1 - k, 3)));
+          if (k < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    }
     $("stats-dialog").showModal();
   }
 
@@ -862,10 +962,14 @@
 
   // ---------- Händelser ----------
   document.querySelectorAll("#difficulty button").forEach((b) =>
-    b.addEventListener("click", () => b.dataset.level !== state.level && open(state.date, b.dataset.level))
+    b.addEventListener("click", () => {
+      if (b.dataset.level === state.level) return;
+      const dir = LEVEL_KEYS.indexOf(b.dataset.level) > LEVEL_KEYS.indexOf(state.level) ? "next" : "prev";
+      open(state.date, b.dataset.level, dir);
+    })
   );
-  $("prev-day").addEventListener("click", () => state.date > FIRST_DAY && open(addDays(state.date, -1), state.level));
-  $("next-day").addEventListener("click", () => state.date < todayKey() && open(addDays(state.date, 1), state.level));
+  $("prev-day").addEventListener("click", () => state.date > FIRST_DAY && open(addDays(state.date, -1), state.level, "prev"));
+  $("next-day").addEventListener("click", () => state.date < todayKey() && open(addDays(state.date, 1), state.level, "next"));
   $("btn-check").addEventListener("click", () => playable() && check());
   $("btn-letter").addEventListener("click", () => playable() && reveal([[state.sel.r, state.sel.c]]));
   $("btn-undo").addEventListener("click", undo);
@@ -887,8 +991,12 @@
   $("next-clue").addEventListener("click", () => stepWord(1));
   $("btn-stats").addEventListener("click", showStats);
   $("btn-archive").addEventListener("click", showArchive);
-  $("btn-settings").addEventListener("click", () => { renderThemePicker(); $("mc-toggle").checked = mcOn(); $("settings-dialog").showModal(); });
+  $("btn-settings").addEventListener("click", () => { renderThemePicker(); $("mc-toggle").checked = mcOn(); $("autocheck-toggle").checked = autoCheck(); $("time-toggle").checked = showTime(); $("settings-dialog").showModal(); });
   $("mc-toggle").addEventListener("change", (e) => { setPref("choices", e.target.checked); update(); });
+  $("autocheck-toggle").addEventListener("change", (e) => { setPref("autocheck", e.target.checked); if (e.target.checked) markWrongSilently(); });
+  $("time-toggle").addEventListener("change", (e) => { setPref("showTime", e.target.checked); applyTimeSetting(); });
+  function applyTimeSetting() { document.body.classList.toggle("hide-time", !showTime()); }
+  applyTimeSetting();
   $("open-help").addEventListener("click", () => { $("settings-dialog").close(); $("help-dialog").showModal(); });
   document.querySelectorAll("#theme-picker button").forEach((b) =>
     b.addEventListener("click", () => { setPref("theme", b.dataset.themeValue); applyTheme(); renderThemePicker(); })
