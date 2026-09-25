@@ -1,6 +1,6 @@
 # HP-Korsord
 
-Ett nytt korsord varje dag med ord från högskoleprovets ORD-del – upplagt som sudokuaday.com. Ledtrådarna är synonymer eller korta förklaringar, precis som på provet. Dagens korsord räknas fram ur datumet, så alla får samma korsord samma dag.
+Ett nytt korsord varje dag med 877 ord från högskoleprovets ORD-del – upplagt som sudokuaday.com. Ledtrådarna är synonymer eller korta förklaringar, precis som på provet. Dagens korsord räknas fram ur datumet, så alla får samma korsord samma dag.
 
 ## Funktioner
 
@@ -15,7 +15,9 @@ Ett nytt korsord varje dag med ord från högskoleprovets ORD-del – upplagt so
 - En ordlista med alla ord och deras betydelser när korsordet är klart
 - Statistik: lösta korsord, lösta utan hjälp, bästa tid och antal HP-ord
 - Sparar varje dags korsord automatiskt, även halvfärdiga
-- Mörkt läge, går att lägga till på hemskärmen och fungerar offline
+- Minimal design i iOS-stil som anpassar sig efter iPhone (stående och liggande), iPad (även delad skärm) och dator
+- Ljust och mörkt läge: följer systemet eller väljs under Inställningar
+- Beter sig som en app: lägg den på hemskärmen (Dela → Lägg till på hemskärmen) så öppnas den i helskärm med egen ikon och fungerar helt utan nät
 
 ## Kör lokalt
 
