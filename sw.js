@@ -1,21 +1,30 @@
-// Enkel offline-cache så att appen fungerar utan nät när den lagts till på hemskärmen.
-const CACHE = "hp-korsord-v2";
-const FILES = ["./", "index.html", "style.css", "js/words.js", "js/generator.js", "js/app.js", "icon.svg", "manifest.webmanifest"];
+// Offline-stöd: allt sparas vid installation. Appen startar direkt från cachen
+// och hämtar samtidigt en ny version i bakgrunden (visas nästa gång den öppnas).
+const CACHE = "hp-korsord-v11";
+const FILES = [
+  "./", "index.html", "style.css", "js/words.js", "js/mek.js", "js/generator.js", "js/app.js",
+  "icon.svg", "icon-180.png", "icon-192.png", "icon-512.png", "manifest.webmanifest",
+];
 
-self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES))));
-self.addEventListener("activate", (e) =>
-  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))))
-);
-// Nätet först, cache som reserv – så att nya versioner syns direkt.
+self.addEventListener("install", (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+});
+self.addEventListener("activate", (e) => {
+  e.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
 self.addEventListener("fetch", (e) => {
-  if (e.request.method !== "GET") return;
+  if (e.request.method !== "GET" || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request)
-      .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy));
-        return res;
-      })
-      .catch(() => caches.match(e.request))
+    caches.open(CACHE).then(async (cache) => {
+      const cached = await cache.match(e.request, { ignoreSearch: true });
+      const fresh = fetch(e.request)
+        .then((res) => { if (res.ok) cache.put(e.request, res.clone()); return res; })
+        .catch(() => cached);
+      return cached || fresh;
+    })
   );
 });

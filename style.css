@@ -17,23 +17,27 @@
   --label-3: rgba(60, 60, 67, .3);
   --separator: rgba(60, 60, 67, .29);
   --bar: rgba(242, 242, 247, .8);
-  --tint: #007aff;
-  --tint-soft: rgba(0, 122, 255, .12);
+  /* Färgtema: väljs under Inställningar (data-accent), här med blå som standard. */
+  --accent-l: #007aff;
+  --accent-d: #0a84ff;
+  --tint: var(--accent-l);
+  --tint-soft: color-mix(in srgb, var(--tint) 13%, transparent);
   --green: #34c759;
   --red: #ff3b30;
   --orange: #ff9500;
   --thumb: #ffffff;
 
   --cell: #ffffff;
-  --block: #1c1c1e;
-  --word: #cfe4ff;
-  --selected: #ffd60a;
-  --solved: #d8f5df;
-
+  --block: #d1d1d6;
+  --grid-line: #d1d1d6;
+  --grid-edge: #3a3a3c;
+  --word: color-mix(in srgb, var(--tint) 13%, var(--cell));
+  --selected: color-mix(in srgb, var(--tint) 32%, var(--cell));
+  --ink: color-mix(in srgb, var(--tint) 85%, #000);
+  --sel-ink: color-mix(in srgb, var(--tint) 65%, #000);
+  --solved: #e4f6e9;
+  --locked-bg: #eef9f1;
   --kb-bg: #d1d3d9;
-  --key: #ffffff;
-  --key-2: #abb0bc;
-  --key-shadow: #898a8d;
 
   --sheet: #f2f2f7;
   --sheet-row: #ffffff;
@@ -53,22 +57,25 @@
     --label-3: rgba(235, 235, 245, .3);
     --separator: rgba(84, 84, 88, .65);
     --bar: rgba(22, 22, 24, .78);
-    --tint: #0a84ff;
-    --tint-soft: rgba(10, 132, 255, .2);
+    --tint: var(--accent-d);
+    --tint-soft: color-mix(in srgb, var(--tint) 22%, transparent);
     --green: #30d158;
     --red: #ff453a;
     --orange: #ff9f0a;
     --thumb: #636366;
-    --cell: #3a3a3c;
-    --block: #161618;
-    --word: #0f3c73;
-    --solved: #133d22;
+    --cell: #2c2c2e;
+    --block: #0f0f11;
+    --grid-line: #0f0f11;
+    --grid-edge: #636366;
+    --word: color-mix(in srgb, var(--tint) 24%, var(--cell));
+    --selected: color-mix(in srgb, var(--tint) 55%, var(--cell));
+    --ink: color-mix(in srgb, var(--tint) 70%, #fff);
+    --sel-ink: #ffffff;
+    --solved: #143a22;
+    --locked-bg: #1d3325;
     --kb-bg: #1c1c1e;
     --sheet: #1c1c1e;
     --sheet-row: #2c2c2e;
-    --key: #5a5a5e;
-    --key-2: #3a3a3c;
-    --key-shadow: #000000;
     color-scheme: dark;
   }
 }
@@ -82,30 +89,35 @@
   --label-3: rgba(235, 235, 245, .3);
   --separator: rgba(84, 84, 88, .65);
   --bar: rgba(22, 22, 24, .78);
-  --tint: #0a84ff;
-  --tint-soft: rgba(10, 132, 255, .2);
+  --tint: var(--accent-d);
+  --tint-soft: color-mix(in srgb, var(--tint) 22%, transparent);
   --green: #30d158;
   --red: #ff453a;
   --orange: #ff9f0a;
   --thumb: #636366;
-  --cell: #3a3a3c;
-  --block: #161618;
-  --word: #0f3c73;
-  --solved: #133d22;
+  --cell: #2c2c2e;
+  --block: #0f0f11;
+  --grid-line: #0f0f11;
+  --grid-edge: #636366;
+  --word: color-mix(in srgb, var(--tint) 24%, var(--cell));
+  --selected: color-mix(in srgb, var(--tint) 55%, var(--cell));
+  --ink: color-mix(in srgb, var(--tint) 70%, #fff);
+  --sel-ink: #ffffff;
+  --solved: #143a22;
+  --locked-bg: #1d3325;
   --kb-bg: #1c1c1e;
   --sheet: #1c1c1e;
   --sheet-row: #2c2c2e;
-  --key: #5a5a5e;
-  --key-2: #3a3a3c;
-  --key-shadow: #000000;
   color-scheme: dark;
 }
 
 /* ---------- Grund ---------- */
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
+/* Som en app: ingen studs, ingen markeringsmeny när man håller på en ruta, ingen textförstoring vid rotation. */
+html { overflow: hidden; overscroll-behavior: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
-  height: 100dvh;
+  height: var(--app-h, 100dvh);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -118,6 +130,7 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-touch-callout: none;
   touch-action: manipulation;
 }
 button { font: inherit; color: inherit; letter-spacing: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
@@ -176,16 +189,17 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   gap: 10px;
 }
 
-/* Datum */
-.dayhead { display: flex; align-items: center; gap: 8px; }
-.day-text { flex: 1; text-align: center; min-width: 0; }
-.kicker { font-size: 13px; font-weight: 600; color: var(--tint); text-transform: uppercase; letter-spacing: .04em; }
-.date-title { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Datum: stor rubrik som i Apples appar */
+.dayhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.day-text { min-width: 0; }
+.kicker { font-size: 13px; font-weight: 600; color: var(--label-2); text-transform: uppercase; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.date-title { margin: 0; font-size: 34px; line-height: 1.1; font-weight: 700; letter-spacing: -.025em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.day-nav { display: flex; gap: 8px; flex: none; padding-bottom: 2px; }
 .chev {
-  width: 36px; height: 36px; border-radius: 18px; background: var(--fill);
+  width: 34px; height: 34px; border-radius: 17px; background: var(--fill);
   display: grid; place-items: center; color: var(--tint); flex: none;
 }
-.chev svg { width: 18px; height: 18px; stroke-width: 2.4; }
+.chev svg { width: 17px; height: 17px; stroke-width: 2.4; }
 .chev.small { width: 30px; height: 30px; background: none; }
 .chev:not(:disabled):active { opacity: .5; }
 
@@ -214,6 +228,24 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   display: flex; align-items: center; justify-content: center; gap: 5px;
 }
 .segmented button[aria-selected="true"], .segmented button[aria-checked="true"] { font-weight: 600; }
+/* Två segment (lägesväljaren) */
+.segmented.two { grid-template-columns: repeat(2, 1fr); }
+.segmented.two .seg-thumb { width: calc((100% - 4px) / 2); }
+.mode-switch { width: clamp(230px, 34vw, 300px); max-width: none; margin: 0; }
+.mode-switch button { height: 28px; font-size: 13px; }
+/* "Ny"-bricka på Meningar tills läget har provats. */
+.mode-switch button.is-new::after {
+  content: ""; width: 7px; height: 7px; margin-left: 2px; border-radius: 50%; flex: none;
+  background: var(--red); animation: badge 2s ease-in-out infinite;
+}
+.tabbar button:focus:not(:focus-visible), .tabbar button:focus { outline: none; }
+@keyframes badge { 50% { transform: scale(1.12); } }
+
+/* Nivåval med tid bredvid */
+.levelrow { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 520px; margin: 0 auto; }
+.levelrow .segmented { flex: 1; min-width: 0; margin: 0; max-width: none; }
+.timer-wrap { display: flex; align-items: center; gap: 6px; flex: none; }
+.timer-wrap .timer { min-width: 2.6em; }
 .segmented button.is-solved::after {
   content: ""; width: 14px; height: 14px; border-radius: 7px; background: var(--green)
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E") center / 10px no-repeat;
@@ -235,9 +267,9 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   display: grid;
   grid-template-columns: repeat(var(--cols), 1fr);
   gap: 1px;
-  padding: 1px;
-  background: var(--block);
-  border-radius: 10px;
+  background: var(--grid-line);
+  border: 2px solid var(--grid-edge);
+  border-radius: 8px;
   overflow: hidden;
   touch-action: manipulation;
   transition: filter .25s ease, opacity .25s ease;
@@ -247,6 +279,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .cell.block { background: var(--block); }
 .cell.letter {
   background: var(--cell);
+  color: var(--ink);
   display: grid; place-items: center;
   font-size: calc(100cqw / var(--cols) * .56);
   font-weight: 500;
@@ -260,8 +293,9 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   color: var(--label-2);
 }
 .cell.in-word { background: var(--word); }
-.cell.selected { background: var(--selected); color: #000; }
-.cell.selected .num { color: rgba(0, 0, 0, .55); }
+.cell.selected { background: var(--selected); color: var(--sel-ink); }
+.cell.selected .num, .cell.in-word .num { color: var(--label); }
+.cell.revealed { color: var(--label); }
 .cell.wrong .ch { color: var(--red); }
 .cell.wrong::after {
   content: ""; position: absolute; left: 12%; right: 12%; top: 50%; height: 1.5px;
@@ -272,9 +306,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   border: calc(100cqw / var(--cols) * .12) solid transparent;
   border-top-color: var(--orange); border-right-color: var(--orange);
 }
-.cell.pop .ch { display: inline-block; animation: pop .16s ease; }
-@keyframes pop { 50% { transform: scale(1.2); } }
-.board.solved .cell.letter { background: var(--solved); animation: settle .5s ease both; }
+.board.solved .cell.letter { background: var(--solved); color: var(--label); animation: settle .5s ease both; animation-delay: var(--d, 0ms); }
 @keyframes settle { 40% { transform: scale(.88); } }
 
 .paused {
@@ -294,10 +326,11 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .tool {
   flex: 1; min-width: 0;
   display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 4px 0; color: var(--tint);
+  padding: 4px 0; color: var(--label-2);
   font-size: 11px; font-weight: 500;
 }
-.tool svg { width: 25px; height: 25px; }
+.tool svg { width: 26px; height: 26px; color: var(--label); stroke-width: 1.6; }
+.tool:disabled { opacity: .3; }
 .tool:active { opacity: .4; }
 .tool span { white-space: nowrap; }
 
@@ -385,28 +418,531 @@ body.clues-open .scrim { opacity: 1; pointer-events: auto; }
 }
 .cc-num { font-weight: 700; margin-right: 6px; }
 
-.keyboard { display: none; }
+.kb-toggle { display: none; }
+.kb-toggle .kb-hide, body.typing .kb-toggle .kb-show { display: none; }
+body.typing .kb-toggle .kb-hide { display: block; }
 @media (pointer: coarse) {
-  .dock { background: var(--kb-bg); }
-  .current-clue { background: var(--bg-elev); }
-  .keyboard {
-    display: grid; gap: 10px;
-    max-width: 740px; margin: 8px auto 0; padding: 0 1px;
+  .kb-toggle { display: grid; }
+  .dock {
+    background: var(--bar);
+    -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+    border-top: .5px solid var(--separator);
   }
-  .kb-row { display: flex; gap: 5px; justify-content: center; }
-  .key {
-    flex: 1; max-width: 64px;
-    height: clamp(38px, 5.4dvh, 56px);
-    border-radius: 5px;
-    background: var(--key);
-    box-shadow: 0 1px 0 var(--key-shadow);
-    font-size: clamp(20px, 2.6dvh, 24px); font-weight: 400;
-  }
-  .key.wide { flex: 1.6; max-width: 96px; background: var(--key-2); display: grid; place-items: center; }
-  .key.wide svg { width: 24px; height: 24px; stroke-width: 1.7; }
-  .key:active { background: var(--key-2); }
-  .key.wide:active { background: var(--key); }
 }
+/* När tangentbordet är uppe räcker det med datum/nivå dolda – rutnätet får platsen. */
+body.kb-open .dock { padding-bottom: 6px; }
+body.compact .dayhead, body.compact .levelrow, body.compact .toolbar { display: none; }
+body.compact .play { padding-top: 8px; }
+
+/* Fältet som tar emot tangentbordet: osynligt men fokuserbart, högst upp så att iOS inte scrollar. */
+.kb-input {
+  position: fixed; top: 0; left: 0;
+  width: 1px; height: 1px; padding: 0; border: 0; margin: 0;
+  opacity: 0; font-size: 16px; caret-color: transparent;
+  pointer-events: none; -webkit-user-select: text; user-select: text;
+}
+
+/* ---------- Svarsalternativ A–E ---------- */
+.choices { display: none; }
+body.mc .choices {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  max-width: 720px; margin: 8px auto 0;
+}
+.choice {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 44px; padding: 7px 12px 7px 8px;
+  border-radius: 12px; background: var(--bg-elev);
+  box-shadow: inset 0 0 0 .5px var(--separator);
+  text-align: left; font-size: 16px; line-height: 1.2;
+  transition: opacity .2s ease, box-shadow .2s ease;
+}
+.choice:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.choice .opt {
+  flex: none; width: 26px; height: 26px; border-radius: 13px;
+  display: grid; place-items: center;
+  background: var(--fill); color: var(--label-2);
+  font-size: 13px; font-weight: 700;
+}
+.choice .opt-word { min-width: 0; overflow-wrap: break-word; }
+.choice:not(:disabled):active { background: var(--fill); }
+.choice:disabled { cursor: default; opacity: 1; }
+.choice.wrong { opacity: .45; }
+.choice.wrong .opt-word { text-decoration: line-through; }
+.choice.wrong .opt { background: var(--red); color: #fff; }
+.choice.right { box-shadow: inset 0 0 0 1.5px var(--green); }
+.choice.right .opt { background: var(--green); color: #fff; }
+.choice.shake { animation: shake .28s ease; }
+@keyframes shake { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+/* Antal kolumner efter hur bred raden faktiskt är (t.ex. smal högerkolumn på liggande iPad),
+   så att orden aldrig trycks ihop eller bryts mitt i. */
+.dock { container: dock / inline-size; }
+@container dock (min-width: 700px) {
+  body.mc .choices { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  body.mc .choice:last-child:nth-child(odd) { grid-column: auto; }
+}
+
+/* Låga skärmar (t.ex. iPhone SE): tätare alternativ så att rutnätet får plats. */
+@media (max-height: 700px) and (orientation: portrait) {
+  body.mc .choices { gap: 4px; margin-top: 6px; }
+  .choice { min-height: 36px; padding: 4px 10px 4px 6px; font-size: 15px; gap: 8px; }
+  .choice .opt { width: 22px; height: 22px; font-size: 12px; }
+  body.mc .current-clue { min-height: 44px; }
+  body.mc .dayhead .kicker { display: none; }
+  body.mc .date-title { font-size: 22px; }
+}
+
+/* iOS-reglage */
+.switch-row { cursor: pointer; gap: 12px; }
+.switch {
+  -webkit-appearance: none; appearance: none; margin: 0; flex: none;
+  position: relative; width: 51px; height: 31px; border-radius: 16px;
+  background: var(--fill-2); cursor: pointer; transition: background .2s ease;
+}
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 27px; height: 27px; border-radius: 50%; background: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .15), 0 3px 1px rgba(0, 0, 0, .06);
+  transition: transform .2s ease;
+}
+.switch:checked { background: var(--green); }
+.switch:checked::after { transform: translateX(20px); }
+.footnote.tight { margin-top: 6px; }
+
+/* ---------- Animationer ---------- */
+/* Bokstaven poppar in med lite fjädring. */
+.cell.pop .ch { display: inline-block; animation: pop-in .24s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes pop-in { from { transform: scale(.4); opacity: 0; } }
+/* Rutnätet byggs upp diagonalt när ett korsord öppnas, och glider in från rätt håll vid dagbyte. */
+.board.enter .cell { animation: cell-in .45s cubic-bezier(.2, .8, .3, 1) both; animation-delay: var(--d, 0ms); }
+@keyframes cell-in { from { opacity: 0; transform: scale(.82); } }
+.board.enter.from-next { animation: slide-next .45s cubic-bezier(.2, .8, .3, 1); }
+.board.enter.from-prev { animation: slide-prev .45s cubic-bezier(.2, .8, .3, 1); }
+@keyframes slide-next { from { transform: translateX(32px); } }
+@keyframes slide-prev { from { transform: translateX(-32px); } }
+/* Fel bokstav skakar, klart ord blinkar grönt eller ger en våg. */
+.cell.shake { animation: cell-shake .35s ease; }
+@keyframes cell-shake { 20% { transform: translateX(-3px); } 40% { transform: translateX(3px); } 60% { transform: translateX(-2px); } 80% { transform: translateX(2px); } }
+.cell.ripple { animation: cell-ripple .5s ease both; animation-delay: calc(var(--i, 0) * 40ms); }
+@keyframes cell-ripple { 40% { transform: scale(.88); } }
+.cell.selected { transition: background-color .15s ease; }
+/* Ledtråden och svarsalternativen tonar in när ordet byts. */
+.cc-text.swap { animation: swap .3s ease; }
+@keyframes swap { from { opacity: 0; transform: translateY(6px); } }
+.choices.rise .choice { animation: rise .38s cubic-bezier(.2, .8, .3, 1) both; animation-delay: calc(var(--i, 0) * 40ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+/* Knappar trycks ner lite, som på iOS. */
+.tool svg, .chev svg, .icon-btn svg, .choice { transition: transform .15s ease; }
+.tool:not(:disabled):active svg, .chev:not(:disabled):active svg, .icon-btn:active svg { transform: scale(.86); }
+.choice:not(:disabled):active { transform: scale(.97); }
+.segmented button.is-solved::after { animation: pop-in .4s cubic-bezier(.3, 1.6, .5, 1); }
+.hero-icon { animation: bounce-in .6s cubic-bezier(.3, 1.6, .5, 1) .1s both; }
+@keyframes bounce-in { from { transform: scale(.3) rotate(-12deg); opacity: 0; } }
+.toast.show { transition: opacity .2s ease, transform .35s cubic-bezier(.3, 1.5, .5, 1); }
+/* Konfetti när korsordet är löst. */
+.confetti-layer { position: fixed; inset: 0; z-index: 70; pointer-events: none; overflow: hidden; }
+.confetti-layer i { position: absolute; width: 8px; height: 12px; margin: -6px 0 0 -4px; border-radius: 2px; }
+
+/* Tips om att lägga appen på hemskärmen (visas en gång i Safari på iPhone/iPad). */
+.install-hint {
+  position: fixed; z-index: 40;
+  left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right));
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  max-width: 520px; margin: 0 auto;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 12px 12px 14px; border-radius: 18px;
+  background: var(--bar); -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .2), inset 0 0 0 .5px var(--separator);
+  animation: rise .5s cubic-bezier(.2, .8, .3, 1) both;
+}
+.install-hint[hidden] { display: none; }
+.install-hint img { width: 44px; height: 44px; border-radius: 10px; flex: none; }
+.install-text { font-size: 14px; line-height: 1.35; display: grid; gap: 2px; }
+.install-text > b { font-size: 15px; }
+.install-text svg { width: 16px; height: 16px; vertical-align: -3px; color: var(--tint); }
+.install-hint .text-btn { align-self: center; }
+
+/* ---------- Låsta ord (visats som rätt) ---------- */
+.cell.locked { color: var(--label); background: var(--locked-bg); }
+.cell.locked .ch { font-weight: 600; }
+.cell.locked.in-word { background: var(--word); }
+.cell.locked.selected { background: var(--selected); color: var(--sel-ink); }
+/* Med svarsalternativ visas inte ordens längd. */
+body.mc .len { display: none; }
+
+/* ---------- Mer animationer ---------- */
+.spark {
+  position: absolute; width: 6px; height: 6px; border-radius: 50%;
+  font-size: 14px; line-height: 1; font-style: normal; font-weight: 400;
+  display: grid; place-items: center; pointer-events: none;
+}
+.spark:not(:empty) { background: none !important; width: auto; height: auto; }
+.combo {
+  position: fixed; left: 50%; top: 42%; z-index: 65;
+  transform: translate(-50%, -50%) scale(.4); opacity: 0; pointer-events: none;
+  padding: 12px 22px; border-radius: 999px;
+  background: linear-gradient(135deg, #ff9500, #ff2d55); color: #fff;
+  font-size: 20px; font-weight: 800; letter-spacing: -.01em;
+  box-shadow: 0 12px 40px rgba(255, 45, 85, .35);
+}
+.combo.show { animation: combo-pop 1.4s cubic-bezier(.3, 1.4, .5, 1) both; }
+@keyframes combo-pop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.4) rotate(-8deg); }
+  18% { opacity: 1; transform: translate(-50%, -50%) scale(1.08) rotate(2deg); }
+  30% { transform: translate(-50%, -50%) scale(1) rotate(0); }
+  75% { opacity: 1; transform: translate(-50%, -60%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -120%) scale(.9); }
+}
+.cell.flash { animation: cell-flash 1s cubic-bezier(.3, 1.4, .5, 1) both; animation-delay: calc(var(--i, 0) * 55ms); }
+@keyframes cell-flash {
+  0% { transform: scale(1); }
+  30% { background: var(--green); color: #fff; transform: scale(1.14) translateY(-3px); }
+  55% { background: var(--green); color: #fff; transform: scale(.96); }
+  100% { transform: scale(1); }
+}
+.cell.selected { animation: cursor-pulse 1.6s ease-in-out infinite; }
+@keyframes cursor-pulse { 50% { box-shadow: inset 0 0 0 2px var(--tint); } }
+.board.enter .cell.selected { animation: cell-in .45s cubic-bezier(.2, .8, .3, 1) both; animation-delay: var(--d, 0ms); }
+.play.mode-in > *:not([hidden]) { animation: mode-in .45s cubic-bezier(.2, .8, .3, 1) both; }
+.play.mode-in > *:nth-child(2) { animation-delay: .04s; }
+.play.mode-in > *:nth-child(3) { animation-delay: .08s; }
+@keyframes mode-in { from { opacity: 0; transform: translateY(12px) scale(.985); } }
+.pulse { animation: pulse .6s cubic-bezier(.3, 1.5, .5, 1); }
+@keyframes pulse { 40% { transform: scale(1.04); } }
+.pop { animation: pop-in .35s cubic-bezier(.3, 1.6, .5, 1); }
+
+/* ---------- Läget Meningar ---------- */
+body.mode-mek .board-area, body.mode-mek .toolbar, body.mode-mek .clues, body.mode-mek .dock { display: none !important; }
+body.mode-mek .app { grid-template: "play" minmax(0, 1fr) / minmax(0, 1fr) !important; }
+body.mode-mek .play { display: flex !important; max-width: 760px; width: 100%; margin: 0 auto; padding-bottom: 0; }
+.mek {
+  flex: 1; min-height: 0; position: relative;
+  display: flex; flex-direction: column; gap: 14px;
+  overflow-y: auto; overscroll-behavior: contain;
+  /* Negativ marginal + padding så att kortens skuggor inte klipps vid kanterna. */
+  margin: 0 -16px; padding: 4px 16px calc(20px + env(safe-area-inset-bottom));
+  -webkit-user-select: none; user-select: none;
+}
+.mek[hidden] { display: none; }
+.mek-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mek-dots { display: flex; gap: 5px; flex-wrap: wrap; }
+.mek-dots i { width: 8px; height: 8px; border-radius: 4px; background: var(--fill-2); transition: width .3s ease, background .3s ease; }
+.mek-dots i.current { width: 22px; background: var(--tint); }
+.mek-dots i.right { background: var(--green); }
+.mek-dots i.wrong { background: var(--red); }
+.mek-count { font-size: 13px; font-weight: 600; color: var(--label-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mek-body { display: flex; flex-direction: column; gap: 12px; transition: filter .25s ease; }
+.mek-body[hidden] { display: none; }
+body.is-paused .mek-body, body.is-paused .mek-result { filter: blur(14px); pointer-events: none; }
+.mek-card {
+  background: var(--bg-elev); border-radius: 20px; padding: 20px 20px 22px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 8px 28px rgba(0, 0, 0, .06);
+}
+.mek-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--label-2); margin-bottom: 10px; }
+.mek-text { margin: 0; font-size: clamp(19px, 4.8vw, 24px); line-height: 1.55; letter-spacing: -.01em; text-wrap: pretty; }
+.gap {
+  display: inline-block; min-width: 4.2em; margin: 0 3px; padding: 0 4px;
+  border-bottom: 2.5px solid var(--label-3); text-align: center; line-height: 1.25;
+  vertical-align: baseline;
+}
+.gap .gap-word { display: inline-block; }
+.gap.filled { border-color: var(--green); }
+.gap.filled .gap-word { color: var(--green); font-weight: 650; animation: drop-in .5s cubic-bezier(.3, 1.5, .5, 1) both; animation-delay: calc(var(--g, 0) * 120ms); }
+.gap.filled.fixed { border-color: var(--tint); }
+.gap.filled.fixed .gap-word { color: var(--tint); }
+.gap.plain { border: 0; margin: 0; padding: 0; min-width: 0; }
+.gap.plain .gap-word { color: var(--label); font-weight: 700; animation: none; }
+@keyframes drop-in { from { opacity: 0; transform: translateY(-14px) scale(.8); } }
+.mek-options { display: grid; gap: 8px; }
+.mek-opt {
+  display: flex; align-items: center; gap: 12px; min-height: 54px; width: 100%;
+  padding: 10px 14px 10px 10px; border-radius: 14px; text-align: left;
+  background: var(--bg-elev); box-shadow: inset 0 0 0 .5px var(--separator);
+  font-size: 17px; line-height: 1.25;
+  transition: transform .15s ease, opacity .25s ease, box-shadow .2s ease, background .2s ease;
+}
+.mek-opt .opt {
+  flex: none; width: 30px; height: 30px; border-radius: 15px; display: grid; place-items: center;
+  background: var(--fill); color: var(--label-2); font-weight: 700; font-size: 14px;
+  transition: background .2s ease, color .2s ease;
+}
+.mek-opt:not(:disabled):active { transform: scale(.98); background: var(--fill); }
+@media (hover: hover) { .mek-opt:not(:disabled):hover { box-shadow: inset 0 0 0 1.5px var(--tint); } }
+.mek-opt:disabled { cursor: default; opacity: 1; }
+.mek-opt.right { box-shadow: inset 0 0 0 2px var(--green); background: color-mix(in srgb, var(--green) 10%, var(--bg-elev)); }
+.mek-opt.right .opt { background: var(--green); color: #fff; }
+.mek-opt.wrong { box-shadow: inset 0 0 0 2px var(--red); }
+.mek-opt.wrong .opt { background: var(--red); color: #fff; }
+.mek-opt.wrong .opt-word { text-decoration: line-through; color: var(--label-2); }
+.mek-opt.dim { opacity: .45; }
+.mek-opt.shake { animation: shake .35s ease; }
+.mek-options.rise .mek-opt { animation: rise .45s cubic-bezier(.2, .8, .3, 1) both; animation-delay: calc(var(--i, 0) * 55ms + 80ms); }
+.mek-card.enter { animation: card-in .5s cubic-bezier(.2, .8, .3, 1) both; }
+.mek-card.enter.from-next { animation-name: card-next; }
+.mek-card.enter.from-prev { animation-name: card-prev; }
+@keyframes card-in { from { opacity: 0; transform: translateY(16px) scale(.97); } }
+@keyframes card-next { from { opacity: 0; transform: translateX(40px) rotate(1.5deg); } }
+@keyframes card-prev { from { opacity: 0; transform: translateX(-40px) rotate(-1.5deg); } }
+.mek-feedback { min-height: 24px; text-align: center; font-weight: 700; font-size: 16px; }
+.fb.ok { color: var(--green); }
+.fb.bad { color: var(--red); }
+.mek-feedback.pop { animation: pop-in .4s cubic-bezier(.3, 1.6, .5, 1); }
+#mek-next { margin-top: 0; }
+.mek-paused { z-index: 2; }
+
+/* Resultat */
+.mek-result { display: flex; flex-direction: column; gap: 8px; }
+.mek-result[hidden] { display: none; }
+.result-card {
+  background: var(--bg-elev); border-radius: 22px; padding: 26px 20px 22px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 8px 28px rgba(0, 0, 0, .06);
+}
+.result-card h2 { margin: 6px 0 0; font-size: 24px; letter-spacing: -.02em; }
+.result-card p { margin: 0; color: var(--label-2); }
+.ring { position: relative; width: 150px; height: 150px; }
+.ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 11; stroke-linecap: round; }
+.ring .track { stroke: var(--fill); }
+.ring .bar { stroke: var(--green); stroke-dasharray: var(--circ); stroke-dashoffset: var(--off); }
+.mek-result.enter .ring .bar { animation: ring-fill 1.1s cubic-bezier(.3, .8, .3, 1) .15s both; }
+@keyframes ring-fill { from { stroke-dashoffset: var(--circ); } }
+.ring-num { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; }
+.ring-num b { font-size: 46px; line-height: 1; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.ring-num span { font-size: 14px; color: var(--label-2); }
+.mek-result.enter .result-card { animation: card-in .6s cubic-bezier(.2, .8, .3, 1) both; }
+.mek-result.enter .result-card h2 { animation: pop-in .5s cubic-bezier(.3, 1.6, .5, 1) .5s both; }
+.mek-review li { display: flex; gap: 10px; align-items: flex-start; line-height: 1.45; }
+.mek-review .mark { flex: none; width: 22px; height: 22px; border-radius: 11px; display: grid; place-items: center; font-size: 12px; font-weight: 800; color: #fff; margin-top: 1px; }
+.mek-review li.ok .mark { background: var(--green); }
+.mek-review li.bad .mark { background: var(--red); }
+.mek-result.enter .mek-review li { animation: rise .4s cubic-bezier(.2, .8, .3, 1) both; animation-delay: calc(var(--i, 0) * 45ms + .4s); }
+body.mode-mek .levelrow { max-width: none; }
+@media (max-height: 559px) and (orientation: landscape) {
+  .mek-options { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .mek-opt { min-height: 44px; font-size: 15px; padding: 6px 10px 6px 8px; }
+  .mek-card { padding: 14px 18px 16px; }
+  .mek-text { font-size: 19px; }
+  .mek-label { display: none; }
+}
+@media (min-width: 740px) and (min-height: 560px) {
+  .mek-options { grid-template-columns: 1fr 1fr; }
+  .mek-card { padding: 26px 28px 28px; }
+}
+
+/* ---------- Färgteman ---------- */
+:root[data-accent="indigo"] { --accent-l: #5856d6; --accent-d: #5e5ce6; }
+:root[data-accent="purple"] { --accent-l: #af52de; --accent-d: #bf5af2; }
+:root[data-accent="pink"] { --accent-l: #ff2d55; --accent-d: #ff375f; }
+:root[data-accent="orange"] { --accent-l: #f57c00; --accent-d: #ff9f0a; }
+:root[data-accent="teal"] { --accent-l: #0a9bb5; --accent-d: #40c8e0; }
+
+/* ---------- Rutstilar ---------- */
+/* Rundad, Bubblor och Mjuk: fristående brickor utan svarta rutor, som svävar på bakgrunden. */
+:root:not([data-cells="classic"]) .board {
+  gap: var(--tile-gap, 3px); padding: 2px; background: transparent; border: 0; border-radius: 0; overflow: visible;
+}
+:root:not([data-cells="classic"]) .cell.block { background: transparent; }
+:root:not([data-cells="classic"]) .cell.letter {
+  box-shadow: inset 0 0 0 1px var(--tile-edge), 0 1px 2px rgba(0, 0, 0, .06);
+  transition: background-color .15s ease, box-shadow .15s ease, border-radius .3s ease;
+}
+:root:not([data-cells="classic"]) .cell.in-word, :root:not([data-cells="classic"]) .cell.selected { box-shadow: none; }
+:root:not([data-cells="classic"]) .cell.selected { box-shadow: 0 0 0 2px var(--tint), 0 4px 12px color-mix(in srgb, var(--tint) 35%, transparent); z-index: 1; }
+:root { --tile-edge: color-mix(in srgb, var(--label) 12%, transparent); }
+:root[data-cells="rounded"] .cell.letter { border-radius: 24%; }
+:root[data-cells="bubble"] { --tile-gap: 4px; }
+:root[data-cells="bubble"] .cell.letter { border-radius: 50%; }
+:root[data-cells="bubble"] .cell .num {
+  top: -6%; left: -6%; z-index: 2; padding: 1px 3px; border-radius: 6px;
+  background: var(--bg); color: var(--label-2); font-size: calc(100cqw / var(--cols) * .2);
+}
+:root[data-cells="soft"] { --tile-gap: 4px; }
+:root[data-cells="soft"] .cell.letter {
+  border-radius: 32%; background: color-mix(in srgb, var(--tint) 5%, var(--cell));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .07), 0 3px 10px color-mix(in srgb, var(--tint) 24%, transparent);
+}
+:root[data-cells="soft"] .cell.letter .ch { font-weight: 650; }
+:root[data-cells="soft"] .cell.in-word { background: var(--word); }
+:root[data-cells="soft"] .cell.selected { background: var(--selected); }
+:root[data-cells="soft"] .cell.locked:not(.in-word):not(.selected) { background: var(--locked-bg); }
+:root:not([data-cells="classic"]) .board.solved .cell.letter { box-shadow: none; }
+:root:not([data-cells="classic"]) .cell.revealed::before { border-top-right-radius: 40%; }
+/* Pulserande markör: inte i klassisk stil där rutan redan har skarp kant */
+:root:not([data-cells="classic"]) .cell.selected { animation: none; }
+
+/* ---------- Typsnitt (Apples egna) ---------- */
+:root[data-font="rounded"] { --letters: ui-rounded, "SF Pro Rounded", system-ui, sans-serif; }
+:root[data-font="serif"] { --letters: ui-serif, "New York", Georgia, "Times New Roman", serif; }
+:root[data-font="mono"] { --letters: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.cell .ch, .cc-strip, .mek-text, .date-title, .ring-num b, .wod-word { font-family: var(--letters, inherit); }
+:root[data-font="rounded"] .date-title, :root[data-font="rounded"] .brand-name { letter-spacing: -.01em; }
+
+/* ---------- Förlopp ---------- */
+.progress { height: 4px; border-radius: 2px; background: var(--fill); overflow: hidden; width: 100%; max-width: 520px; margin: -4px auto 0; flex: none; }
+.progress i { display: block; height: 100%; width: var(--p, 0%); border-radius: 2px; background: linear-gradient(90deg, var(--tint), color-mix(in srgb, var(--tint) 60%, var(--green))); transition: width .5s cubic-bezier(.3, .8, .3, 1); }
+body.mode-mek .progress, body.compact .progress { display: none; }
+
+/* ---------- Ledtrådskortet: hela ledtråden + ordets bokstäver ---------- */
+.cc-text { display: flex; flex-direction: column; justify-content: center; gap: 2px; -webkit-line-clamp: unset; }
+.cc-num { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--tint); margin: 0; }
+.cc-clue { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cc-strip { display: none; gap: 3px; flex-wrap: wrap; margin-top: 5px; }
+.cc-strip b {
+  width: 22px; height: 26px; border-radius: 6px; display: grid; place-items: center;
+  background: var(--fill); font-size: 14px; font-weight: 700; color: var(--ink);
+  transition: background-color .15s ease, transform .15s ease;
+}
+.cc-strip b.cur { background: var(--selected); color: var(--sel-ink); transform: translateY(-2px); box-shadow: 0 2px 6px color-mix(in srgb, var(--tint) 30%, transparent); }
+.cc-strip b.ok { background: var(--locked-bg); color: var(--green); }
+.cc-strip b.bad { color: var(--red); }
+body.typing .cc-strip { display: flex; }
+
+/* ---------- iPhone med tangentbordet uppe: fokusläge ---------- */
+body.compact .navbar { display: none; }
+body.compact .play { padding-top: max(8px, env(safe-area-inset-top)); gap: 6px; }
+/* Rutnätet får hela bredden och skrollar till ordet man skriver i. */
+body.compact .board-area { container-type: inline-size; overflow-y: auto; overflow-x: hidden; place-items: start center; padding: 6px 0 10px; scroll-behavior: smooth; }
+body.compact .board { width: min(100cqw - 4px, var(--cols) * 52px); }
+body.compact .dock { padding-top: 8px; }
+body.compact .current-clue { min-height: 0; padding: 4px 0; box-shadow: 0 -6px 20px rgba(0, 0, 0, .06); }
+body.compact .cc-text { padding: 6px 2px; }
+
+/* ---------- Stilväljare i inställningarna ---------- */
+.preset-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.preset-row button, .font-row button, .swatch-row button {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px 4px 8px; border-radius: 14px; background: var(--bg-elev);
+  font-size: 12px; font-weight: 600; color: var(--label-2);
+  box-shadow: inset 0 0 0 1px transparent; transition: box-shadow .2s ease, transform .15s ease, color .2s ease;
+}
+.preset-row button[aria-checked="true"], .font-row button[aria-checked="true"], .swatch-row button[aria-checked="true"] {
+  box-shadow: inset 0 0 0 2px var(--tint); color: var(--label);
+}
+.preset-row button:active, .font-row button:active, .swatch-row button:active { transform: scale(.95); }
+.mini { display: grid; grid-template-columns: repeat(3, 14px); gap: 2px; padding: 2px; }
+.mini i { width: 14px; height: 14px; background: var(--cell); box-shadow: inset 0 0 0 1px var(--tile-edge); }
+.mini i.b { background: transparent; box-shadow: none; }
+.mini i.s { background: var(--selected); box-shadow: none; }
+.mini i.w { background: var(--word); box-shadow: none; }
+.mini[data-cells="rounded"] i { border-radius: 4px; }
+.mini[data-cells="bubble"] i { border-radius: 50%; }
+.mini[data-cells="soft"] i { border-radius: 5px; background: color-mix(in srgb, var(--tint) 8%, var(--cell)); box-shadow: 0 1px 3px color-mix(in srgb, var(--tint) 20%, transparent); }
+.mini[data-cells="soft"] i.b { background: transparent; box-shadow: none; }
+.mini[data-cells="soft"] i.s { background: var(--selected); }
+.mini[data-cells="soft"] i.w { background: var(--word); }
+.mini[data-cells="classic"] { gap: 1px; padding: 1px; background: var(--block); border-radius: 3px; }
+.mini[data-cells="classic"] i { box-shadow: none; }
+.mini[data-cells="classic"] i.b { background: var(--block); }
+.swatch-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.swatch-row button { padding: 10px 2px 8px; font-size: 11px; }
+.swatch-row i { width: 26px; height: 26px; border-radius: 50%; background: var(--c); box-shadow: 0 2px 6px color-mix(in srgb, var(--c) 45%, transparent); transition: transform .25s cubic-bezier(.3, 1.6, .5, 1); }
+.swatch-row button[aria-checked="true"] i { transform: scale(1.12); box-shadow: 0 0 0 3px var(--bg-elev), 0 0 0 5px var(--c); }
+.swatch-row [data-accent="blue"] { --c: #007aff; }
+.swatch-row [data-accent="indigo"] { --c: #5856d6; }
+.swatch-row [data-accent="purple"] { --c: #af52de; }
+.swatch-row [data-accent="pink"] { --c: #ff2d55; }
+.swatch-row [data-accent="orange"] { --c: #f57c00; }
+.swatch-row [data-accent="teal"] { --c: #0a9bb5; }
+.font-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.font-row b { font-size: 22px; color: var(--label); line-height: 1.1; }
+.font-row [data-font="rounded"] b { font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif; }
+.font-row [data-font="serif"] b { font-family: ui-serif, "New York", Georgia, serif; }
+.font-row [data-font="mono"] b { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+/* ---------- Ordlista ---------- */
+dialog.sheet.tall { height: calc(100dvh - env(safe-area-inset-top) - 12px); }
+.search { display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 38px; border-radius: 11px; background: var(--fill); color: var(--label-2); }
+.search svg { width: 18px; height: 18px; flex: none; }
+.search input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 17px; color: var(--label); outline: none; -webkit-user-select: text; user-select: text; }
+.search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.word-count { font-size: 13px; color: var(--label-2); margin: 2px 4px 0; }
+.word-list { background: var(--bg-elev); border-radius: var(--radius); overflow: hidden; }
+.word-list .letter-head { position: sticky; top: 0; z-index: 1; padding: 6px 16px; font-size: 13px; font-weight: 700; color: var(--tint); background: color-mix(in srgb, var(--bg-elev) 88%, var(--tint)); }
+.word-list .w { position: relative; padding: 10px 16px; line-height: 1.35; }
+.word-list .w + .w::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: var(--separator); }
+.word-list .w b { font-weight: 650; }
+.word-list .w span { color: var(--label-2); }
+.word-list mark { background: color-mix(in srgb, var(--tint) 25%, transparent); color: inherit; border-radius: 3px; }
+.word-list .empty { padding: 24px 16px; text-align: center; color: var(--label-2); }
+.word-of-day {
+  position: relative; overflow: hidden;
+  border-radius: 18px; padding: 16px 18px 18px; color: #fff;
+  background: linear-gradient(135deg, var(--tint), color-mix(in srgb, var(--tint) 55%, #000));
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--tint) 35%, transparent);
+}
+.word-of-day::after { content: "✦"; position: absolute; right: 14px; top: 8px; font-size: 42px; opacity: .18; animation: twinkle 3s ease-in-out infinite; }
+@keyframes twinkle { 50% { transform: rotate(20deg) scale(1.15); opacity: .3; } }
+.wod-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; opacity: .8; }
+.wod-word { font-size: 30px; font-weight: 800; letter-spacing: -.02em; margin: 2px 0; text-transform: lowercase; }
+.wod-clue { font-size: 16px; opacity: .92; }
+.word-of-day.enter { animation: card-in .6s cubic-bezier(.2, .8, .3, 1) both; }
+.wide-only { display: grid; }
+@media (max-width: 359px) { .wide-only { display: none; } }
+
+/* ---------- Fler animationer ---------- */
+.cell.word-in { animation: word-in .35s cubic-bezier(.3, 1.4, .5, 1) both; animation-delay: calc(var(--i, 0) * 22ms); }
+@keyframes word-in { 40% { transform: scale(.9); } }
+.date-title.swap, .kicker.swap { animation: swap .35s ease; }
+.tool:not(:disabled):active svg { transform: scale(.82) rotate(-6deg); }
+#btn-letter.used svg { animation: bulb .8s ease; }
+@keyframes bulb { 30% { transform: scale(1.25); color: #ffcc00; filter: drop-shadow(0 0 6px #ffcc00); } }
+.icon-btn svg { transition: transform .2s cubic-bezier(.3, 1.6, .5, 1); }
+.icon-btn:active svg { transform: scale(.8); }
+.seg-thumb { transition: transform .35s cubic-bezier(.3, 1.3, .5, 1); }
+
+/* ---------- Läget Ord (ORD-delen) ---------- */
+.ord-word {
+  display: block; text-align: center; padding: 18px 0 10px;
+  font-size: clamp(34px, 9vw, 52px); font-weight: 800; letter-spacing: -.02em; line-height: 1.1;
+  color: var(--label); overflow-wrap: anywhere;
+}
+body.quiz-ord .mek-card.enter .ord-word { animation: pop-in .5s cubic-bezier(.3, 1.5, .5, 1) .1s both; }
+body.quiz-ord .mek-options { grid-template-columns: 1fr !important; }
+body.quiz-ord .mek-opt { min-height: 50px; }
+.fb-note { display: block; margin-top: 4px; font-weight: 500; font-size: 15px; color: var(--label-2); }
+
+/* ---------- Flikrad (iPhone) och rubrik i navigationsfältet ---------- */
+.nav-title { display: none; font-weight: 600; font-size: 17px; }
+.tabbar { display: none; }
+@media (max-width: 739px) {
+  .mode-switch { display: none; }
+  .nav-title { display: block; }
+  .tabbar {
+    display: flex; flex: none; justify-content: space-around; align-items: flex-start;
+    padding: 6px max(8px, env(safe-area-inset-right)) calc(2px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    background: var(--bar); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+    border-top: .5px solid var(--separator); z-index: 10;
+  }
+  .tabbar button {
+    position: relative; flex: 1; max-width: 120px;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 2px 0 4px; font-size: 10.5px; font-weight: 500; color: var(--label-2);
+    transition: color .2s ease;
+  }
+  .tabbar svg { width: 26px; height: 26px; stroke-width: 1.7; transition: transform .3s cubic-bezier(.3, 1.6, .5, 1); }
+  .tabbar svg .solid { fill: currentColor; }
+  .tabbar button[aria-selected="true"] { color: var(--tint); }
+  .tabbar button[aria-selected="true"] svg { transform: scale(1.08); }
+  .tabbar button:active svg { transform: scale(.85); }
+  .tabbar button.is-new::after {
+    content: ""; position: absolute; top: 1px; left: calc(50% + 10px);
+    width: 9px; height: 9px; border-radius: 50%; background: var(--red);
+    box-shadow: 0 0 0 2px var(--bar); animation: badge 2s ease-in-out infinite;
+  }
+  /* Flikraden har säker yta i botten, då behöver docken och frågelägena inte ha det. */
+  .dock { padding-bottom: 6px; }
+  .mek { padding-bottom: 20px; }
+  body.compact .tabbar { display: none; }
+  body.compact .dock { padding-bottom: 6px; }
+  /* Tätare rubrik på iPhone så att rutnätet får mer plats. */
+  .dayhead .kicker { font-size: 12px; }
+  .date-title { font-size: 28px; }
+  .chev { width: 32px; height: 32px; }
+  .play { gap: 8px; }
+}
+
+/* Dold tid */
+body.hide-time .timer { display: none; }
 
 /* ---------- Toast ---------- */
 .toast {
@@ -442,6 +978,8 @@ dialog.sheet[open] { display: flex; animation: sheet-up .38s cubic-bezier(.3, .7
   padding: 4px 16px calc(20px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; gap: 8px;
 }
+/* Innehållet i ett ark får aldrig tryckas ihop, arket skrollar i stället. */
+.sheet-body > * { flex-shrink: 0; }
 .list-title { margin: 14px 16px 2px; font-size: 13px; text-transform: uppercase; color: var(--label-2); }
 .list { list-style: none; margin: 0; padding: 0; background: var(--bg-elev); border-radius: var(--radius); overflow: hidden; }
 .list li { position: relative; padding: 11px 16px; font-size: 16px; }
@@ -538,8 +1076,7 @@ dialog.alert[open] { animation: alert-in .2s ease; }
     column-gap: 8px;
   }
   .play { padding: 20px 20px 0 28px; gap: 14px; }
-  .date-title { font-size: 28px; }
-  .chev { width: 40px; height: 40px; border-radius: 20px; }
+  .date-title { font-size: 34px; }
   .segmented button { height: 32px; font-size: 15px; }
   .tool { font-size: 12px; }
   .tool svg { width: 27px; height: 27px; }
@@ -565,20 +1102,22 @@ dialog.alert[open] { animation: alert-in .2s ease; }
   dialog.actionsheet { width: 360px; box-shadow: none; }
 }
 @keyframes pop-in { from { transform: translateY(40px); opacity: 0; } }
-/* Liggande iPad: tangentbordet under ledtrådarna så att rutnätet får hela höjden. */
-@media (min-width: 1000px) and (min-height: 560px) and (orientation: landscape) and (pointer: coarse) {
+/* Liggande iPad: ledtrådsraden under ledtrådslistan så att rutnätet får hela höjden. */
+@media (min-width: 900px) and (min-height: 560px) and (orientation: landscape) and (pointer: coarse) {
   .app {
     grid-template: "play clues" minmax(0, 1fr) "play dock" auto / minmax(0, 1fr) clamp(380px, 36vw, 460px);
   }
   .play { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
-  .dock { border-radius: 16px 16px 0 0; }
-  .key { font-size: 20px; height: clamp(40px, 5.6dvh, 50px); }
 }
 /* Datorer med mus: ingen dock behövs när ledtrådarna syns bredvid. */
 @media (min-width: 740px) and (min-height: 560px) and (pointer: fine) {
   .app { grid-template: "play clues" minmax(0, 1fr) / minmax(0, 1fr) clamp(300px, 34vw, 400px); }
   .dock { display: none; }
   .play { padding-bottom: 16px; }
+  body.mc .app { grid-template: "play clues" minmax(0, 1fr) "dock clues" auto / minmax(0, 1fr) clamp(300px, 34vw, 400px); }
+  body.mc .dock { display: block; padding-bottom: 16px; }
+  body.mc .current-clue { display: none; }
+  body.mc .choices { margin-top: 0; }
 }
 
 /* ---------- Liggande telefon ---------- */
@@ -594,17 +1133,15 @@ dialog.alert[open] { animation: alert-in .2s ease; }
   }
   .play { display: contents; }
   .dayhead { grid-area: head; padding: 8px 12px 0 0; }
-  .segmented { grid-area: seg; margin: 8px 0 0; max-width: none; width: calc(100% - 12px); }
+  .levelrow { grid-area: seg; margin: 8px 12px 0 0; width: auto; max-width: none; }
   .toolbar { grid-area: tools; padding: 4px 12px 0 0; margin: 0; max-width: none; }
   .tool span { display: none; }
   .board-area { grid-area: board; padding: 8px 0 calc(8px + env(safe-area-inset-bottom)) 12px; }
   .dock { align-self: end; padding: 6px 12px calc(6px + env(safe-area-inset-bottom)) 0; background: none !important; }
   .kicker { display: none; }
-  .date-title { font-size: 17px; }
-  .chev { width: 32px; height: 32px; }
+  .date-title { font-size: 22px; }
+  .chev { width: 30px; height: 30px; }
   .current-clue { min-height: 44px; }
-  .keyboard { gap: 6px !important; }
-  .key { height: 34px !important; font-size: 18px !important; }
   .navbar { min-height: calc(40px + env(safe-area-inset-top)); }
   .icon-btn { height: 40px; }
 }
@@ -612,12 +1149,10 @@ dialog.alert[open] { animation: alert-in .2s ease; }
 /* ---------- Små telefoner (iPhone SE/mini) ---------- */
 @media (max-width: 380px) {
   .play { padding: 8px 12px 0; gap: 8px; }
-  .date-title { font-size: 19px; }
-  .kicker { font-size: 12px; }
+  .date-title { font-size: 28px; }
 }
 @media (max-height: 700px) and (orientation: portrait) {
-  .kicker { display: none; }
-  .date-title { font-size: 18px; }
+  .date-title { font-size: 26px; }
   .tool span { display: none; }
   .toolbar { padding-bottom: 2px; }
 }
@@ -625,3 +1160,6 @@ dialog.alert[open] { animation: alert-in .2s ease; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Dolt reglage som ger haptisk återkoppling på iPhone (iOS 18). */
+.haptic { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }

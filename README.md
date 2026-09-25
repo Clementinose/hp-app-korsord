@@ -1,18 +1,28 @@
 # HP-Korsord
 
-Ett nytt korsord varje dag med ord från högskoleprovets ORD-del – upplagt som sudokuaday.com. Ledtrådarna är synonymer eller korta förklaringar, precis som på provet. Dagens korsord räknas fram ur datumet, så alla får samma korsord samma dag.
+Ett nytt korsord varje dag med över 2 000 ord från högskoleprovets ORD-del – upplagt som sudokuaday.com. Ledtrådarna är synonymer eller korta förklaringar, precis som på provet. Dagens korsord räknas fram ur datumet, så alla får samma korsord samma dag.
 
 ## Funktioner
 
 - Tre nya korsord varje dag (Lätt / Medel / Svår), med pilar för att bläddra mellan dagar
 - Arkiv med kalender där du ser vilka dagar du löst och kan spela missade korsord
 - Timer med paus, och en svit (🔥 dagar i rad) i statistiken
-- Svenskt tangentbord med Å, Ä och Ö på mobilen, och vanligt tangentbord på datorn (piltangenter, Tab/Enter för nästa ord, mellanslag byter riktning)
-- Hjälp: kontrollera, visa bokstav, visa ord, rensa eller ge upp
+- Skriv med iPhonens/iPadens eget tangentbord eller ett externt tangentbord som Magic Keyboard (piltangenter, Tab/Enter för nästa ord, mellanslag byter riktning, ⌘Z ångrar)
+- Tre lägen: **Korsord**, **Ord** (som ORD-delen: ett ord och fem betydelser, A–E) och **Meningar** (meningskomplettering som i MEK-delen). En ny omgång varje dag på tre nivåer
+- Visa fel: per ord (standard – rätt eller fel visas först när ordet är ifyllt), direkt eller av. Ord som visats som rätt låses
+- Stilval: fyra rutformer (Rundad, Bubblor, Mjuk, Klassisk), sex färgteman och fyra typsnitt
+- Flikrad i botten på iPhone som i iOS-appar
+- Fokusläge på iPhone: när tangentbordet är uppe får rutnätet hela bredden och skrollar till ordet, och ledtrådskortet visar hela ledtråden och ordets bokstäver
+- Ordlista med sökning och Dagens ord
+- Inställningar för att visa fel direkt och för att visa eller dölja tiden
+- Animationer: rutnätet byggs upp, bokstäver poppar in, rätt ord blinkar grönt, fel bokstav skakar och konfetti när korsordet är löst
+- Verktyg som i en sudoku-app: ångra, sudda, kontrollera, tips, visa ord, börja om eller ge upp
 - En ordlista med alla ord och deras betydelser när korsordet är klart
 - Statistik: lösta korsord, lösta utan hjälp, bästa tid och antal HP-ord
 - Sparar varje dags korsord automatiskt, även halvfärdiga
-- Mörkt läge, går att lägga till på hemskärmen och fungerar offline
+- Minimal design i iOS-stil som anpassar sig efter iPhone (stående och liggande), iPad (även delad skärm) och dator
+- Ljust och mörkt läge: följer systemet eller väljs under Inställningar
+- Beter sig som en app: lägg den på hemskärmen (Dela → Lägg till på hemskärmen) så öppnas den i helskärm med egen ikon och fungerar helt utan nät
 
 ## Kör lokalt
 

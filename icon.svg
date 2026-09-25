@@ -1,12 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#2f6fed"/>
-  <g fill="#fff">
-    <rect x="10" y="10" width="13" height="13" rx="3"/>
-    <rect x="25.5" y="10" width="13" height="13" rx="3" fill="#bcd3ff"/>
-    <rect x="41" y="10" width="13" height="13" rx="3"/>
-    <rect x="25.5" y="25.5" width="13" height="13" rx="3" fill="#bcd3ff"/>
-    <rect x="25.5" y="41" width="13" height="13" rx="3" fill="#bcd3ff"/>
-    <rect x="10" y="41" width="13" height="13" rx="3"/>
-    <rect x="41" y="41" width="13" height="13" rx="3"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2d8cff"/>
+      <stop offset="1" stop-color="#0a5fd8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <g font-family="-apple-system, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="150" text-anchor="middle" fill="#0a5fd8">
+    <!-- Ett litet korsord: HP vågrätt och ORD lodrätt -->
+    <rect x="262" y="262" width="160" height="160" rx="28" fill="#ffffff"/>
+    <rect x="432" y="262" width="160" height="160" rx="28" fill="#ffffff"/>
+    <rect x="602" y="262" width="160" height="160" rx="28" fill="#ffffff" fill-opacity=".28"/>
+    <rect x="432" y="432" width="160" height="160" rx="28" fill="#ffffff"/>
+    <rect x="432" y="602" width="160" height="160" rx="28" fill="#ffd60a"/>
+    <rect x="262" y="602" width="160" height="160" rx="28" fill="#ffffff" fill-opacity=".28"/>
+    <rect x="602" y="602" width="160" height="160" rx="28" fill="#ffffff" fill-opacity=".28"/>
+    <text x="342" y="395">H</text>
+    <text x="512" y="395">P</text>
+    <text x="512" y="565">O</text>
+    <text x="512" y="735" fill="#1c1c1e">R</text>
   </g>
 </svg>
