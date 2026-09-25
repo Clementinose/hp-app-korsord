@@ -1,0 +1,11 @@
+{
+  "name": "HP-Korsord",
+  "short_name": "HP-Korsord",
+  "description": "Korsord med ord från högskoleprovets ORD-del.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#1b1f3b",
+  "theme_color": "#1b1f3b",
+  "lang": "sv",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
