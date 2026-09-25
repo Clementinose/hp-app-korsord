@@ -39,8 +39,8 @@
   function save() {
     if (!state) return;
     const all = progressAll();
-    const { entries, revealed, wrong, seconds, hints, done, gaveUp } = state;
-    all[puzzleId(state.date, state.level)] = { sig: state.sig, entries, revealed, wrong, seconds, hints, done, gaveUp };
+    const { entries, revealed, wrong, seconds, hints, done, gaveUp, mcTried, mcMistakes } = state;
+    all[puzzleId(state.date, state.level)] = { sig: state.sig, entries, revealed, wrong, seconds, hints, done, gaveUp, mcTried, mcMistakes };
     store(PROGRESS_KEY, all);
     setPref("level", state.level);
   }
@@ -101,12 +101,14 @@
       date, level, puzzle, sig,
       entries: blank(""), revealed: blank(false), wrong: blank(false),
       seconds: 0, hints: 0, done: false, gaveUp: false,
+      mcTried: {}, mcMistakes: 0, // felaktiga val bland svarsalternativen
       sel: { r: first.row, c: first.col }, dir: first.dir, warnedFull: false,
     };
     if (saved && saved.sig === sig) {
       Object.assign(state, {
         entries: saved.entries, revealed: saved.revealed, wrong: saved.wrong,
         seconds: saved.seconds, hints: saved.hints, done: saved.done, gaveUp: saved.gaveUp,
+        mcTried: saved.mcTried || {}, mcMistakes: saved.mcMistakes || 0,
       });
     }
     paused = false;
@@ -228,7 +230,96 @@
     $("btn-solve").textContent = state.done ? "Visa lösningen" : "Ge upp och visa lösningen";
     $("btn-undo").disabled = state.done || !undoStack.length;
     for (const id of ["btn-erase", "btn-check", "btn-letter"]) $(id).disabled = state.done;
+    renderChoices();
   }
+
+  // ---------- Svarsalternativ (A–E), som på högskoleprovet ----------
+  const LABELS = ["A", "B", "C", "D", "E"];
+  const choiceCache = new Map();
+  const mcOn = () => !!prefs().choices;
+
+  function shuffled(arr, rng) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  }
+  // Rätt ord plus fyra andra HP-ord, helst lika långa. Samma alternativ varje gång för samma ord.
+  function choicesFor(w) {
+    const key = `${state.date}|${state.level}|${w.word}`;
+    if (!choiceCache.has(key)) {
+      const rng = mulberry32(hashString(`${SEED_VERSION}|val|${key}`));
+      const inPuzzle = new Set(state.puzzle.words.map((x) => x.word));
+      const pool = shuffled(HP_WORDS.map(([x]) => x).filter((x) => !inPuzzle.has(x)), rng)
+        .sort((a, b) => Math.abs(a.length - w.word.length) - Math.abs(b.length - w.word.length));
+      choiceCache.set(key, shuffled([w.word, ...pool.slice(0, 4)], rng));
+    }
+    return choiceCache.get(key);
+  }
+
+  function renderChoices() {
+    const box = $("choices");
+    document.body.classList.toggle("mc", mcOn());
+    if (!mcOn() || !state) { box.innerHTML = ""; return; }
+    const w = currentWord();
+    const solved = cellsOf(w).every(([r, c]) => state.entries[r][c] === state.puzzle.grid[r][c]);
+    const tried = state.mcTried[w.word] || [];
+    const html = choicesFor(w).map((word, i) => {
+      const cls = word === w.word && solved ? "right" : tried.includes(word) ? "wrong" : "";
+      const off = state.done || paused || solved || tried.includes(word);
+      return `<button class="choice ${cls}" data-word="${word}" ${off ? "disabled" : ""}>` +
+        `<span class="opt">${LABELS[i]}</span><span class="opt-word">${word.toLowerCase()}</span></button>`;
+    }).join("");
+    if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+  }
+
+  function nextOpenWord() {
+    const order = ["across", "down"].flatMap((d) =>
+      state.puzzle.words.map((w, i) => [w, i]).filter(([w]) => w.dir === d).map(([, i]) => i)
+    );
+    const pos = order.indexOf(currentWordIndex());
+    for (let k = 1; k < order.length; k++) {
+      const i = order[(pos + k) % order.length];
+      if (cellsOf(state.puzzle.words[i]).some(([r, c]) => !state.entries[r][c])) return i;
+    }
+    return -1;
+  }
+
+  function pickChoice(word) {
+    if (!playable()) return;
+    const w = currentWord();
+    const btn = $("choices").querySelector(`[data-word="${word}"]`);
+    if (word === w.word) {
+      remember(cellsOf(w));
+      cellsOf(w).forEach(([r, c], i) => {
+        if (state.revealed[r][c]) return;
+        state.entries[r][c] = w.word[i];
+        state.wrong[r][c] = false;
+        const el = cellEls[r][c];
+        el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop");
+      });
+      update();
+      afterChange();
+      if (!state.done) {
+        const next = nextOpenWord();
+        if (next >= 0) setTimeout(() => { if (!state.done) selectWord(next); }, 450);
+      }
+    } else {
+      state.mcTried[w.word] = [...(state.mcTried[w.word] || []), word];
+      state.mcMistakes++;
+      if (btn) { btn.classList.remove("shake"); void btn.offsetWidth; btn.classList.add("shake"); }
+      setTimeout(() => { update(); save(); }, 280);
+      toast(`${word.toLowerCase()} betyder ${(HP_WORDS.find(([x]) => x === word) || ["", "något annat"])[1]}`);
+    }
+  }
+  function pickIndex(i) {
+    const w = currentWord();
+    const word = choicesFor(w)[i];
+    if (word && mcOn()) pickChoice(word);
+  }
+  $("choices").addEventListener("click", (e) => {
+    const b = e.target.closest(".choice");
+    if (b && !b.disabled) pickChoice(b.dataset.word);
+  });
 
   function scrollClueIntoView() {
     if (!matchMedia("(min-width: 740px) and (min-height: 560px)").matches) return;
@@ -435,6 +526,7 @@
     Object.assign(state, {
       entries: blank(""), revealed: blank(false), wrong: blank(false),
       seconds: 0, hints: 0, done: false, gaveUp: false, warnedFull: false,
+      mcTried: {}, mcMistakes: 0,
     });
     boardEl.classList.remove("solved");
     undoStack = [];
@@ -476,7 +568,8 @@
     const hints = state.hints ? ` med ${state.hints} ${state.hints === 1 ? "ledtråd" : "ledtrådar"}` : " helt utan hjälp";
     $("win-summary").textContent = state.gaveUp
       ? "Ingen fara – gå igenom orden nedan så sitter de nästa gång."
-      : `${LEVELS[state.level].label} · ${formatTime(state.seconds)}${hints}.`;
+      : `${LEVELS[state.level].label} · ${formatTime(state.seconds)}${hints}` +
+        (state.mcMistakes ? ` och ${state.mcMistakes} fel val.` : ".");
     $("win-words").innerHTML = state.puzzle.words
       .slice()
       .sort((a, b) => a.word.localeCompare(b.word, "sv"))
@@ -605,6 +698,7 @@
     if (paused) { stopTimer(); save(); } else startTimer();
   }
   function renderPause() {
+    renderChoices();
     $("paused").hidden = !paused;
     boardEl.classList.toggle("blurred", paused);
     $("btn-pause").disabled = state.done;
@@ -681,8 +775,9 @@
     if (kbInput.value !== SENTINEL) kbInput.value = SENTINEL;
     try { kbInput.setSelectionRange(1, 1); } catch { /* äldre webbläsare */ }
   }
-  function focusInput() {
+  function focusInput(force) {
     if (!state || !playable()) return;
+    if (mcOn() && !force && matchMedia("(pointer: coarse)").matches) return;
     if (document.activeElement !== kbInput) kbInput.focus({ preventScroll: true });
     resetInput();
   }
@@ -695,6 +790,7 @@
   function handleText(text) {
     for (const ch of text) {
       if (ch === " ") selectCell(state.sel.r, state.sel.c);
+      else if (/^[1-5]$/.test(ch)) pickIndex(+ch - 1);
       else { const l = toLetter(ch); if (l) typeLetter(l); }
     }
   }
@@ -739,6 +835,7 @@
     else if (k === " ") { selectCell(state.sel.r, state.sel.c); e.preventDefault(); }
     else if (!fromInput && (k === "Backspace" || k === "Delete")) { backspace(); e.preventDefault(); }
     else if (!fromInput && k.length === 1 && toLetter(k)) { typeLetter(toLetter(k)); e.preventDefault(); }
+    else if (!fromInput && /^[1-5]$/.test(k)) { pickIndex(+k - 1); e.preventDefault(); }
   });
 
   // Anpassa appens höjd efter det som syns när iOS-tangentbordet är uppe.
@@ -759,7 +856,7 @@
   document.querySelectorAll(".tool, .cc-nav, .cc-text").forEach((b) =>
     b.addEventListener("pointerdown", (e) => { if (document.activeElement === kbInput) e.preventDefault(); })
   );
-  $("kb-toggle").addEventListener("click", () => (document.activeElement === kbInput ? kbInput.blur() : focusInput()));
+  $("kb-toggle").addEventListener("click", () => (document.activeElement === kbInput ? kbInput.blur() : focusInput(true)));
   // Tryck bredvid rutnätet för att fälla ner tangentbordet.
   $("board-area").addEventListener("click", (e) => { if (!e.target.closest(".cell.letter, .paused")) kbInput.blur(); });
 
@@ -790,7 +887,8 @@
   $("next-clue").addEventListener("click", () => stepWord(1));
   $("btn-stats").addEventListener("click", showStats);
   $("btn-archive").addEventListener("click", showArchive);
-  $("btn-settings").addEventListener("click", () => { renderThemePicker(); $("settings-dialog").showModal(); });
+  $("btn-settings").addEventListener("click", () => { renderThemePicker(); $("mc-toggle").checked = mcOn(); $("settings-dialog").showModal(); });
+  $("mc-toggle").addEventListener("change", (e) => { setPref("choices", e.target.checked); update(); });
   $("open-help").addEventListener("click", () => { $("settings-dialog").close(); $("help-dialog").showModal(); });
   document.querySelectorAll("#theme-picker button").forEach((b) =>
     b.addEventListener("click", () => { setPref("theme", b.dataset.themeValue); applyTheme(); renderThemePicker(); })

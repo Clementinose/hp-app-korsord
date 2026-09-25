@@ -8,6 +8,7 @@ Ett nytt korsord varje dag med ord från högskoleprovets ORD-del – upplagt so
 - Arkiv med kalender där du ser vilka dagar du löst och kan spela missade korsord
 - Timer med paus, och en svit (🔥 dagar i rad) i statistiken
 - Skriv med iPhonens/iPadens eget tangentbord eller ett externt tangentbord som Magic Keyboard (piltangenter, Tab/Enter för nästa ord, mellanslag byter riktning, ⌘Z ångrar)
+- Svarsalternativ A–E som på högskoleprovet (slå på under Inställningar): välj rätt ord bland fem, eller tryck 1–5 på tangentbordet
 - Verktyg som i en sudoku-app: ångra, sudda, kontrollera, tips, visa ord, börja om eller ge upp
 - En ordlista med alla ord och deras betydelser när korsordet är klart
 - Statistik: lösta korsord, lösta utan hjälp, bästa tid och antal HP-ord

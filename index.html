@@ -126,6 +126,8 @@
           <svg class="kb-show" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M9.3 10h.01M12.6 10h.01M15.9 10h.01M18 10h.01M8 14h8"/></svg>
           <svg class="kb-hide" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="3" width="19" height="12" rx="2.5"/><path d="M6 7h.01M9.3 7h.01M12.6 7h.01M15.9 7h.01M18 7h.01M8 11h8M9 18.5l3 2.5 3-2.5"/></svg>
         </button>
+      </div>
+      <div class="choices" id="choices" role="group" aria-label="Svarsalternativ"></div>
     </div>
   </div>
 
@@ -203,6 +205,11 @@
         <button data-theme-value="light" role="radio">Ljust</button>
         <button data-theme-value="dark" role="radio">Mörkt</button>
       </div>
+      <div class="list-title">Spel</div>
+      <ul class="list">
+        <li><label class="row switch-row" for="mc-toggle">Svarsalternativ (A–E)<input type="checkbox" id="mc-toggle" class="switch"></label></li>
+      </ul>
+      <p class="footnote tight">Visar fem ord att välja mellan för varje ledtråd, som på högskoleprovet. Välj rätt ord så fylls det i.</p>
       <div class="list-title">Hjälp</div>
       <ul class="list">
         <li><button class="row" id="open-help">Så spelar du<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
@@ -224,6 +231,7 @@
         <li><b>Byt riktning.</b> Tryck på samma ruta igen för att växla mellan vågrätt och lodrätt.</li>
         <li><b>Skriv.</b> Tryck på en ruta så kommer tangentbordet upp. Med Magic Keyboard eller annat tangentbord skriver du direkt.</li>
         <li><b>Kortkommandon.</b> Piltangenter flyttar, Tab eller Enter går till nästa ord, mellanslag byter riktning och ⌘Z ångrar.</li>
+        <li><b>Svarsalternativ.</b> Slå på A–E under Inställningar för att välja bland fem ord, som på provet. Med tangentbord väljer du med 1–5.</li>
         <li><b>Missat en dag?</b> Öppna arkivet uppe till vänster.</li>
       </ul>
       <button class="pill wide" data-close>Kör igång</button>
