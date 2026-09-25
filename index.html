@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="style.css">
   <script>
     // Sätt tema innan sidan ritas, så att den inte blinkar.
-    try { const t = JSON.parse(localStorage.getItem("hpk-prefs-v2") || "{}").theme; if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
+    try { const t = JSON.parse(localStorage.getItem("hpk-prefs-v2") || "{}").theme; if (t === "light" || t === "dark") { document.documentElement.dataset.theme = t; document.documentElement.dataset.themeByApp = ""; } } catch {}
   </script>
 </head>
 <body>

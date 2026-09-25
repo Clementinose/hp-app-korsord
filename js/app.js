@@ -109,7 +109,7 @@
       });
     }
     paused = false;
-    history.replaceState(null, "", `#${date}/${level}`);
+    try { history.replaceState(null, "", `#${date}/${level}`); } catch { /* inbäddad vy */ }
     setup();
   }
 
@@ -611,8 +611,9 @@
   // ---------- Tema ----------
   function applyTheme() {
     const t = prefs().theme;
-    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
-    else delete document.documentElement.dataset.theme;
+    const root = document.documentElement;
+    if (t === "light" || t === "dark") { root.dataset.theme = t; root.dataset.themeByApp = ""; }
+    else if ("themeByApp" in root.dataset) { delete root.dataset.theme; delete root.dataset.themeByApp; }
     const dark = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
     document.querySelectorAll('meta[name="theme-color"]').forEach((m) => (m.content = dark ? "#000000" : "#f2f2f7"));
   }
