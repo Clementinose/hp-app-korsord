@@ -1,6 +1,6 @@
 # HP-Korsord
 
-Ett nytt korsord varje dag med 877 ord från högskoleprovets ORD-del – upplagt som sudokuaday.com. Ledtrådarna är synonymer eller korta förklaringar, precis som på provet. Dagens korsord räknas fram ur datumet, så alla får samma korsord samma dag.
+Ett nytt korsord varje dag med över 1 400 ord från högskoleprovets ORD-del – upplagt som sudokuaday.com. Ledtrådarna är synonymer eller korta förklaringar, precis som på provet. Dagens korsord räknas fram ur datumet, så alla får samma korsord samma dag.
 
 ## Funktioner
 
@@ -8,7 +8,9 @@ Ett nytt korsord varje dag med 877 ord från högskoleprovets ORD-del – upplag
 - Arkiv med kalender där du ser vilka dagar du löst och kan spela missade korsord
 - Timer med paus, och en svit (🔥 dagar i rad) i statistiken
 - Skriv med iPhonens/iPadens eget tangentbord eller ett externt tangentbord som Magic Keyboard (piltangenter, Tab/Enter för nästa ord, mellanslag byter riktning, ⌘Z ångrar)
-- Svarsalternativ A–E som på högskoleprovet (slå på under Inställningar): välj rätt ord bland fem, eller tryck 1–5 på tangentbordet
+- Två lägen: **Korsord** och **Meningar** (meningskomplettering som i MEK-delen, med en ny omgång varje dag på tre nivåer)
+- Visa fel: av, per ord (när ordet är ifyllt) eller direkt. Ord som visats som rätt låses
+- Svarsalternativ A–E som på högskoleprovet (slå på under Inställningar): välj rätt ord bland fem lika långa (ordets längd visas inte), eller tryck 1–5 på tangentbordet
 - Inställningar för att visa fel direkt och för att visa eller dölja tiden
 - Animationer: rutnätet byggs upp, bokstäver poppar in, rätt ord blinkar grönt, fel bokstav skakar och konfetti när korsordet är löst
 - Verktyg som i en sudoku-app: ångra, sudda, kontrollera, tips, visa ord, börja om eller ge upp

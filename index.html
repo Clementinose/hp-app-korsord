@@ -30,8 +30,11 @@
       </button>
     </div>
     <div class="nav-center">
-      <span class="timer" id="timer" aria-label="Tid">0:00</span>
-      <button class="pause" id="btn-pause" aria-label="Pausa"></button>
+      <div class="segmented two mode-switch" id="mode-switch" role="tablist" aria-label="Läge">
+        <span class="seg-thumb" aria-hidden="true"></span>
+        <button data-mode="cross" role="tab">Korsord</button>
+        <button data-mode="mek" role="tab">Meningar</button>
+      </div>
     </div>
     <div class="nav-side right">
       <button class="icon-btn" id="btn-stats" aria-label="Statistik">
@@ -60,12 +63,41 @@
         </div>
       </div>
 
-      <div class="segmented" role="tablist" aria-label="Svårighetsgrad" id="difficulty">
-        <span class="seg-thumb" aria-hidden="true"></span>
-        <button data-level="easy" role="tab">Lätt</button>
-        <button data-level="medium" role="tab">Medel</button>
-        <button data-level="hard" role="tab">Svår</button>
+      <div class="levelrow">
+        <div class="segmented" role="tablist" aria-label="Svårighetsgrad" id="difficulty">
+          <span class="seg-thumb" aria-hidden="true"></span>
+          <button data-level="easy" role="tab">Lätt</button>
+          <button data-level="medium" role="tab">Medel</button>
+          <button data-level="hard" role="tab">Svår</button>
+        </div>
+        <div class="timer-wrap">
+          <span class="timer" id="timer" aria-label="Tid">0:00</span>
+          <button class="pause" id="btn-pause" aria-label="Pausa"></button>
+        </div>
       </div>
+
+      <!-- Meningskomplettering -->
+      <section class="mek" id="mek" hidden aria-label="Meningskomplettering">
+        <div class="mek-top">
+          <div class="mek-dots" id="mek-dots"></div>
+          <span class="mek-count" id="mek-count"></span>
+        </div>
+        <div class="mek-body" id="mek-body">
+          <article class="mek-card" id="mek-card">
+            <div class="mek-label">Välj det som passar bäst</div>
+            <p class="mek-text" id="mek-text"></p>
+          </article>
+          <div class="mek-options" id="mek-options"></div>
+          <div class="mek-feedback" id="mek-feedback" aria-live="polite"></div>
+          <button class="pill wide" id="mek-next" hidden>Nästa fråga</button>
+        </div>
+        <div class="mek-result" id="mek-result" hidden></div>
+        <div class="paused mek-paused" id="mek-paused" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"/></svg>
+          <p>Pausat</p>
+          <button class="pill" id="mek-resume">Fortsätt</button>
+        </div>
+      </section>
 
       <div class="board-area" id="board-area">
         <div class="board" id="board" aria-label="Korsord"></div>
@@ -149,6 +181,7 @@
 
   <div class="scrim" id="scrim"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="combo" id="combo" aria-hidden="true"></div>
 
   <dialog id="win-dialog" class="sheet">
     <div class="sheet-bar">
@@ -219,10 +252,17 @@
       <div class="list-title">Spel</div>
       <ul class="list">
         <li><label class="row switch-row" for="mc-toggle">Svarsalternativ (A–E)<input type="checkbox" id="mc-toggle" class="switch"></label></li>
-        <li><label class="row switch-row" for="autocheck-toggle">Visa fel direkt<input type="checkbox" id="autocheck-toggle" class="switch"></label></li>
         <li><label class="row switch-row" for="time-toggle">Visa tid<input type="checkbox" id="time-toggle" class="switch"></label></li>
       </ul>
-      <p class="footnote tight"><b>Svarsalternativ</b> visar fem ord att välja mellan, som på högskoleprovet. <b>Visa fel direkt</b> gör en felaktig bokstav röd så fort du skriver den. Med tiden dold räknas den ändå för din bästa tid.</p>
+      <p class="footnote tight"><b>Svarsalternativ</b> visar fem lika långa ord att välja mellan, som på högskoleprovet. Med tiden dold räknas den ändå för din bästa tid.</p>
+      <div class="list-title">Visa fel i korsordet</div>
+      <div class="segmented" id="check-picker" role="radiogroup" aria-label="Visa fel">
+        <span class="seg-thumb" aria-hidden="true"></span>
+        <button data-check="off" role="radio">Av</button>
+        <button data-check="word" role="radio">Per ord</button>
+        <button data-check="letter" role="radio">Direkt</button>
+      </div>
+      <p class="footnote tight"><b>Per ord:</b> när ett ord är ifyllt visas om det är rätt eller fel. <b>Direkt:</b> varje felaktig bokstav blir röd med en gång. Ord som visats som rätt låses så att de inte kan ändras.</p>
       <div class="list-title">Hjälp</div>
       <ul class="list">
         <li><button class="row" id="open-help">Så spelar du<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
@@ -244,6 +284,7 @@
         <li><b>Byt riktning.</b> Tryck på samma ruta igen för att växla mellan vågrätt och lodrätt.</li>
         <li><b>Skriv.</b> Tryck på en ruta så kommer tangentbordet upp. Med Magic Keyboard eller annat tangentbord skriver du direkt.</li>
         <li><b>Kortkommandon.</b> Piltangenter flyttar, Tab eller Enter går till nästa ord, mellanslag byter riktning och ⌘Z ångrar.</li>
+        <li><b>Två lägen.</b> Välj <b>Korsord</b> eller <b>Meningar</b> högst upp. Meningar är meningskomplettering som i MEK-delen: välj det alternativ som passar bäst i luckorna.</li>
         <li><b>Svarsalternativ.</b> Slå på A–E under Inställningar för att välja bland fem ord, som på provet. Med tangentbord väljer du med 1–5.</li>
         <li><b>Missat en dag?</b> Öppna arkivet uppe till vänster.</li>
       </ul>
@@ -273,6 +314,7 @@
   </dialog>
 
   <script src="js/words.js"></script>
+  <script src="js/mek.js"></script>
   <script src="js/generator.js"></script>
   <script src="js/app.js"></script>
 </body>

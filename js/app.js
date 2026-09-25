@@ -25,6 +25,9 @@
   let undoStack = []; // ändringar som kan ångras i det öppna korsordet
   let enterDir = ""; // "prev" / "next": från vilket håll rutnätet glider in
   let lastClue = -1;
+  let combo = 0; // rätta ord/svar i rad
+  let cur = { date: null, level: "medium" }; // dag och nivå som visas, i båda lägena
+  let mek = null; // pågående omgång meningskomplettering
   const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   // Kort vibration där enheten stöder det (Android). iOS ignorerar anropet.
   const haptic = (pattern) => { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* ej stöd */ } };
@@ -39,14 +42,16 @@
   }
   const progressAll = () => load(PROGRESS_KEY) || {};
   const puzzleId = (date, level) => date + "|" + level;
+  const mekId = (date, level) => date + "|mek-" + level;
+  const progressKey = (date, level) => (mode() === "mek" ? mekId(date, level) : puzzleId(date, level));
   const signature = (p) => p.rows + "x" + p.cols + ":" + p.words.map((w) => w.word).join(",");
 
   function save() {
     if (!state) return;
     const all = progressAll();
-    const { entries, revealed, wrong, seconds, hints, done, gaveUp, mcTried, mcMistakes } = state;
+    const { entries, revealed, wrong, locked, seconds, hints, done, gaveUp, mcTried, mcMistakes } = state;
     all[puzzleId(state.date, state.level)] = {
-      sig: state.sig, entries, revealed, wrong, seconds, hints, done, gaveUp, mcTried, mcMistakes,
+      sig: state.sig, entries, revealed, wrong, locked, seconds, hints, done, gaveUp, mcTried, mcMistakes,
       words: state.puzzle.words.length,
     };
     store(PROGRESS_KEY, all);
@@ -54,6 +59,7 @@
   }
 
   const prefs = () => load(PREFS_KEY) || {};
+  const mode = () => (prefs().mode === "mek" ? "mek" : "cross");
   function setPref(key, value) { store(PREFS_KEY, { ...prefs(), [key]: value }); }
 
   // ---------- Datum ----------
@@ -99,8 +105,11 @@
 
   // ---------- Öppna ett korsord ----------
   function open(date, level, dir) {
-    if (state) { stopTimer(); save(); }
+    stopTimer();
+    if (state) save();
+    if (mek) saveMek();
     enterDir = dir || "";
+    cur = { date, level };
     const puzzle = puzzleFor(date, level);
     const sig = signature(puzzle);
     const saved = progressAll()[puzzleId(date, level)];
@@ -108,9 +117,9 @@
     const first = puzzle.words[0];
     state = {
       date, level, puzzle, sig,
-      entries: blank(""), revealed: blank(false), wrong: blank(false),
+      entries: blank(""), revealed: blank(false), wrong: blank(false), locked: blank(false),
       seconds: 0, hints: 0, done: false, gaveUp: false,
-      mcTried: {}, mcMistakes: 0, // felaktiga val bland svarsalternativen
+      mcTried: {}, mcMistakes: 0, // felaktiga val och fel ord/bokstäver
       sel: { r: first.row, c: first.col }, dir: first.dir, warnedFull: false,
     };
     if (saved && saved.sig === sig) {
@@ -118,11 +127,13 @@
         entries: saved.entries, revealed: saved.revealed, wrong: saved.wrong,
         seconds: saved.seconds, hints: saved.hints, done: saved.done, gaveUp: saved.gaveUp,
         mcTried: saved.mcTried || {}, mcMistakes: saved.mcMistakes || 0,
+        locked: saved.locked || blank(false),
       });
     }
     paused = false;
     undoStack = [];
-    try { history.replaceState(null, "", `#${date}/${level}`); } catch { /* inbäddad vy */ }
+    combo = 0;
+    setHash();
     setup();
   }
 
@@ -159,27 +170,32 @@
   const currentWordIndex = () => cellWords[state.sel.r][state.sel.c][state.dir];
   const currentWord = () => state.puzzle.words[currentWordIndex()];
   const playable = () => !state.done && !paused;
+  const fixed = (r, c) => state.revealed[r][c] || state.locked[r][c]; // får inte ändras
+  function setHash() {
+    try { history.replaceState(null, "", `#${cur.date}/${cur.level}${mode() === "mek" ? "/mek" : ""}`); } catch { /* inbäddad vy */ }
+  }
 
   // ---------- Rendering ----------
   function renderHeader() {
-    const isToday = state.date === todayKey();
-    const yesterday = state.date === addDays(todayKey(), -1);
-    const d = fromKey(state.date);
+    const isToday = cur.date === todayKey();
+    const yesterday = cur.date === addDays(todayKey(), -1);
+    const d = fromKey(cur.date);
     const weekday = d.toLocaleDateString("sv-SE", { weekday: "long" });
     const dateOpts = { day: "numeric", month: "long" };
     if (d.getFullYear() !== new Date().getFullYear()) dateOpts.year = "numeric";
     const date = d.toLocaleDateString("sv-SE", dateOpts);
     $("date-title").textContent = isToday ? "Idag" : yesterday ? "Igår" : weekday.charAt(0).toUpperCase() + weekday.slice(1);
     $("kicker").textContent = isToday || yesterday ? `${weekday} ${date}` : date;
-    $("prev-day").disabled = state.date <= FIRST_DAY;
+    $("prev-day").disabled = cur.date <= FIRST_DAY;
     $("next-day").disabled = isToday;
     const all = progressAll();
     document.querySelectorAll("#difficulty button").forEach((b) => {
-      const p = all[puzzleId(state.date, b.dataset.level)];
-      b.setAttribute("aria-selected", b.dataset.level === state.level);
+      const p = all[progressKey(cur.date, b.dataset.level)];
+      b.setAttribute("aria-selected", b.dataset.level === cur.level);
       b.classList.toggle("is-solved", !!(p && p.done && !p.gaveUp));
     });
-    $("difficulty").style.setProperty("--i", LEVEL_KEYS.indexOf(state.level));
+    $("difficulty").style.setProperty("--i", LEVEL_KEYS.indexOf(cur.level));
+    renderModeSwitch();
   }
 
   function renderBoard() {
@@ -237,6 +253,7 @@
         el.classList.toggle("in-word", active.has(r + "," + c) && !state.done);
         el.classList.toggle("selected", r === sel.r && c === sel.c && !state.done);
         el.classList.toggle("revealed", revealed[r][c]);
+        el.classList.toggle("locked", state.locked[r][c] && !revealed[r][c]);
         el.classList.toggle("wrong", wrong[r][c]);
       }
     }
@@ -247,7 +264,8 @@
       li.classList.toggle("filled", cellsOf(puzzle.words[i]).every(([r, c]) => entries[r][c]));
     });
     $("cc-num").textContent = cw ? `${cw.number} ${DIR_NAME[cw.dir]}` : "";
-    $("cc-clue").textContent = cw ? `${cw.clue} (${cw.word.length})` : "";
+    // Med svarsalternativ visas inte ordets längd, så att den inte avslöjar svaret.
+    $("cc-clue").textContent = cw ? (mcOn() ? cw.clue : `${cw.clue} (${cw.word.length})`) : "";
     const ci = currentWordIndex();
     if (ci !== lastClue) { lastClue = ci; animate($("cc-open"), "swap", 400); }
     $("btn-solve").textContent = state.done ? "Visa lösningen" : "Ge upp och visa lösningen";
@@ -260,7 +278,8 @@
   const LABELS = ["A", "B", "C", "D", "E"];
   const choiceCache = new Map();
   const mcOn = () => !!prefs().choices;
-  const autoCheck = () => !!prefs().autocheck;
+  // Hur fel visas i korsordet: "off", "word" (när ordet är ifyllt) eller "letter" (direkt).
+  const checkMode = () => prefs().checkMode || (prefs().autocheck ? "letter" : "off");
   const showTime = () => prefs().showTime !== false;
 
   function shuffled(arr, rng) {
@@ -275,6 +294,7 @@
       const rng = mulberry32(hashString(`${SEED_VERSION}|val|${key}`));
       const inPuzzle = new Set(state.puzzle.words.map((x) => x.word));
       // Inga ord med samma förklaring som rätt svar, annars finns två rätta alternativ.
+      // Alla alternativ är lika långa (om det finns tillräckligt många), så längden avslöjar inget.
       const pool = shuffled(HP_WORDS.filter(([x, c]) => !inPuzzle.has(x) && c !== w.clue).map(([x]) => x), rng)
         .sort((a, b) => Math.abs(a.length - w.word.length) - Math.abs(b.length - w.word.length));
       choiceCache.set(key, shuffled([w.word, ...pool.slice(0, 4)], rng));
@@ -321,14 +341,15 @@
     if (word === w.word) {
       remember(cellsOf(w));
       cellsOf(w).forEach(([r, c], i) => {
-        if (state.revealed[r][c]) return;
+        if (fixed(r, c)) return;
         state.entries[r][c] = w.word[i];
         state.wrong[r][c] = false;
         const el = cellEls[r][c];
         el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop");
       });
+      lockWord(cellsOf(w));
       update();
-      cellsOf(w).forEach(([r, c], i) => { cellEls[r][c].style.setProperty("--i", i); animate(cellEls[r][c], "flash", 900); });
+      celebrateWord(cellsOf(w));
       afterChange();
       if (!state.done) {
         const next = nextOpenWord();
@@ -337,6 +358,7 @@
     } else {
       state.mcTried[w.word] = [...(state.mcTried[w.word] || []), word];
       state.mcMistakes++;
+      combo = 0;
       haptic(25);
       if (btn) { btn.classList.remove("shake"); void btn.offsetWidth; btn.classList.add("shake"); }
       setTimeout(() => { update(); save(); }, 280);
@@ -435,6 +457,7 @@
     if (state.done || paused || !undoStack.length) return;
     const step = undoStack.pop();
     for (const [r, c, entry, revealed, wrong] of step.cells) {
+      if (state.locked[r][c]) continue; // rätt ord är låsta
       state.entries[r][c] = entry;
       state.revealed[r][c] = revealed;
       state.wrong[r][c] = wrong;
@@ -447,54 +470,88 @@
   function typeLetter(ch) {
     if (!playable()) return;
     const { r, c } = state.sel;
-    if (!state.revealed[r][c]) {
+    if (!fixed(r, c)) {
       const changed = state.entries[r][c] !== ch;
       if (changed) remember([[r, c]]);
       state.entries[r][c] = ch;
       state.wrong[r][c] = false;
       const el = cellEls[r][c];
       el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop");
-      if (autoCheck() && ch !== state.puzzle.grid[r][c]) {
+      if (checkMode() === "letter" && ch !== state.puzzle.grid[r][c]) {
         state.wrong[r][c] = true;
         if (changed) state.mcMistakes++;
+        combo = 0;
         animate(el, "shake", 400);
         haptic(25);
       }
     }
     moveWithinWord(1);
+    // Hoppa förbi låsta rutor så att man kan skriva vidare direkt.
+    while (fixed(state.sel.r, state.sel.c) && moveWithinWord(1)) { /* nästa */ }
     update();
-    celebrateWordsAt(r, c);
+    evaluateWordsAt(r, c);
     afterChange();
   }
 
-  // När ett ord blir helt ifyllt: grön blinkning om "Visa fel direkt" är på och ordet är rätt,
-  // annars en neutral våg (så att den inte avslöjar om ordet stämmer).
-  function celebrateWordsAt(r, c) {
+  function lockWord(cells) {
+    for (const [r, c] of cells) { state.locked[r][c] = true; state.wrong[r][c] = false; }
+  }
+
+  // Ett ord som visats som rätt: låses, blinkar grönt, gnistrar och räknas i "i rad".
+  function celebrateWord(cells) {
+    haptic(12);
+    cells.forEach(([r, c], i) => {
+      const el = cellEls[r][c];
+      el.style.setProperty("--i", i);
+      animate(el, "flash", 1000);
+    });
+    sparkle(cells);
+    combo++;
+    if (combo >= 2) comboToast(combo);
+  }
+
+  // När ett ord blir helt ifyllt avgör inställningen vad som visas:
+  // "off": bara en neutral våg (avslöjar inget), "word"/"letter": rätt ord låses och firas,
+  // och i läget "word" markeras ett felaktigt ord först nu.
+  function evaluateWordsAt(r, c) {
+    const how = checkMode();
     for (const dir of ["across", "down"]) {
       const wi = cellWords[r][c][dir];
       if (wi === undefined) continue;
       const cells = cellsOf(state.puzzle.words[wi]);
       if (!cells.every(([rr, cc]) => state.entries[rr][cc])) continue;
+      if (cells.every(([rr, cc]) => fixed(rr, cc))) continue; // redan klart
       const right = cells.every(([rr, cc]) => state.entries[rr][cc] === state.puzzle.grid[rr][cc]);
-      if (autoCheck() && !right) continue;
-      haptic(10);
-      cells.forEach(([rr, cc], i) => {
-        const el = cellEls[rr][cc];
-        el.style.setProperty("--i", i);
-        animate(el, autoCheck() ? "flash" : "ripple", 900);
-      });
+      if (how === "off") {
+        cells.forEach(([rr, cc], i) => { cellEls[rr][cc].style.setProperty("--i", i); animate(cellEls[rr][cc], "ripple", 900); });
+      } else if (right) {
+        lockWord(cells);
+        update();
+        celebrateWord(cells);
+      } else if (how === "word") {
+        cells.forEach(([rr, cc], i) => {
+          if (fixed(rr, cc)) return;
+          state.wrong[rr][cc] = true;
+          cellEls[rr][cc].style.setProperty("--i", i);
+          animate(cellEls[rr][cc], "shake", 450);
+        });
+        state.mcMistakes++;
+        combo = 0;
+        haptic(25);
+        update();
+      }
     }
   }
 
   function backspace() {
     if (!playable()) return;
     const { r, c } = state.sel;
-    if (state.entries[r][c] && !state.revealed[r][c]) {
+    if (state.entries[r][c] && !fixed(r, c)) {
       remember([[r, c]]);
       state.entries[r][c] = "";
     } else if (moveWithinWord(-1)) {
       const { r: pr, c: pc } = state.sel;
-      if (state.entries[pr][pc] && !state.revealed[pr][pc]) {
+      if (state.entries[pr][pc] && !fixed(pr, pc)) {
         remember([[pr, pc]]);
         state.entries[pr][pc] = "";
       }
@@ -510,7 +567,7 @@
     if (!playable()) return;
     const { r, c } = state.sel;
     const cells = (state.entries[r][c] ? [[r, c]] : cellsOf(currentWord()))
-      .filter(([rr, cc]) => state.entries[rr][cc] && !state.revealed[rr][cc]);
+      .filter(([rr, cc]) => state.entries[rr][cc] && !fixed(rr, cc));
     if (!cells.length) return;
     remember(cells);
     for (const [rr, cc] of cells) { state.entries[rr][cc] = ""; state.wrong[rr][cc] = false; }
@@ -537,11 +594,22 @@
   }
 
   // ---------- Hjälp ----------
-  function markWrongSilently() {
+  // När man slår på "visa fel": lås redan rätta ord och markera fel enligt valt läge.
+  function applyCheckMode() {
+    if (!state || state.done) return;
+    const how = checkMode();
+    if (how === "off") return;
     const { puzzle, entries } = state;
-    for (let r = 0; r < puzzle.rows; r++)
-      for (let c = 0; c < puzzle.cols; c++)
-        if (puzzle.grid[r][c] && entries[r][c] && entries[r][c] !== puzzle.grid[r][c]) state.wrong[r][c] = true;
+    for (const w of puzzle.words) {
+      const cells = cellsOf(w);
+      if (!cells.every(([r, c]) => entries[r][c])) continue;
+      if (cells.every(([r, c]) => entries[r][c] === puzzle.grid[r][c])) lockWord(cells);
+      else if (how === "word") cells.forEach(([r, c]) => { if (!fixed(r, c)) state.wrong[r][c] = true; });
+    }
+    if (how === "letter")
+      for (let r = 0; r < puzzle.rows; r++)
+        for (let c = 0; c < puzzle.cols; c++)
+          if (puzzle.grid[r][c] && entries[r][c] && entries[r][c] !== puzzle.grid[r][c]) state.wrong[r][c] = true;
     update();
     save();
   }
@@ -555,7 +623,20 @@
         if (!entries[r][c]) empty++;
         else if (entries[r][c] !== puzzle.grid[r][c]) { state.wrong[r][c] = true; wrong++; }
       }
+    // Hela ord som stämmer låses och får en grön blinkning.
+    const newlyRight = [];
+    for (const w of puzzle.words) {
+      const cells = cellsOf(w);
+      if (cells.every(([r, c]) => entries[r][c] === puzzle.grid[r][c]) && !cells.every(([r, c]) => fixed(r, c))) {
+        lockWord(cells);
+        newlyRight.push(cells);
+      }
+    }
     update();
+    newlyRight.forEach((cells, k) => setTimeout(() => cells.forEach(([r, c], i) => {
+      cellEls[r][c].style.setProperty("--i", i);
+      animate(cellEls[r][c], "flash", 1000);
+    }), k * 120));
     save();
     if (wrong) toast(`${wrong} ${wrong === 1 ? "bokstav är fel" : "bokstäver är fel"}`);
     else toast(empty ? "Inga fel hittills – fortsätt så! ✨" : "Allt rätt!");
@@ -592,7 +673,7 @@
   function resetPuzzle() {
     const blank = (v) => state.puzzle.grid.map((row) => row.map(() => v));
     Object.assign(state, {
-      entries: blank(""), revealed: blank(false), wrong: blank(false),
+      entries: blank(""), revealed: blank(false), wrong: blank(false), locked: blank(false),
       seconds: 0, hints: 0, done: false, gaveUp: false, warnedFull: false,
       mcTried: {}, mcMistakes: 0,
     });
@@ -631,30 +712,78 @@
     setTimeout(showWinDialog, gaveUp ? 0 : 1300);
   }
 
-  function confetti() {
-    if (reduceMotion() || !document.body.animate) return;
-    const colors = ["#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#007aff", "#af52de", "#ff2d55"];
+  const PARTY = ["#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#007aff", "#af52de", "#ff2d55", "#5ac8fa"];
+  function fxLayer(ms) {
     const layer = document.createElement("div");
     layer.className = "confetti-layer";
     document.body.appendChild(layer);
+    setTimeout(() => layer.remove(), ms);
+    return layer;
+  }
+
+  // Konfetti som skjuts upp från båda nedre hörnen och en explosion i mitten.
+  function confetti(amount = 1) {
+    if (reduceMotion() || !document.body.animate) return;
+    const layer = fxLayer(3600);
     const w = innerWidth, h = innerHeight;
-    for (let i = 0; i < 90; i++) {
-      const p = document.createElement("i");
-      p.style.background = colors[i % colors.length];
-      p.style.left = w / 2 + "px";
-      p.style.top = h * 0.45 + "px";
-      if (i % 3 === 0) p.style.borderRadius = "50%";
+    const shoot = (x, y, angleMin, angleMax, n, power) => {
+      for (let i = 0; i < n; i++) {
+        const p = document.createElement("i");
+        p.style.background = PARTY[(Math.random() * PARTY.length) | 0];
+        p.style.left = x + "px"; p.style.top = y + "px";
+        const shape = i % 4;
+        if (shape === 0) p.style.borderRadius = "50%";
+        if (shape === 1) { p.style.width = "5px"; p.style.height = "14px"; }
+        layer.appendChild(p);
+        const a = (angleMin + Math.random() * (angleMax - angleMin)) * Math.PI / 180;
+        const f = power * (0.55 + Math.random() * 0.6);
+        const dx = Math.cos(a) * f, dy = -Math.sin(a) * f;
+        const spin = (Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 720);
+        p.animate([
+          { transform: "translate(0,0) rotate(0deg)", opacity: 1 },
+          { transform: `translate(${dx * 0.8}px, ${dy}px) rotate(${spin * 0.5}deg)`, opacity: 1, offset: 0.4 },
+          { transform: `translate(${dx}px, ${dy + h * 0.75}px) rotate(${spin}deg)`, opacity: 0 },
+        ], { duration: 2200 + Math.random() * 1200, easing: "cubic-bezier(.15,.7,.3,1)", fill: "forwards" });
+      }
+    };
+    const power = Math.min(w, h) * 0.95;
+    shoot(0, h, 50, 80, 55 * amount, power);
+    shoot(w, h, 100, 130, 55 * amount, power);
+    shoot(w / 2, h * 0.42, 0, 360, 40 * amount, power * 0.5);
+  }
+
+  // Små gnistor som sprutar ut från ett ord som blivit rätt.
+  function sparkle(cells) {
+    if (reduceMotion() || !document.body.animate || !cells.length) return;
+    const a = cellEls[cells[0][0]][cells[0][1]].getBoundingClientRect();
+    const b = cellEls[cells[cells.length - 1][0]][cells[cells.length - 1][1]].getBoundingClientRect();
+    const layer = fxLayer(1200);
+    const n = 10 + cells.length * 2;
+    for (let i = 0; i < n; i++) {
+      const t = Math.random();
+      const x = a.left + (b.right - a.left) * t, y = a.top + (b.bottom - a.top) * t;
+      const p = document.createElement("b");
+      p.className = "spark";
+      p.textContent = i % 3 === 0 ? "✦" : "";
+      p.style.left = x + "px"; p.style.top = y + "px";
+      p.style.color = i % 2 ? "#ffcc00" : "#34c759";
+      if (!p.textContent) p.style.background = i % 2 ? "#ffcc00" : "#34c759";
       layer.appendChild(p);
-      const angle = Math.random() * Math.PI * 2;
-      const force = 120 + Math.random() * Math.min(w, h) * 0.45;
-      const dx = Math.cos(angle) * force, dy = Math.sin(angle) * force - 180;
+      const ang = Math.random() * Math.PI * 2, dist = 18 + Math.random() * 42;
       p.animate([
-        { transform: "translate(0,0) rotate(0) scale(1)", opacity: 1 },
-        { transform: `translate(${dx}px, ${dy}px) rotate(${Math.random() * 540}deg) scale(1)`, opacity: 1, offset: 0.45 },
-        { transform: `translate(${dx * 1.2}px, ${dy + h * 0.6}px) rotate(${Math.random() * 900}deg) scale(.6)`, opacity: 0 },
-      ], { duration: 1600 + Math.random() * 900, easing: "cubic-bezier(.2,.7,.3,1)", fill: "forwards" });
+        { transform: "translate(-50%,-50%) scale(.2)", opacity: 1 },
+        { transform: `translate(calc(-50% + ${Math.cos(ang) * dist}px), calc(-50% + ${Math.sin(ang) * dist}px)) scale(1)`, opacity: 1, offset: 0.5 },
+        { transform: `translate(calc(-50% + ${Math.cos(ang) * dist * 1.4}px), calc(-50% + ${Math.sin(ang) * dist * 1.4 + 10}px)) scale(.3)`, opacity: 0 },
+      ], { duration: 700 + Math.random() * 400, easing: "cubic-bezier(.2,.8,.3,1)", fill: "forwards" });
     }
-    setTimeout(() => layer.remove(), 2800);
+  }
+
+  function comboToast(n) {
+    const el = $("combo");
+    el.textContent = n >= 5 ? `🔥 ${n} i rad – grymt!` : n >= 3 ? `🔥 ${n} i rad!` : "✨ 2 i rad";
+    el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove("show"), 1500);
   }
 
   function showWinDialog() {
@@ -683,8 +812,17 @@
     const per = Object.fromEntries(LEVEL_KEYS.map((k) => [k, { solved: 0, clean: 0, best: null }]));
     const solvedDays = new Set();
     let words = 0;
+    const mekStat = { rounds: 0, right: 0, total: 0, perfect: 0 };
     for (const [id, p] of Object.entries(all)) {
       const [date, level] = id.split("|");
+      if (level.startsWith("mek-")) {
+        if (!p.done) continue;
+        const right = p.answers.filter((a, i) => a !== null && p.correct && a === p.correct[i]).length;
+        mekStat.rounds++; mekStat.right += right; mekStat.total += p.answers.length;
+        if (right === p.answers.length) mekStat.perfect++;
+        solvedDays.add(date);
+        continue;
+      }
       if (!per[level] || !p.done || p.gaveUp) continue;
       const s = per[level];
       s.solved++;
@@ -701,7 +839,7 @@
       best = Math.max(best, run);
       prev = day;
     }
-    return { per, streak, bestStreak: best, words, days: solvedDays.size };
+    return { per, streak, bestStreak: best, words, days: solvedDays.size, mek: mekStat };
   }
 
   function showStats() {
@@ -718,16 +856,21 @@
         <div class="stat"><div class="v">${s.clean}</div><div class="l">Utan hjälp</div></div>
         <div class="stat"><div class="v">${s.best === null ? "–" : formatTime(s.best)}</div><div class="l">Bästa tid</div></div></div>`;
     }
+    const m = st.mek;
+    html += `<div class="list-title">Meningskomplettering</div><div class="stat-grid">
+      <div class="stat"><div class="v">${m.rounds}</div><div class="l">Omgångar</div></div>
+      <div class="stat"><div class="v">${m.total ? Math.round((m.right / m.total) * 100) : 0}%</div><div class="l">Rätt svar</div></div>
+      <div class="stat"><div class="v">${m.perfect}</div><div class="l">Alla rätt</div></div></div>`;
     $("stats-body").innerHTML = html;
     if (!reduceMotion()) {
       $("stats-body").querySelectorAll(".stat .v").forEach((el) => {
-        const m = el.textContent.match(/^(\D*)(\d+)$/);
+        const m = el.textContent.match(/^(\D*)(\d+)(%?)$/);
         if (!m) return;
-        const [, prefix, target] = m;
+        const [, prefix, target, suffix] = m;
         const start = performance.now();
         const tick = (t) => {
           const k = Math.min(1, (t - start) / 700);
-          el.textContent = prefix + Math.round(+target * (1 - Math.pow(1 - k, 3)));
+          el.textContent = prefix + Math.round(+target * (1 - Math.pow(1 - k, 3))) + suffix;
           if (k < 1) requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
@@ -754,22 +897,23 @@
       const k = toKey(new Date(y, m, day));
       const enabled = k >= FIRST_DAY && k <= today;
       const dots = LEVEL_KEYS.map((l) => {
-        const p = all[puzzleId(k, l)];
-        const cls = p && p.done && !p.gaveUp ? "solved" : p && (p.done || p.entries.some((row) => row.some(Boolean))) ? "started" : "";
+        const p = all[progressKey(k, l)];
+        const started = p && (p.done || (p.entries ? p.entries.some((row) => row.some(Boolean)) : p.answers.some((a) => a !== null)));
+        const cls = p && p.done && !p.gaveUp ? "solved" : started ? "started" : "";
         return `<i class="dot ${l} ${cls}"></i>`;
       }).join("");
-      const cls = ["day", k === today ? "today" : "", k === state.date ? "current" : ""].join(" ");
+      const cls = ["day", k === today ? "today" : "", k === cur.date ? "current" : ""].join(" ");
       html += `<button class="${cls}" data-date="${k}" ${enabled ? "" : "disabled"}><span>${day}</span><span class="dots">${enabled ? dots : ""}</span></button>`;
     }
     const cal = $("calendar");
     cal.innerHTML = html;
     cal.querySelectorAll("button.day").forEach((b) =>
-      b.addEventListener("click", () => { $("archive-dialog").close(); open(b.dataset.date, state.level); })
+      b.addEventListener("click", () => { $("archive-dialog").close(); openCurrent(b.dataset.date, cur.level); })
     );
   }
 
   function showArchive() {
-    const d = fromKey(state.date);
+    const d = fromKey(cur.date);
     calMonth = { y: d.getFullYear(), m: d.getMonth() };
     renderCalendar();
     $("archive-dialog").showModal();
@@ -785,32 +929,40 @@
     const m = Math.floor(s / 60), sec = s % 60;
     return m >= 60 ? `${Math.floor(m / 60)}:${pad(m % 60)}:${pad(sec)}` : `${m}:${pad(sec)}`;
   }
-  function renderTimer() { $("timer").textContent = formatTime(state.seconds); }
+  const active = () => (mode() === "mek" ? mek : state); // det som tiden räknas för
+  const saveActive = () => (mode() === "mek" ? saveMek() : save());
+  function renderTimer() { const a = active(); $("timer").textContent = formatTime(a ? a.seconds : 0); }
   function startTimer() {
     stopTimer();
     renderTimer();
-    if (state.done || paused) return;
+    const a = active();
+    if (!a || a.done || paused) return;
     timerId = setInterval(() => {
       if (document.hidden) return;
-      state.seconds++;
+      a.seconds++;
       renderTimer();
-      if (state.seconds % 5 === 0) save();
+      if (a.seconds % 5 === 0) saveActive();
     }, 1000);
   }
   function stopTimer() { clearInterval(timerId); timerId = null; }
 
   function setPaused(value) {
-    if (state.done && value) return;
+    const a = active();
+    if (!a || (a.done && value)) return;
     paused = value;
     if (paused) kbInput.blur();
     renderPause();
-    if (paused) { stopTimer(); save(); } else startTimer();
+    if (paused) { stopTimer(); saveActive(); } else startTimer();
   }
   function renderPause() {
-    renderChoices();
-    $("paused").hidden = !paused;
-    boardEl.classList.toggle("blurred", paused);
-    $("btn-pause").disabled = state.done;
+    if (state) renderChoices();
+    const inMek = mode() === "mek";
+    $("paused").hidden = !paused || inMek;
+    $("mek-paused").hidden = !paused || !inMek;
+    document.body.classList.toggle("is-paused", paused);
+    boardEl.classList.toggle("blurred", paused && !inMek);
+    const a = active();
+    $("btn-pause").disabled = !a || a.done;
     $("btn-pause").innerHTML = paused
       ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="solid" d="M8 5.5v13l10-6.5z"/></svg>'
       : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"/></svg>';
@@ -845,6 +997,249 @@
       dlg.addEventListener("cancel", cancel);
       dlg.showModal();
     });
+  }
+
+  // ---------- Läge: korsord eller meningskomplettering ----------
+  function openCurrent(date, level, dir) {
+    if (mode() === "mek") openMek(date, level, dir);
+    else open(date, level, dir);
+  }
+  function renderModeSwitch() {
+    const m = mode();
+    document.querySelectorAll("#mode-switch button").forEach((b) => b.setAttribute("aria-selected", b.dataset.mode === m));
+    $("mode-switch").style.setProperty("--i", m === "mek" ? 1 : 0);
+  }
+  function applyMode(anim) {
+    const inMek = mode() === "mek";
+    document.body.classList.toggle("mode-mek", inMek);
+    $("mek").hidden = !inMek;
+    if (inMek) { kbInput.blur(); setCluesOpen(false); }
+    renderModeSwitch();
+    renderHeader();
+    renderPause();
+    if (anim) animate(document.querySelector(".play"), "mode-in", 500);
+  }
+  function setMode(m) {
+    if (m === mode()) return;
+    stopTimer();
+    paused = false;
+    if (mode() === "mek") saveMek(); else save();
+    setPref("mode", m);
+    if (m === "mek") openMek(cur.date, cur.level);
+    else open(cur.date, cur.level);
+    applyMode(true);
+    setHash();
+  }
+
+  // ---------- Meningskomplettering (MEK) ----------
+  // Lätt: 8 frågor på nivå 1. Medel: 10 frågor, mest nivå 2. Svår: 10 frågor, mest nivå 3.
+  const MEK_SETS = { easy: { 1: 8 }, medium: { 1: 3, 2: 7 }, hard: { 2: 4, 3: 6 } };
+  const MEK_LABELS = ["A", "B", "C", "D"];
+
+  function mekRoundFor(date, level) {
+    const rng = mulberry32(hashString(`${SEED_VERSION}|mek|${date}|${level}`));
+    let ids = [];
+    for (const [d, n] of Object.entries(MEK_SETS[level])) {
+      const pool = HP_MEK.map((q, i) => [q, i]).filter(([q]) => q[2] === +d).map(([, i]) => i);
+      ids = ids.concat(shuffled(pool, rng).slice(0, n));
+    }
+    ids = shuffled(ids, rng);
+    // Ordningen på alternativen blandas per fråga. correct[i] = platsen där rätt svar hamnade.
+    const order = ids.map(() => shuffled([0, 1, 2, 3], rng));
+    return { ids, order, correct: order.map((o) => o.indexOf(0)) };
+  }
+
+  function openMek(date, level, dir) {
+    stopTimer();
+    if (state) save();
+    if (mek) saveMek();
+    cur = { date, level };
+    const round = mekRoundFor(date, level);
+    const saved = progressAll()[mekId(date, level)];
+    mek = {
+      date, level, ...round,
+      answers: round.ids.map(() => null), seconds: 0, done: false,
+    };
+    if (saved && saved.sig === round.ids.join(",")) Object.assign(mek, { answers: saved.answers, seconds: saved.seconds, done: saved.done });
+    mek.idx = Math.max(0, mek.answers.findIndex((a) => a === null));
+    if (mek.done || mek.idx < 0) mek.idx = mek.ids.length - 1;
+    paused = false;
+    combo = 0;
+    setHash();
+    renderHeader();
+    renderPause();
+    renderMek(dir ? "from-" + dir : "");
+    startTimer();
+  }
+
+  function saveMek() {
+    if (!mek) return;
+    const all = progressAll();
+    all[mekId(mek.date, mek.level)] = {
+      sig: mek.ids.join(","), answers: mek.answers, correct: mek.correct, seconds: mek.seconds, done: mek.done,
+    };
+    store(PROGRESS_KEY, all);
+    setPref("level", mek.level);
+  }
+
+  // Delar upp meningen i text och luckor.
+  function mekSentence(q, fill, cls) {
+    const parts = q[0].split("___");
+    return parts.map((t, i) => {
+      if (i === parts.length - 1) return escapeHtml(t);
+      const word = fill ? fill[i] : "";
+      return `${escapeHtml(t)}<span class="gap ${word ? "filled " + (cls || "") : ""}" style="--g:${i}"><span class="gap-word">${escapeHtml(word) || "&nbsp;"}</span></span>`;
+    }).join("");
+  }
+  const escapeHtml = (t) => t.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+
+  function renderMekDots() {
+    $("mek-dots").innerHTML = mek.ids.map((_, i) => {
+      const a = mek.answers[i];
+      const cls = a === null ? (i === mek.idx && !mek.done ? "current" : "") : a === mek.correct[i] ? "right" : "wrong";
+      return `<i class="${cls}"></i>`;
+    }).join("");
+    const answered = mek.answers.filter((a) => a !== null).length;
+    $("mek-count").textContent = mek.done ? "Klart" : `Fråga ${mek.idx + 1} av ${mek.ids.length}`;
+    $("mek-count").dataset.answered = answered;
+  }
+
+  function renderMek(enter) {
+    renderMekDots();
+    if (mek.done) return showMekResult(false);
+    $("mek-body").hidden = false;
+    $("mek-result").hidden = true;
+    const i = mek.idx;
+    const q = HP_MEK[mek.ids[i]];
+    const answered = mek.answers[i];
+    const correctOpt = q[1][0];
+    $("mek-text").innerHTML = mekSentence(q, answered !== null ? correctOpt : null, answered === mek.correct[i] ? "ok" : "fixed");
+    $("mek-options").innerHTML = mek.order[i].map((src, k) => {
+      const words = q[1][src];
+      let cls = "";
+      if (answered !== null) cls = k === mek.correct[i] ? "right" : k === answered ? "wrong" : "dim";
+      return `<button class="mek-opt ${cls}" data-k="${k}" style="--i:${k}" ${answered !== null ? "disabled" : ""}>` +
+        `<span class="opt">${MEK_LABELS[k]}</span><span class="opt-word">${words.map(escapeHtml).join(" – ")}</span></button>`;
+    }).join("");
+    renderMekFeedback();
+    if (enter !== undefined) {
+      animate($("mek-card"), "enter" + (enter ? " " + enter : ""), 600);
+      animate($("mek-options"), "rise", 800);
+    }
+  }
+
+  function renderMekFeedback() {
+    const i = mek.idx, a = mek.answers[i];
+    const fb = $("mek-feedback");
+    const next = $("mek-next");
+    if (a === null) { fb.innerHTML = ""; next.hidden = true; return; }
+    const right = a === mek.correct[i];
+    fb.innerHTML = right
+      ? `<span class="fb ok">✓ Rätt!</span>`
+      : `<span class="fb bad">✕ Fel – rätt svar är ${MEK_LABELS[mek.correct[i]]}</span>`;
+    next.hidden = false;
+    next.textContent = i === mek.ids.length - 1 ? "Se resultatet" : "Nästa fråga";
+  }
+
+  function answerMek(k) {
+    if (!mek || mek.done || paused || mek.answers[mek.idx] !== null) return;
+    const i = mek.idx;
+    mek.answers[i] = k;
+    const right = k === mek.correct[i];
+    renderMek();
+    const btn = $("mek-options").querySelector(`[data-k="${k}"]`);
+    if (right) {
+      combo++;
+      haptic(12);
+      if (btn) animate(btn, "pulse", 700);
+      if (combo >= 2) comboToast(combo);
+      sparkleAt($("mek-text"));
+    } else {
+      combo = 0;
+      haptic(25);
+      if (btn) animate(btn, "shake", 400);
+    }
+    animate($("mek-feedback"), "pop", 500);
+    saveMek();
+    renderMekDots();
+    if (matchMedia("(pointer: fine)").matches) $("mek-next").focus({ preventScroll: true });
+  }
+
+  function nextMek() {
+    if (!mek || mek.answers[mek.idx] === null) return;
+    if (mek.idx < mek.ids.length - 1) {
+      mek.idx++;
+      renderMek("from-next");
+      return;
+    }
+    mek.done = true;
+    stopTimer();
+    saveMek();
+    renderHeader();
+    renderPause();
+    showMekResult(true);
+  }
+
+  function showMekResult(celebrate) {
+    renderMekDots();
+    const right = mek.answers.filter((a, i) => a === mek.correct[i]).length;
+    const n = mek.ids.length;
+    const pct = right / n;
+    const msg = right === n ? "Alla rätt – perfekt!" : pct >= 0.8 ? "Riktigt bra!" : pct >= 0.5 ? "Bra jobbat!" : "Fortsätt öva – det sitter snart!";
+    const circ = 2 * Math.PI * 54;
+    const items = mek.ids.map((id, i) => {
+      const q = HP_MEK[id];
+      const ok = mek.answers[i] === mek.correct[i];
+      return `<li class="${ok ? "ok" : "bad"}" style="--i:${i}"><span class="mark">${ok ? "✓" : "✕"}</span><span>${mekSentence(q, q[1][0], "plain")}</span></li>`;
+    }).join("");
+    const nextLevel = LEVEL_KEYS.slice(LEVEL_KEYS.indexOf(mek.level) + 1).find((l) => { const p = progressAll()[mekId(mek.date, l)]; return !(p && p.done); });
+    $("mek-result").innerHTML = `
+      <div class="result-card">
+        <div class="ring" style="--circ:${circ};--off:${circ * (1 - pct)}">
+          <svg viewBox="0 0 120 120" aria-hidden="true"><circle class="track" cx="60" cy="60" r="54"/><circle class="bar" cx="60" cy="60" r="54"/></svg>
+          <div class="ring-num"><b id="mek-score">${right}</b><span>av ${n}</span></div>
+        </div>
+        <h2>${msg}</h2>
+        <p>${LEVELS[mek.level].label}${showTime() ? " · " + formatTime(mek.seconds) : ""}</p>
+        ${nextLevel ? `<button class="pill" id="mek-next-level">Spela ${LEVELS[nextLevel].label.toLowerCase()}</button>` : ""}
+      </div>
+      <div class="list-title">Rätt svar</div>
+      <ul class="list mek-review">${items}</ul>`;
+    $("mek-body").hidden = true;
+    $("mek-result").hidden = false;
+    const nl = $("mek-next-level");
+    if (nl) nl.addEventListener("click", () => openCurrent(mek.date, nextLevel, "next"));
+    if (celebrate) {
+      animate($("mek-result"), "enter", 900);
+      if (!reduceMotion()) {
+        const el = $("mek-score"), start = performance.now();
+        const tick = (t) => { const k = Math.min(1, (t - start) / 900); el.textContent = Math.round(right * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(tick); };
+        requestAnimationFrame(tick);
+      }
+      if (pct >= 0.8) { confetti(right === n ? 1 : 0.5); haptic([15, 60, 15, 60, 30]); }
+    }
+  }
+
+  // Gnistor runt en textruta (meningsläget).
+  function sparkleAt(el) {
+    if (reduceMotion() || !document.body.animate) return;
+    const r = el.getBoundingClientRect();
+    const layer = fxLayer(1200);
+    for (let i = 0; i < 18; i++) {
+      const p = document.createElement("b");
+      p.className = "spark";
+      p.textContent = i % 3 === 0 ? "✦" : "";
+      const x = r.left + Math.random() * r.width, y = r.top + Math.random() * r.height;
+      p.style.left = x + "px"; p.style.top = y + "px";
+      p.style.color = i % 2 ? "#ffcc00" : "#34c759";
+      if (!p.textContent) p.style.background = i % 2 ? "#ffcc00" : "#34c759";
+      layer.appendChild(p);
+      const ang = Math.random() * Math.PI * 2, dist = 20 + Math.random() * 40;
+      p.animate([
+        { transform: "translate(-50%,-50%) scale(.2)", opacity: 1 },
+        { transform: `translate(calc(-50% + ${Math.cos(ang) * dist}px), calc(-50% + ${Math.sin(ang) * dist}px)) scale(1)`, opacity: 0 },
+      ], { duration: 800 + Math.random() * 300, easing: "cubic-bezier(.2,.8,.3,1)", fill: "forwards" });
+    }
   }
 
   // ---------- Tema ----------
@@ -932,6 +1327,13 @@
   document.addEventListener("keydown", (e) => {
     if (document.querySelector("dialog[open]") || !state) return;
     const k = e.key;
+    if (mode() === "mek") {
+      if (e.ctrlKey || e.metaKey || e.altKey || paused || !mek) return;
+      const idx = "1234".indexOf(k) >= 0 ? "1234".indexOf(k) : "abcd".indexOf(k.toLowerCase());
+      if (k.length === 1 && idx >= 0) { answerMek(idx); e.preventDefault(); }
+      else if ((k === "Enter" || k === " " || k === "ArrowRight") && mek.answers[mek.idx] !== null && !mek.done) { nextMek(); e.preventDefault(); }
+      return;
+    }
     if ((e.metaKey || e.ctrlKey) && !e.altKey && k.toLowerCase() === "z") { undo(); e.preventDefault(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey || paused || e.isComposing) return;
     const fromInput = e.target === kbInput;
@@ -972,13 +1374,17 @@
   // ---------- Händelser ----------
   document.querySelectorAll("#difficulty button").forEach((b) =>
     b.addEventListener("click", () => {
-      if (b.dataset.level === state.level) return;
-      const dir = LEVEL_KEYS.indexOf(b.dataset.level) > LEVEL_KEYS.indexOf(state.level) ? "next" : "prev";
-      open(state.date, b.dataset.level, dir);
+      if (b.dataset.level === cur.level) return;
+      const dir = LEVEL_KEYS.indexOf(b.dataset.level) > LEVEL_KEYS.indexOf(cur.level) ? "next" : "prev";
+      openCurrent(cur.date, b.dataset.level, dir);
     })
   );
-  $("prev-day").addEventListener("click", () => state.date > FIRST_DAY && open(addDays(state.date, -1), state.level, "prev"));
-  $("next-day").addEventListener("click", () => state.date < todayKey() && open(addDays(state.date, 1), state.level, "next"));
+  $("prev-day").addEventListener("click", () => cur.date > FIRST_DAY && openCurrent(addDays(cur.date, -1), cur.level, "prev"));
+  $("next-day").addEventListener("click", () => cur.date < todayKey() && openCurrent(addDays(cur.date, 1), cur.level, "next"));
+  document.querySelectorAll("#mode-switch button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+  $("mek-options").addEventListener("click", (e) => { const b = e.target.closest(".mek-opt"); if (b && !b.disabled) answerMek(+b.dataset.k); });
+  $("mek-next").addEventListener("click", () => nextMek());
+  $("mek-resume").addEventListener("click", () => setPaused(false));
   $("btn-check").addEventListener("click", () => playable() && check());
   $("btn-letter").addEventListener("click", () => playable() && reveal([[state.sel.r, state.sel.c]]));
   $("btn-undo").addEventListener("click", undo);
@@ -1000,9 +1406,16 @@
   $("next-clue").addEventListener("click", () => stepWord(1));
   $("btn-stats").addEventListener("click", showStats);
   $("btn-archive").addEventListener("click", showArchive);
-  $("btn-settings").addEventListener("click", () => { renderThemePicker(); $("mc-toggle").checked = mcOn(); $("autocheck-toggle").checked = autoCheck(); $("time-toggle").checked = showTime(); $("settings-dialog").showModal(); });
+  $("btn-settings").addEventListener("click", () => { renderThemePicker(); $("mc-toggle").checked = mcOn(); renderCheckPicker(); $("time-toggle").checked = showTime(); $("settings-dialog").showModal(); });
   $("mc-toggle").addEventListener("change", (e) => { setPref("choices", e.target.checked); update(); });
-  $("autocheck-toggle").addEventListener("change", (e) => { setPref("autocheck", e.target.checked); if (e.target.checked) markWrongSilently(); });
+  function renderCheckPicker() {
+    const keys = ["off", "word", "letter"];
+    document.querySelectorAll("#check-picker button").forEach((b) => b.setAttribute("aria-checked", b.dataset.check === checkMode()));
+    $("check-picker").style.setProperty("--i", keys.indexOf(checkMode()));
+  }
+  document.querySelectorAll("#check-picker button").forEach((b) =>
+    b.addEventListener("click", () => { setPref("checkMode", b.dataset.check); renderCheckPicker(); applyCheckMode(); })
+  );
   $("time-toggle").addEventListener("change", (e) => { setPref("showTime", e.target.checked); applyTimeSetting(); });
   function applyTimeSetting() { document.body.classList.toggle("hide-time", !showTime()); }
   applyTimeSetting();
@@ -1021,11 +1434,11 @@
   );
   $("cal-prev").addEventListener("click", () => shiftMonth(-1));
   $("cal-next").addEventListener("click", () => shiftMonth(1));
-  $("archive-today").addEventListener("click", () => { $("archive-dialog").close(); open(todayKey(), state.level); });
-  window.addEventListener("pagehide", save);
+  $("archive-today").addEventListener("click", () => { $("archive-dialog").close(); openCurrent(todayKey(), cur.level); });
+  window.addEventListener("pagehide", () => { save(); saveMek(); });
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) save();
-    else if (state) renderHeader(); // "Idag"/"Igår" stämmer även om appen legat öppen över midnatt
+    if (document.hidden) { save(); saveMek(); }
+    else if (cur.date) renderHeader(); // "Idag"/"Igår" stämmer även om appen legat öppen över midnatt
   });
 
   // ---------- Tips om hemskärmen (bara i Safari på iPhone/iPad, en gång) ----------
@@ -1040,19 +1453,25 @@
   $("install-close").addEventListener("click", () => { $("install-hint").hidden = true; setPref("installHint", true); });
   window.addEventListener("hashchange", () => {
     const t = fromHash();
-    if (t && (t.date !== state.date || t.level !== state.level)) open(t.date, t.level);
+    if (!t) return;
+    if (t.mode && t.mode !== mode()) setPref("mode", t.mode);
+    if (t.date !== cur.date || t.level !== cur.level || t.mode) openCurrent(t.date, t.level);
   });
 
   function fromHash() {
-    const [date, level] = location.hash.slice(1).split("/");
-    return validDate(date) ? { date, level: LEVELS[level] ? level : LEVELS[prefs().level] ? prefs().level : "medium" } : null;
+    const [date, level, m] = location.hash.slice(1).split("/");
+    if (!validDate(date)) return null;
+    return { date, level: LEVELS[level] ? level : LEVELS[prefs().level] ? prefs().level : "medium", mode: m === "mek" ? "mek" : null };
   }
 
   // ---------- Start ----------
   applyTheme();
   const firstVisit = !load(PREFS_KEY);
   const startAt = fromHash() || { date: todayKey(), level: LEVELS[prefs().level] ? prefs().level : "medium" };
-  open(startAt.date, startAt.level);
+  if (startAt.mode) setPref("mode", startAt.mode);
+  open(startAt.date, startAt.level); // korsordet finns alltid i bakgrunden
+  if (mode() === "mek") openMek(startAt.date, startAt.level);
+  applyMode(false);
   if (firstVisit) $("help-dialog").showModal();
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
