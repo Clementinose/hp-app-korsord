@@ -37,9 +37,11 @@
       </button>
     </div>
     <div class="nav-center">
-      <div class="segmented two mode-switch" id="mode-switch" role="tablist" aria-label="Läge">
+      <span class="nav-title" id="nav-title">Korsord</span>
+      <div class="segmented mode-switch" id="mode-switch" role="tablist" aria-label="Läge">
         <span class="seg-thumb" aria-hidden="true"></span>
         <button data-mode="cross" role="tab">Korsord</button>
+        <button data-mode="ord" role="tab">Ord</button>
         <button data-mode="mek" role="tab">Meningar</button>
       </div>
     </div>
@@ -93,7 +95,7 @@
         </div>
         <div class="mek-body" id="mek-body">
           <article class="mek-card" id="mek-card">
-            <div class="mek-label">Välj det som passar bäst</div>
+            <div class="mek-label" id="mek-label">Välj det som passar bäst</div>
             <p class="mek-text" id="mek-text"></p>
           </article>
           <div class="mek-options" id="mek-options"></div>
@@ -174,6 +176,22 @@
       <div class="choices" id="choices" role="group" aria-label="Svarsalternativ"></div>
     </div>
   </div>
+
+  <!-- Flikrad på iPhone (på iPad sitter lägesväljaren i navigationsfältet). -->
+  <nav class="tabbar" id="tabbar" aria-label="Lägen">
+    <button data-mode="cross" role="tab">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2" class="solid"/></svg>
+      <span>Korsord</span>
+    </button>
+    <button data-mode="ord" role="tab">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19l5-14 5 14M5.8 14h6.4"/><path d="M15 12.5h4.5a1.5 1.5 0 0 1 0 3H15v-6h4a1.5 1.5 0 0 1 0 3"/></svg>
+      <span>Ord</span>
+    </button>
+    <button data-mode="mek" role="tab">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M4 11.5h5M15 11.5h5M4 16.5h16"/><rect x="10" y="9.5" width="4" height="4" rx="1"/></svg>
+      <span>Meningar</span>
+    </button>
+  </nav>
 
   <!-- Osynligt fält som tar emot text från iOS-tangentbordet och externa tangentbord. -->
   <input id="kb-input" class="kb-input" type="text" value=" " aria-label="Skriv bokstav"
@@ -284,10 +302,9 @@
       </div>
       <div class="list-title">Spel</div>
       <ul class="list">
-        <li><label class="row switch-row" for="mc-toggle">Svarsalternativ (A–E)<input type="checkbox" id="mc-toggle" class="switch"></label></li>
         <li><label class="row switch-row" for="time-toggle">Visa tid<input type="checkbox" id="time-toggle" class="switch"></label></li>
       </ul>
-      <p class="footnote tight"><b>Svarsalternativ</b> visar fem lika långa ord att välja mellan, som på högskoleprovet. Med tiden dold räknas den ändå för din bästa tid.</p>
+      <p class="footnote tight">Med tiden dold räknas den ändå för din bästa tid.</p>
       <div class="list-title">Visa fel i korsordet</div>
       <div class="segmented" id="check-picker" role="radiogroup" aria-label="Visa fel">
         <span class="seg-thumb" aria-hidden="true"></span>
@@ -335,8 +352,8 @@
         <li><b>Byt riktning.</b> Tryck på samma ruta igen för att växla mellan vågrätt och lodrätt.</li>
         <li><b>Skriv.</b> Tryck på en ruta så kommer tangentbordet upp. Med Magic Keyboard eller annat tangentbord skriver du direkt.</li>
         <li><b>Kortkommandon.</b> Piltangenter flyttar, Tab eller Enter går till nästa ord, mellanslag byter riktning och ⌘Z ångrar.</li>
-        <li><b>Två lägen.</b> Välj <b>Korsord</b> eller <b>Meningar</b> högst upp. Meningar är meningskomplettering som i MEK-delen: välj det alternativ som passar bäst i luckorna.</li>
-        <li><b>Svarsalternativ.</b> Slå på A–E under Inställningar för att välja bland fem ord, som på provet. Med tangentbord väljer du med 1–5.</li>
+        <li><b>Tre lägen.</b> <b>Korsord</b>, <b>Ord</b> och <b>Meningar</b>. Ord är som ORD-delen: ett ord och fem betydelser (A–E). Meningar är som MEK-delen: välj det som passar bäst i luckorna.</li>
+        <li><b>Rätt eller fel.</b> Som standard får du veta om ett ord är rätt först när hela ordet är ifyllt. Det kan ändras under Inställningar.</li>
         <li><b>Missat en dag?</b> Öppna arkivet uppe till vänster.</li>
       </ul>
       <button class="pill wide" data-close>Kör igång</button>

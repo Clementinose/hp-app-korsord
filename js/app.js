@@ -63,8 +63,8 @@
   }
   const progressAll = () => load(PROGRESS_KEY) || {};
   const puzzleId = (date, level) => date + "|" + level;
-  const mekId = (date, level) => date + "|mek-" + level;
-  const progressKey = (date, level) => (mode() === "mek" ? mekId(date, level) : puzzleId(date, level));
+  const mekId = (date, level, kind) => `${date}|${kind || mode()}-${level}`;
+  const progressKey = (date, level) => (isQuiz() ? mekId(date, level) : puzzleId(date, level));
   const signature = (p) => p.rows + "x" + p.cols + ":" + p.words.map((w) => w.word).join(",");
 
   function save() {
@@ -80,7 +80,9 @@
   }
 
   const prefs = () => load(PREFS_KEY) || {};
-  const mode = () => (prefs().mode === "mek" ? "mek" : "cross");
+  const MODES = ["cross", "ord", "mek"];
+  const mode = () => (MODES.includes(prefs().mode) ? prefs().mode : "cross");
+  const isQuiz = () => mode() !== "cross"; // Ord och Meningar är frågelägen
   function setPref(key, value) { store(PREFS_KEY, { ...prefs(), [key]: value }); }
 
   // ---------- Datum ----------
@@ -193,7 +195,7 @@
   const playable = () => !state.done && !paused;
   const fixed = (r, c) => state.revealed[r][c] || state.locked[r][c]; // får inte ändras
   function setHash() {
-    try { history.replaceState(null, "", `#${cur.date}/${cur.level}${mode() === "mek" ? "/mek" : ""}`); } catch { /* inbäddad vy */ }
+    try { history.replaceState(null, "", `#${cur.date}/${cur.level}${isQuiz() ? "/" + mode() : ""}`); } catch { /* inbäddad vy */ }
   }
 
   // ---------- Rendering ----------
@@ -336,9 +338,9 @@
   // ---------- Svarsalternativ (A–E), som på högskoleprovet ----------
   const LABELS = ["A", "B", "C", "D", "E"];
   const choiceCache = new Map();
-  const mcOn = () => !!prefs().choices;
+  const mcOn = () => false; // flervalet är nu ett eget läge (Ord)
   // Hur fel visas i korsordet: "off", "word" (när ordet är ifyllt) eller "letter" (direkt).
-  const checkMode = () => prefs().checkMode || (prefs().autocheck ? "letter" : "off");
+  const checkMode = () => prefs().checkMode || (prefs().autocheck ? "letter" : "word");
   const showTime = () => prefs().showTime !== false;
 
   function shuffled(arr, rng) {
@@ -872,13 +874,15 @@
     const solvedDays = new Set();
     let words = 0;
     const mekStat = { rounds: 0, right: 0, total: 0, perfect: 0 };
+    const ordStat = { rounds: 0, right: 0, total: 0, perfect: 0 };
     for (const [id, p] of Object.entries(all)) {
       const [date, level] = id.split("|");
-      if (level.startsWith("mek-")) {
+      if (level.startsWith("mek-") || level.startsWith("ord-")) {
         if (!p.done) continue;
+        const st = level.startsWith("ord-") ? ordStat : mekStat;
         const right = p.answers.filter((a, i) => a !== null && p.correct && a === p.correct[i]).length;
-        mekStat.rounds++; mekStat.right += right; mekStat.total += p.answers.length;
-        if (right === p.answers.length) mekStat.perfect++;
+        st.rounds++; st.right += right; st.total += p.answers.length;
+        if (right === p.answers.length) st.perfect++;
         solvedDays.add(date);
         continue;
       }
@@ -898,7 +902,7 @@
       best = Math.max(best, run);
       prev = day;
     }
-    return { per, streak, bestStreak: best, words, days: solvedDays.size, mek: mekStat };
+    return { per, streak, bestStreak: best, words, days: solvedDays.size, mek: mekStat, ord: ordStat };
   }
 
   function showStats() {
@@ -915,11 +919,12 @@
         <div class="stat"><div class="v">${s.clean}</div><div class="l">Utan hjälp</div></div>
         <div class="stat"><div class="v">${s.best === null ? "–" : formatTime(s.best)}</div><div class="l">Bästa tid</div></div></div>`;
     }
-    const m = st.mek;
-    html += `<div class="list-title">Meningskomplettering</div><div class="stat-grid">
-      <div class="stat"><div class="v">${m.rounds}</div><div class="l">Omgångar</div></div>
-      <div class="stat"><div class="v">${m.total ? Math.round((m.right / m.total) * 100) : 0}%</div><div class="l">Rätt svar</div></div>
-      <div class="stat"><div class="v">${m.perfect}</div><div class="l">Alla rätt</div></div></div>`;
+    for (const [title, m] of [["Ord (ORD-delen)", st.ord], ["Meningskomplettering", st.mek]]) {
+      html += `<div class="list-title">${title}</div><div class="stat-grid">
+        <div class="stat"><div class="v">${m.rounds}</div><div class="l">Omgångar</div></div>
+        <div class="stat"><div class="v">${m.total ? Math.round((m.right / m.total) * 100) : 0}%</div><div class="l">Rätt svar</div></div>
+        <div class="stat"><div class="v">${m.perfect}</div><div class="l">Alla rätt</div></div></div>`;
+    }
     $("stats-body").innerHTML = html;
     if (!reduceMotion()) {
       $("stats-body").querySelectorAll(".stat .v").forEach((el) => {
@@ -988,8 +993,8 @@
     const m = Math.floor(s / 60), sec = s % 60;
     return m >= 60 ? `${Math.floor(m / 60)}:${pad(m % 60)}:${pad(sec)}` : `${m}:${pad(sec)}`;
   }
-  const active = () => (mode() === "mek" ? mek : state); // det som tiden räknas för
-  const saveActive = () => (mode() === "mek" ? saveMek() : save());
+  const active = () => (isQuiz() ? mek : state); // det som tiden räknas för
+  const saveActive = () => (isQuiz() ? saveMek() : save());
   function renderTimer() { const a = active(); $("timer").textContent = formatTime(a ? a.seconds : 0); }
   function startTimer() {
     stopTimer();
@@ -1015,7 +1020,7 @@
   }
   function renderPause() {
     if (state) renderChoices();
-    const inMek = mode() === "mek";
+    const inMek = isQuiz();
     $("paused").hidden = !paused || inMek;
     $("mek-paused").hidden = !paused || !inMek;
     document.body.classList.toggle("is-paused", paused);
@@ -1099,21 +1104,25 @@
 
   // ---------- Läge: korsord eller meningskomplettering ----------
   function openCurrent(date, level, dir) {
-    if (mode() === "mek") openMek(date, level, dir);
+    if (isQuiz()) openMek(date, level, dir);
     else open(date, level, dir);
   }
   function renderModeSwitch() {
     const m = mode();
-    if (m === "mek" && !prefs().seenMek) setPref("seenMek", true);
-    document.querySelectorAll("#mode-switch button").forEach((b) => {
+    const seenKey = { mek: "seenMek", ord: "seenOrd" };
+    if (seenKey[m] && !prefs()[seenKey[m]]) setPref(seenKey[m], true);
+    // Samma knappar finns i navigationsfältet (iPad) och i flikraden (iPhone).
+    document.querySelectorAll("[data-mode]").forEach((b) => {
       b.setAttribute("aria-selected", b.dataset.mode === m);
-      b.classList.toggle("is-new", b.dataset.mode === "mek" && !prefs().seenMek);
+      b.classList.toggle("is-new", !!seenKey[b.dataset.mode] && !prefs()[seenKey[b.dataset.mode]]);
     });
-    $("mode-switch").style.setProperty("--i", m === "mek" ? 1 : 0);
+    $("mode-switch").style.setProperty("--i", MODES.indexOf(m));
+    $("nav-title").textContent = { cross: "Korsord", ord: "Ord", mek: "Meningar" }[m];
   }
   function applyMode(anim) {
-    const inMek = mode() === "mek";
+    const inMek = isQuiz();
     document.body.classList.toggle("mode-mek", inMek);
+    document.body.classList.toggle("quiz-ord", mode() === "ord");
     $("mek").hidden = !inMek;
     if (inMek) { kbInput.blur(); setCluesOpen(false); }
     renderModeSwitch();
@@ -1125,9 +1134,9 @@
     if (m === mode()) return;
     stopTimer();
     paused = false;
-    if (mode() === "mek") saveMek(); else save();
+    if (isQuiz()) saveMek(); else save();
     setPref("mode", m);
-    if (m === "mek") openMek(cur.date, cur.level);
+    if (m !== "cross") openMek(cur.date, cur.level);
     else open(cur.date, cur.level);
     applyMode(true);
     setHash();
@@ -1136,7 +1145,28 @@
   // ---------- Meningskomplettering (MEK) ----------
   // Lätt: 8 frågor på nivå 1. Medel: 10 frågor, mest nivå 2. Svår: 10 frågor, mest nivå 3.
   const MEK_SETS = { easy: { 1: 8 }, medium: { 1: 3, 2: 7 }, hard: { 2: 4, 3: 6 } };
-  const MEK_LABELS = ["A", "B", "C", "D"];
+  const MEK_LABELS = ["A", "B", "C", "D", "E"];
+
+  // Ord, som ORD-delen på högskoleprovet: ett ord och fem betydelser att välja mellan.
+  // Lätt: kortare ord och slumpade felsvar. Medel: felsvar från ord av ungefär samma längd.
+  // Svår: längre ord och felsvar från ord som liknar rätt ord (samma begynnelse eller längd).
+  const ORD_COUNT = { easy: 10, medium: 10, hard: 10 };
+  function ordRoundFor(date, level) {
+    const rng = mulberry32(hashString(`${SEED_VERSION}|ord|${date}|${level}`));
+    const lenOk = { easy: (L) => L <= 7, medium: (L) => L >= 6 && L <= 10, hard: (L) => L >= 8 }[level];
+    const all = HP_WORDS.map((_, i) => i);
+    const ids = shuffled(all.filter((i) => lenOk(HP_WORDS[i][0].length)), rng).slice(0, ORD_COUNT[level]);
+    const opts = ids.map((id) => {
+      const [w, clue] = HP_WORDS[id];
+      let cand = all.filter((j) => j !== id && HP_WORDS[j][1] !== clue);
+      const near = level === "hard"
+        ? cand.filter((j) => HP_WORDS[j][0].slice(0, 2) === w.slice(0, 2) || HP_WORDS[j][0].length === w.length)
+        : level === "medium" ? cand.filter((j) => Math.abs(HP_WORDS[j][0].length - w.length) <= 1) : [];
+      if (near.length >= 4) cand = near;
+      return shuffled([id, ...shuffled(cand, rng).slice(0, 4)], rng);
+    });
+    return { ids, opts, correct: opts.map((o, i) => o.indexOf(ids[i])) };
+  }
 
   function mekRoundFor(date, level) {
     const rng = mulberry32(hashString(`${SEED_VERSION}|mek|${date}|${level}`));
@@ -1156,10 +1186,11 @@
     if (state) save();
     if (mek) saveMek();
     cur = { date, level };
-    const round = mekRoundFor(date, level);
-    const saved = progressAll()[mekId(date, level)];
+    const kind = mode() === "ord" ? "ord" : "mek";
+    const round = kind === "ord" ? ordRoundFor(date, level) : mekRoundFor(date, level);
+    const saved = progressAll()[mekId(date, level, kind)];
     mek = {
-      date, level, ...round,
+      kind, date, level, ...round,
       answers: round.ids.map(() => null), seconds: 0, done: false,
     };
     if (saved && saved.sig === round.ids.join(",")) Object.assign(mek, { answers: saved.answers, seconds: saved.seconds, done: saved.done });
@@ -1177,7 +1208,7 @@
   function saveMek() {
     if (!mek) return;
     const all = progressAll();
-    all[mekId(mek.date, mek.level)] = {
+    all[mekId(mek.date, mek.level, mek.kind)] = {
       sig: mek.ids.join(","), answers: mek.answers, correct: mek.correct, seconds: mek.seconds, done: mek.done,
     };
     store(PROGRESS_KEY, all);
@@ -1212,16 +1243,24 @@
     $("mek-body").hidden = false;
     $("mek-result").hidden = true;
     const i = mek.idx;
-    const q = HP_MEK[mek.ids[i]];
     const answered = mek.answers[i];
-    const correctOpt = q[1][0];
-    $("mek-text").innerHTML = mekSentence(q, answered !== null ? correctOpt : null, answered === mek.correct[i] ? "ok" : "fixed");
-    $("mek-options").innerHTML = mek.order[i].map((src, k) => {
-      const words = q[1][src];
+    let optTexts;
+    if (mek.kind === "ord") {
+      // Ordet visas utan ledtråd om längden – precis som på provet.
+      $("mek-label").textContent = "Vad betyder ordet?";
+      $("mek-text").innerHTML = `<span class="ord-word">${escapeHtml(HP_WORDS[mek.ids[i]][0].toLowerCase())}</span>`;
+      optTexts = mek.opts[i].map((j) => escapeHtml(HP_WORDS[j][1]));
+    } else {
+      const q = HP_MEK[mek.ids[i]];
+      $("mek-label").textContent = "Välj det som passar bäst";
+      $("mek-text").innerHTML = mekSentence(q, answered !== null ? q[1][0] : null, answered === mek.correct[i] ? "ok" : "fixed");
+      optTexts = mek.order[i].map((src) => q[1][src].map(escapeHtml).join(" – "));
+    }
+    $("mek-options").innerHTML = optTexts.map((text, k) => {
       let cls = "";
       if (answered !== null) cls = k === mek.correct[i] ? "right" : k === answered ? "wrong" : "dim";
       return `<button class="mek-opt ${cls}" data-k="${k}" style="--i:${k}" ${answered !== null ? "disabled" : ""}>` +
-        `<span class="opt">${MEK_LABELS[k]}</span><span class="opt-word">${words.map(escapeHtml).join(" – ")}</span></button>`;
+        `<span class="opt">${MEK_LABELS[k]}</span><span class="opt-word">${text}</span></button>`;
     }).join("");
     renderMekFeedback();
     if (enter !== undefined) {
@@ -1236,9 +1275,10 @@
     const next = $("mek-next");
     if (a === null) { fb.innerHTML = ""; next.hidden = true; return; }
     const right = a === mek.correct[i];
+    const meaning = mek.kind === "ord" ? ` <span class="fb-note">${escapeHtml(HP_WORDS[mek.ids[i]][0].toLowerCase())} = ${escapeHtml(HP_WORDS[mek.ids[i]][1])}</span>` : "";
     fb.innerHTML = right
-      ? `<span class="fb ok">✓ Rätt!</span>`
-      : `<span class="fb bad">✕ Fel – rätt svar är ${MEK_LABELS[mek.correct[i]]}</span>`;
+      ? `<span class="fb ok">✓ Rätt!</span>${meaning}`
+      : `<span class="fb bad">✕ Fel – rätt svar är ${MEK_LABELS[mek.correct[i]]}</span>${meaning}`;
     next.hidden = false;
     next.textContent = i === mek.ids.length - 1 ? "Se resultatet" : "Nästa fråga";
   }
@@ -1255,7 +1295,7 @@
       haptic(12);
       if (btn) animate(btn, "pulse", 700);
       if (combo >= 2) comboToast(combo);
-      sparkleAt($("mek-text"));
+      sparkleAt($("mek-card"));
     } else {
       combo = 0;
       haptic(25);
@@ -1290,11 +1330,13 @@
     const msg = right === n ? "Alla rätt – perfekt!" : pct >= 0.8 ? "Riktigt bra!" : pct >= 0.5 ? "Bra jobbat!" : "Fortsätt öva – det sitter snart!";
     const circ = 2 * Math.PI * 54;
     const items = mek.ids.map((id, i) => {
-      const q = HP_MEK[id];
       const ok = mek.answers[i] === mek.correct[i];
-      return `<li class="${ok ? "ok" : "bad"}" style="--i:${i}"><span class="mark">${ok ? "✓" : "✕"}</span><span>${mekSentence(q, q[1][0], "plain")}</span></li>`;
+      const text = mek.kind === "ord"
+        ? `<b>${escapeHtml(HP_WORDS[id][0].toLowerCase())}</b> – ${escapeHtml(HP_WORDS[id][1])}`
+        : mekSentence(HP_MEK[id], HP_MEK[id][1][0], "plain");
+      return `<li class="${ok ? "ok" : "bad"}" style="--i:${i}"><span class="mark">${ok ? "✓" : "✕"}</span><span>${text}</span></li>`;
     }).join("");
-    const nextLevel = LEVEL_KEYS.slice(LEVEL_KEYS.indexOf(mek.level) + 1).find((l) => { const p = progressAll()[mekId(mek.date, l)]; return !(p && p.done); });
+    const nextLevel = LEVEL_KEYS.slice(LEVEL_KEYS.indexOf(mek.level) + 1).find((l) => { const p = progressAll()[mekId(mek.date, l, mek.kind)]; return !(p && p.done); });
     $("mek-result").innerHTML = `
       <div class="result-card">
         <div class="ring" style="--circ:${circ};--off:${circ * (1 - pct)}">
@@ -1454,9 +1496,10 @@
   document.addEventListener("keydown", (e) => {
     if (document.querySelector("dialog[open]") || !state) return;
     const k = e.key;
-    if (mode() === "mek") {
+    if (isQuiz()) {
       if (e.ctrlKey || e.metaKey || e.altKey || paused || !mek) return;
-      const idx = "1234".indexOf(k) >= 0 ? "1234".indexOf(k) : "abcd".indexOf(k.toLowerCase());
+      const n = mek.kind === "ord" ? 5 : 4;
+      const idx = "12345".slice(0, n).indexOf(k) >= 0 ? "12345".indexOf(k) : "abcde".slice(0, n).indexOf(k.toLowerCase());
       if (k.length === 1 && idx >= 0) { answerMek(idx); e.preventDefault(); }
       else if ((k === "Enter" || k === " " || k === "ArrowRight") && mek.answers[mek.idx] !== null && !mek.done) { nextMek(); e.preventDefault(); }
       return;
@@ -1516,7 +1559,7 @@
   );
   $("prev-day").addEventListener("click", () => cur.date > FIRST_DAY && openCurrent(addDays(cur.date, -1), cur.level, "prev"));
   $("next-day").addEventListener("click", () => cur.date < todayKey() && openCurrent(addDays(cur.date, 1), cur.level, "next"));
-  document.querySelectorAll("#mode-switch button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+  document.querySelectorAll("button[data-mode]").forEach((b) => b.addEventListener("click", () => { setMode(b.dataset.mode); haptic(8); }));
   $("mek-options").addEventListener("click", (e) => { const b = e.target.closest(".mek-opt"); if (b && !b.disabled) answerMek(+b.dataset.k); });
   $("mek-next").addEventListener("click", () => nextMek());
   $("mek-resume").addEventListener("click", () => setPaused(false));
@@ -1541,8 +1584,7 @@
   $("next-clue").addEventListener("click", () => stepWord(1));
   $("btn-stats").addEventListener("click", showStats);
   $("btn-archive").addEventListener("click", showArchive);
-  $("btn-settings").addEventListener("click", () => { renderThemePicker(); $("mc-toggle").checked = mcOn(); renderCheckPicker(); renderStylePickers(); $("time-toggle").checked = showTime(); $("settings-dialog").showModal(); });
-  $("mc-toggle").addEventListener("change", (e) => { setPref("choices", e.target.checked); update(); });
+  $("btn-settings").addEventListener("click", () => { renderThemePicker(); renderCheckPicker(); renderStylePickers(); $("time-toggle").checked = showTime(); $("settings-dialog").showModal(); });
   function renderCheckPicker() {
     const keys = ["off", "word", "letter"];
     document.querySelectorAll("#check-picker button").forEach((b) => b.setAttribute("aria-checked", b.dataset.check === checkMode()));
@@ -1596,7 +1638,7 @@
   function fromHash() {
     const [date, level, m] = location.hash.slice(1).split("/");
     if (!validDate(date)) return null;
-    return { date, level: LEVELS[level] ? level : LEVELS[prefs().level] ? prefs().level : "medium", mode: m === "mek" ? "mek" : null };
+    return { date, level: LEVELS[level] ? level : LEVELS[prefs().level] ? prefs().level : "medium", mode: m === "mek" || m === "ord" ? m : null };
   }
 
   // ---------- Start ----------
@@ -1606,7 +1648,7 @@
   const startAt = fromHash() || { date: todayKey(), level: LEVELS[prefs().level] ? prefs().level : "medium" };
   if (startAt.mode) setPref("mode", startAt.mode);
   open(startAt.date, startAt.level); // korsordet finns alltid i bakgrunden
-  if (mode() === "mek") openMek(startAt.date, startAt.level);
+  if (isQuiz()) openMek(startAt.date, startAt.level);
   applyMode(false);
   syncViewport();
   if (firstVisit) $("help-dialog").showModal();

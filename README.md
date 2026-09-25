@@ -1,6 +1,6 @@
 # HP-Korsord
 
-Ett nytt korsord varje dag med över 1 400 ord från högskoleprovets ORD-del – upplagt som sudokuaday.com. Ledtrådarna är synonymer eller korta förklaringar, precis som på provet. Dagens korsord räknas fram ur datumet, så alla får samma korsord samma dag.
+Ett nytt korsord varje dag med över 2 000 ord från högskoleprovets ORD-del – upplagt som sudokuaday.com. Ledtrådarna är synonymer eller korta förklaringar, precis som på provet. Dagens korsord räknas fram ur datumet, så alla får samma korsord samma dag.
 
 ## Funktioner
 
@@ -8,12 +8,12 @@ Ett nytt korsord varje dag med över 1 400 ord från högskoleprovets ORD-del �
 - Arkiv med kalender där du ser vilka dagar du löst och kan spela missade korsord
 - Timer med paus, och en svit (🔥 dagar i rad) i statistiken
 - Skriv med iPhonens/iPadens eget tangentbord eller ett externt tangentbord som Magic Keyboard (piltangenter, Tab/Enter för nästa ord, mellanslag byter riktning, ⌘Z ångrar)
-- Två lägen: **Korsord** och **Meningar** (meningskomplettering som i MEK-delen, med en ny omgång varje dag på tre nivåer)
-- Visa fel: av, per ord (när ordet är ifyllt) eller direkt. Ord som visats som rätt låses
+- Tre lägen: **Korsord**, **Ord** (som ORD-delen: ett ord och fem betydelser, A–E) och **Meningar** (meningskomplettering som i MEK-delen). En ny omgång varje dag på tre nivåer
+- Visa fel: per ord (standard – rätt eller fel visas först när ordet är ifyllt), direkt eller av. Ord som visats som rätt låses
 - Stilval: fyra rutformer (Rundad, Bubblor, Mjuk, Klassisk), sex färgteman och fyra typsnitt
+- Flikrad i botten på iPhone som i iOS-appar
 - Fokusläge på iPhone: när tangentbordet är uppe får rutnätet hela bredden och skrollar till ordet, och ledtrådskortet visar hela ledtråden och ordets bokstäver
 - Ordlista med sökning och Dagens ord
-- Svarsalternativ A–E som på högskoleprovet (slå på under Inställningar): välj rätt ord bland fem lika långa (ordets längd visas inte), eller tryck 1–5 på tangentbordet
 - Inställningar för att visa fel direkt och för att visa eller dölja tiden
 - Animationer: rutnätet byggs upp, bokstäver poppar in, rätt ord blinkar grönt, fel bokstav skakar och konfetti när korsordet är löst
 - Verktyg som i en sudoku-app: ångra, sudda, kontrollera, tips, visa ord, börja om eller ge upp
