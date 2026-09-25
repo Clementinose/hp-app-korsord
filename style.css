@@ -17,8 +17,11 @@
   --label-3: rgba(60, 60, 67, .3);
   --separator: rgba(60, 60, 67, .29);
   --bar: rgba(242, 242, 247, .8);
-  --tint: #007aff;
-  --tint-soft: rgba(0, 122, 255, .12);
+  /* Färgtema: väljs under Inställningar (data-accent), här med blå som standard. */
+  --accent-l: #007aff;
+  --accent-d: #0a84ff;
+  --tint: var(--accent-l);
+  --tint-soft: color-mix(in srgb, var(--tint) 13%, transparent);
   --green: #34c759;
   --red: #ff3b30;
   --orange: #ff9500;
@@ -28,10 +31,10 @@
   --block: #d1d1d6;
   --grid-line: #d1d1d6;
   --grid-edge: #3a3a3c;
-  --word: #e3eefc;
-  --selected: #b3d4ff;
-  --ink: #0a60d8;
-  --sel-ink: #0a4fb3;
+  --word: color-mix(in srgb, var(--tint) 13%, var(--cell));
+  --selected: color-mix(in srgb, var(--tint) 32%, var(--cell));
+  --ink: color-mix(in srgb, var(--tint) 85%, #000);
+  --sel-ink: color-mix(in srgb, var(--tint) 65%, #000);
   --solved: #e4f6e9;
   --locked-bg: #eef9f1;
   --kb-bg: #d1d3d9;
@@ -54,8 +57,8 @@
     --label-3: rgba(235, 235, 245, .3);
     --separator: rgba(84, 84, 88, .65);
     --bar: rgba(22, 22, 24, .78);
-    --tint: #0a84ff;
-    --tint-soft: rgba(10, 132, 255, .2);
+    --tint: var(--accent-d);
+    --tint-soft: color-mix(in srgb, var(--tint) 22%, transparent);
     --green: #30d158;
     --red: #ff453a;
     --orange: #ff9f0a;
@@ -64,9 +67,9 @@
     --block: #0f0f11;
     --grid-line: #0f0f11;
     --grid-edge: #636366;
-    --word: #16304f;
-    --selected: #1f5fb8;
-    --ink: #64a8ff;
+    --word: color-mix(in srgb, var(--tint) 24%, var(--cell));
+    --selected: color-mix(in srgb, var(--tint) 55%, var(--cell));
+    --ink: color-mix(in srgb, var(--tint) 70%, #fff);
     --sel-ink: #ffffff;
     --solved: #143a22;
     --locked-bg: #1d3325;
@@ -86,8 +89,8 @@
   --label-3: rgba(235, 235, 245, .3);
   --separator: rgba(84, 84, 88, .65);
   --bar: rgba(22, 22, 24, .78);
-  --tint: #0a84ff;
-  --tint-soft: rgba(10, 132, 255, .2);
+  --tint: var(--accent-d);
+  --tint-soft: color-mix(in srgb, var(--tint) 22%, transparent);
   --green: #30d158;
   --red: #ff453a;
   --orange: #ff9f0a;
@@ -96,9 +99,9 @@
   --block: #0f0f11;
   --grid-line: #0f0f11;
   --grid-edge: #636366;
-  --word: #16304f;
-  --selected: #1f5fb8;
-  --ink: #64a8ff;
+  --word: color-mix(in srgb, var(--tint) 24%, var(--cell));
+  --selected: color-mix(in srgb, var(--tint) 55%, var(--cell));
+  --ink: color-mix(in srgb, var(--tint) 70%, #fff);
   --sel-ink: #ffffff;
   --solved: #143a22;
   --locked-bg: #1d3325;
@@ -716,6 +719,167 @@ body.mode-mek .levelrow { max-width: none; }
   .mek-card { padding: 26px 28px 28px; }
 }
 
+/* ---------- Färgteman ---------- */
+:root[data-accent="indigo"] { --accent-l: #5856d6; --accent-d: #5e5ce6; }
+:root[data-accent="purple"] { --accent-l: #af52de; --accent-d: #bf5af2; }
+:root[data-accent="pink"] { --accent-l: #ff2d55; --accent-d: #ff375f; }
+:root[data-accent="orange"] { --accent-l: #f57c00; --accent-d: #ff9f0a; }
+:root[data-accent="teal"] { --accent-l: #0a9bb5; --accent-d: #40c8e0; }
+
+/* ---------- Rutstilar ---------- */
+/* Rundad, Bubblor och Mjuk: fristående brickor utan svarta rutor, som svävar på bakgrunden. */
+:root:not([data-cells="classic"]) .board {
+  gap: var(--tile-gap, 3px); padding: 2px; background: transparent; border: 0; border-radius: 0; overflow: visible;
+}
+:root:not([data-cells="classic"]) .cell.block { background: transparent; }
+:root:not([data-cells="classic"]) .cell.letter {
+  box-shadow: inset 0 0 0 1px var(--tile-edge), 0 1px 2px rgba(0, 0, 0, .06);
+  transition: background-color .15s ease, box-shadow .15s ease, border-radius .3s ease;
+}
+:root:not([data-cells="classic"]) .cell.in-word, :root:not([data-cells="classic"]) .cell.selected { box-shadow: none; }
+:root:not([data-cells="classic"]) .cell.selected { box-shadow: 0 0 0 2px var(--tint), 0 4px 12px color-mix(in srgb, var(--tint) 35%, transparent); z-index: 1; }
+:root { --tile-edge: color-mix(in srgb, var(--label) 12%, transparent); }
+:root[data-cells="rounded"] .cell.letter { border-radius: 24%; }
+:root[data-cells="bubble"] { --tile-gap: 4px; }
+:root[data-cells="bubble"] .cell.letter { border-radius: 50%; }
+:root[data-cells="bubble"] .cell .num {
+  top: -6%; left: -6%; z-index: 2; padding: 1px 3px; border-radius: 6px;
+  background: var(--bg); color: var(--label-2); font-size: calc(100cqw / var(--cols) * .2);
+}
+:root[data-cells="soft"] { --tile-gap: 4px; }
+:root[data-cells="soft"] .cell.letter {
+  border-radius: 32%; background: color-mix(in srgb, var(--tint) 5%, var(--cell));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .07), 0 3px 10px color-mix(in srgb, var(--tint) 24%, transparent);
+}
+:root[data-cells="soft"] .cell.letter .ch { font-weight: 650; }
+:root[data-cells="soft"] .cell.in-word { background: var(--word); }
+:root[data-cells="soft"] .cell.selected { background: var(--selected); }
+:root[data-cells="soft"] .cell.locked:not(.in-word):not(.selected) { background: var(--locked-bg); }
+:root:not([data-cells="classic"]) .board.solved .cell.letter { box-shadow: none; }
+:root:not([data-cells="classic"]) .cell.revealed::before { border-top-right-radius: 40%; }
+/* Pulserande markör: inte i klassisk stil där rutan redan har skarp kant */
+:root:not([data-cells="classic"]) .cell.selected { animation: none; }
+
+/* ---------- Typsnitt (Apples egna) ---------- */
+:root[data-font="rounded"] { --letters: ui-rounded, "SF Pro Rounded", system-ui, sans-serif; }
+:root[data-font="serif"] { --letters: ui-serif, "New York", Georgia, "Times New Roman", serif; }
+:root[data-font="mono"] { --letters: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.cell .ch, .cc-strip, .mek-text, .date-title, .ring-num b, .wod-word { font-family: var(--letters, inherit); }
+:root[data-font="rounded"] .date-title, :root[data-font="rounded"] .brand-name { letter-spacing: -.01em; }
+
+/* ---------- Förlopp ---------- */
+.progress { height: 4px; border-radius: 2px; background: var(--fill); overflow: hidden; width: 100%; max-width: 520px; margin: -4px auto 0; flex: none; }
+.progress i { display: block; height: 100%; width: var(--p, 0%); border-radius: 2px; background: linear-gradient(90deg, var(--tint), color-mix(in srgb, var(--tint) 60%, var(--green))); transition: width .5s cubic-bezier(.3, .8, .3, 1); }
+body.mode-mek .progress, body.compact .progress { display: none; }
+
+/* ---------- Ledtrådskortet: hela ledtråden + ordets bokstäver ---------- */
+.cc-text { display: flex; flex-direction: column; justify-content: center; gap: 2px; -webkit-line-clamp: unset; }
+.cc-num { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--tint); margin: 0; }
+.cc-clue { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cc-strip { display: none; gap: 3px; flex-wrap: wrap; margin-top: 5px; }
+.cc-strip b {
+  width: 22px; height: 26px; border-radius: 6px; display: grid; place-items: center;
+  background: var(--fill); font-size: 14px; font-weight: 700; color: var(--ink);
+  transition: background-color .15s ease, transform .15s ease;
+}
+.cc-strip b.cur { background: var(--selected); color: var(--sel-ink); transform: translateY(-2px); box-shadow: 0 2px 6px color-mix(in srgb, var(--tint) 30%, transparent); }
+.cc-strip b.ok { background: var(--locked-bg); color: var(--green); }
+.cc-strip b.bad { color: var(--red); }
+body.typing .cc-strip { display: flex; }
+
+/* ---------- iPhone med tangentbordet uppe: fokusläge ---------- */
+body.compact .navbar { display: none; }
+body.compact .play { padding-top: max(8px, env(safe-area-inset-top)); gap: 6px; }
+/* Rutnätet får hela bredden och skrollar till ordet man skriver i. */
+body.compact .board-area { container-type: inline-size; overflow-y: auto; overflow-x: hidden; place-items: start center; padding: 6px 0 10px; scroll-behavior: smooth; }
+body.compact .board { width: min(100cqw - 4px, var(--cols) * 52px); }
+body.compact .dock { padding-top: 8px; }
+body.compact .current-clue { min-height: 0; padding: 4px 0; box-shadow: 0 -6px 20px rgba(0, 0, 0, .06); }
+body.compact .cc-text { padding: 6px 2px; }
+
+/* ---------- Stilväljare i inställningarna ---------- */
+.preset-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.preset-row button, .font-row button, .swatch-row button {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px 4px 8px; border-radius: 14px; background: var(--bg-elev);
+  font-size: 12px; font-weight: 600; color: var(--label-2);
+  box-shadow: inset 0 0 0 1px transparent; transition: box-shadow .2s ease, transform .15s ease, color .2s ease;
+}
+.preset-row button[aria-checked="true"], .font-row button[aria-checked="true"], .swatch-row button[aria-checked="true"] {
+  box-shadow: inset 0 0 0 2px var(--tint); color: var(--label);
+}
+.preset-row button:active, .font-row button:active, .swatch-row button:active { transform: scale(.95); }
+.mini { display: grid; grid-template-columns: repeat(3, 14px); gap: 2px; padding: 2px; }
+.mini i { width: 14px; height: 14px; background: var(--cell); box-shadow: inset 0 0 0 1px var(--tile-edge); }
+.mini i.b { background: transparent; box-shadow: none; }
+.mini i.s { background: var(--selected); box-shadow: none; }
+.mini i.w { background: var(--word); box-shadow: none; }
+.mini[data-cells="rounded"] i { border-radius: 4px; }
+.mini[data-cells="bubble"] i { border-radius: 50%; }
+.mini[data-cells="soft"] i { border-radius: 5px; background: color-mix(in srgb, var(--tint) 8%, var(--cell)); box-shadow: 0 1px 3px color-mix(in srgb, var(--tint) 20%, transparent); }
+.mini[data-cells="soft"] i.b { background: transparent; box-shadow: none; }
+.mini[data-cells="soft"] i.s { background: var(--selected); }
+.mini[data-cells="soft"] i.w { background: var(--word); }
+.mini[data-cells="classic"] { gap: 1px; padding: 1px; background: var(--block); border-radius: 3px; }
+.mini[data-cells="classic"] i { box-shadow: none; }
+.mini[data-cells="classic"] i.b { background: var(--block); }
+.swatch-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.swatch-row button { padding: 10px 2px 8px; font-size: 11px; }
+.swatch-row i { width: 26px; height: 26px; border-radius: 50%; background: var(--c); box-shadow: 0 2px 6px color-mix(in srgb, var(--c) 45%, transparent); transition: transform .25s cubic-bezier(.3, 1.6, .5, 1); }
+.swatch-row button[aria-checked="true"] i { transform: scale(1.12); box-shadow: 0 0 0 3px var(--bg-elev), 0 0 0 5px var(--c); }
+.swatch-row [data-accent="blue"] { --c: #007aff; }
+.swatch-row [data-accent="indigo"] { --c: #5856d6; }
+.swatch-row [data-accent="purple"] { --c: #af52de; }
+.swatch-row [data-accent="pink"] { --c: #ff2d55; }
+.swatch-row [data-accent="orange"] { --c: #f57c00; }
+.swatch-row [data-accent="teal"] { --c: #0a9bb5; }
+.font-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.font-row b { font-size: 22px; color: var(--label); line-height: 1.1; }
+.font-row [data-font="rounded"] b { font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif; }
+.font-row [data-font="serif"] b { font-family: ui-serif, "New York", Georgia, serif; }
+.font-row [data-font="mono"] b { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+/* ---------- Ordlista ---------- */
+dialog.sheet.tall { height: calc(100dvh - env(safe-area-inset-top) - 12px); }
+.search { display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 38px; border-radius: 11px; background: var(--fill); color: var(--label-2); }
+.search svg { width: 18px; height: 18px; flex: none; }
+.search input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 17px; color: var(--label); outline: none; -webkit-user-select: text; user-select: text; }
+.search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.word-count { font-size: 13px; color: var(--label-2); margin: 2px 4px 0; }
+.word-list { background: var(--bg-elev); border-radius: var(--radius); overflow: hidden; }
+.word-list .letter-head { position: sticky; top: 0; z-index: 1; padding: 6px 16px; font-size: 13px; font-weight: 700; color: var(--tint); background: color-mix(in srgb, var(--bg-elev) 88%, var(--tint)); }
+.word-list .w { position: relative; padding: 10px 16px; line-height: 1.35; }
+.word-list .w + .w::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: var(--separator); }
+.word-list .w b { font-weight: 650; }
+.word-list .w span { color: var(--label-2); }
+.word-list mark { background: color-mix(in srgb, var(--tint) 25%, transparent); color: inherit; border-radius: 3px; }
+.word-list .empty { padding: 24px 16px; text-align: center; color: var(--label-2); }
+.word-of-day {
+  position: relative; overflow: hidden;
+  border-radius: 18px; padding: 16px 18px 18px; color: #fff;
+  background: linear-gradient(135deg, var(--tint), color-mix(in srgb, var(--tint) 55%, #000));
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--tint) 35%, transparent);
+}
+.word-of-day::after { content: "✦"; position: absolute; right: 14px; top: 8px; font-size: 42px; opacity: .18; animation: twinkle 3s ease-in-out infinite; }
+@keyframes twinkle { 50% { transform: rotate(20deg) scale(1.15); opacity: .3; } }
+.wod-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; opacity: .8; }
+.wod-word { font-size: 30px; font-weight: 800; letter-spacing: -.02em; margin: 2px 0; text-transform: lowercase; }
+.wod-clue { font-size: 16px; opacity: .92; }
+.word-of-day.enter { animation: card-in .6s cubic-bezier(.2, .8, .3, 1) both; }
+.wide-only { display: grid; }
+@media (max-width: 359px) { .wide-only { display: none; } }
+
+/* ---------- Fler animationer ---------- */
+.cell.word-in { animation: word-in .35s cubic-bezier(.3, 1.4, .5, 1) both; animation-delay: calc(var(--i, 0) * 22ms); }
+@keyframes word-in { 40% { transform: scale(.9); } }
+.date-title.swap, .kicker.swap { animation: swap .35s ease; }
+.tool:not(:disabled):active svg { transform: scale(.82) rotate(-6deg); }
+#btn-letter.used svg { animation: bulb .8s ease; }
+@keyframes bulb { 30% { transform: scale(1.25); color: #ffcc00; filter: drop-shadow(0 0 6px #ffcc00); } }
+.icon-btn svg { transition: transform .2s cubic-bezier(.3, 1.6, .5, 1); }
+.icon-btn:active svg { transform: scale(.8); }
+.seg-thumb { transition: transform .35s cubic-bezier(.3, 1.3, .5, 1); }
+
 /* Dold tid */
 body.hide-time .timer { display: none; }
 
@@ -753,6 +917,8 @@ dialog.sheet[open] { display: flex; animation: sheet-up .38s cubic-bezier(.3, .7
   padding: 4px 16px calc(20px + env(safe-area-inset-bottom));
   display: flex; flex-direction: column; gap: 8px;
 }
+/* Innehållet i ett ark får aldrig tryckas ihop, arket skrollar i stället. */
+.sheet-body > * { flex-shrink: 0; }
 .list-title { margin: 14px 16px 2px; font-size: 13px; text-transform: uppercase; color: var(--label-2); }
 .list { list-style: none; margin: 0; padding: 0; background: var(--bg-elev); border-radius: var(--radius); overflow: hidden; }
 .list li { position: relative; padding: 11px 16px; font-size: 16px; }
@@ -933,3 +1099,6 @@ dialog.alert[open] { animation: alert-in .2s ease; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Dolt reglage som ger haptisk återkoppling på iPhone (iOS 18). */
+.haptic { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }

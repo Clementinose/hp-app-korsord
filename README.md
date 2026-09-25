@@ -10,6 +10,9 @@ Ett nytt korsord varje dag med över 1 400 ord från högskoleprovets ORD-del �
 - Skriv med iPhonens/iPadens eget tangentbord eller ett externt tangentbord som Magic Keyboard (piltangenter, Tab/Enter för nästa ord, mellanslag byter riktning, ⌘Z ångrar)
 - Två lägen: **Korsord** och **Meningar** (meningskomplettering som i MEK-delen, med en ny omgång varje dag på tre nivåer)
 - Visa fel: av, per ord (när ordet är ifyllt) eller direkt. Ord som visats som rätt låses
+- Stilval: fyra rutformer (Rundad, Bubblor, Mjuk, Klassisk), sex färgteman och fyra typsnitt
+- Fokusläge på iPhone: när tangentbordet är uppe får rutnätet hela bredden och skrollar till ordet, och ledtrådskortet visar hela ledtråden och ordets bokstäver
+- Ordlista med sökning och Dagens ord
 - Svarsalternativ A–E som på högskoleprovet (slå på under Inställningar): välj rätt ord bland fem lika långa (ordets längd visas inte), eller tryck 1–5 på tangentbordet
 - Inställningar för att visa fel direkt och för att visa eller dölja tiden
 - Animationer: rutnätet byggs upp, bokstäver poppar in, rätt ord blinkar grönt, fel bokstav skakar och konfetti när korsordet är löst

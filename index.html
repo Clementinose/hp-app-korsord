@@ -19,7 +19,11 @@
   <link rel="stylesheet" href="style.css">
   <script>
     // Sätt tema innan sidan ritas, så att den inte blinkar.
-    try { const t = JSON.parse(localStorage.getItem("hpk-prefs-v2") || "{}").theme; if (t === "light" || t === "dark") { document.documentElement.dataset.theme = t; document.documentElement.dataset.themeByApp = ""; } } catch {}
+    try {
+      const p = JSON.parse(localStorage.getItem("hpk-prefs-v2") || "{}"), d = document.documentElement.dataset;
+      if (p.theme === "light" || p.theme === "dark") { d.theme = p.theme; d.themeByApp = ""; }
+      d.cells = p.cells || "rounded"; d.accent = p.accent || "blue"; d.font = p.font || "standard";
+    } catch {}
   </script>
 </head>
 <body>
@@ -27,6 +31,9 @@
     <div class="nav-side">
       <button class="icon-btn" id="btn-archive" aria-label="Arkiv">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="16" rx="3.5"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/></svg>
+      </button>
+      <button class="icon-btn wide-only" id="btn-words" aria-label="Ordlista">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>
       </button>
     </div>
     <div class="nav-center">
@@ -75,6 +82,8 @@
           <button class="pause" id="btn-pause" aria-label="Pausa"></button>
         </div>
       </div>
+
+      <div class="progress" id="progress" aria-hidden="true"><i></i></div>
 
       <!-- Meningskomplettering -->
       <section class="mek" id="mek" hidden aria-label="Meningskomplettering">
@@ -152,6 +161,7 @@
         </button>
         <button class="cc-text" id="cc-open" aria-label="Visa alla ledtrådar">
           <span class="cc-num" id="cc-num"></span><span class="cc-clue" id="cc-clue"></span>
+          <span class="cc-strip" id="cc-strip" aria-hidden="true"></span>
         </button>
         <button class="cc-nav" id="next-clue" aria-label="Nästa ledtråd">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
@@ -249,6 +259,29 @@
         <button data-theme-value="light" role="radio">Ljust</button>
         <button data-theme-value="dark" role="radio">Mörkt</button>
       </div>
+      <div class="list-title">Rutor</div>
+      <div class="preset-row" id="cell-picker" role="radiogroup" aria-label="Rutor">
+        <button data-cells="rounded" role="radio"><span class="mini" data-cells="rounded"></span><span>Rundad</span></button>
+        <button data-cells="bubble" role="radio"><span class="mini" data-cells="bubble"></span><span>Bubblor</span></button>
+        <button data-cells="soft" role="radio"><span class="mini" data-cells="soft"></span><span>Mjuk</span></button>
+        <button data-cells="classic" role="radio"><span class="mini" data-cells="classic"></span><span>Klassisk</span></button>
+      </div>
+      <div class="list-title">Färg</div>
+      <div class="swatch-row" id="accent-picker" role="radiogroup" aria-label="Färg">
+        <button data-accent="blue" role="radio"><i></i><span>Blå</span></button>
+        <button data-accent="indigo" role="radio"><i></i><span>Indigo</span></button>
+        <button data-accent="purple" role="radio"><i></i><span>Lila</span></button>
+        <button data-accent="pink" role="radio"><i></i><span>Rosa</span></button>
+        <button data-accent="orange" role="radio"><i></i><span>Orange</span></button>
+        <button data-accent="teal" role="radio"><i></i><span>Turkos</span></button>
+      </div>
+      <div class="list-title">Bokstäver</div>
+      <div class="font-row" id="font-picker" role="radiogroup" aria-label="Bokstäver">
+        <button data-font="standard" role="radio"><b>Aa</b><span>Standard</span></button>
+        <button data-font="rounded" role="radio"><b>Aa</b><span>Rundad</span></button>
+        <button data-font="serif" role="radio"><b>Aa</b><span>Serif</span></button>
+        <button data-font="mono" role="radio"><b>Aa</b><span>Mono</span></button>
+      </div>
       <div class="list-title">Spel</div>
       <ul class="list">
         <li><label class="row switch-row" for="mc-toggle">Svarsalternativ (A–E)<input type="checkbox" id="mc-toggle" class="switch"></label></li>
@@ -265,9 +298,27 @@
       <p class="footnote tight"><b>Per ord:</b> när ett ord är ifyllt visas om det är rätt eller fel. <b>Direkt:</b> varje felaktig bokstav blir röd med en gång. Ord som visats som rätt låses så att de inte kan ändras.</p>
       <div class="list-title">Hjälp</div>
       <ul class="list">
+        <li><button class="row" id="open-words">Ordlista<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
         <li><button class="row" id="open-help">Så spelar du<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
       </ul>
       <p class="footnote">HP-Korsord · Ett nytt korsord varje dag med ord från högskoleprovets ORD-del.</p>
+    </div>
+  </dialog>
+
+  <dialog id="words-dialog" class="sheet tall">
+    <div class="sheet-bar">
+      <span class="grabber" aria-hidden="true"></span>
+      <h2>Ordlista</h2>
+      <button class="text-btn" data-close>Klar</button>
+    </div>
+    <div class="sheet-body">
+      <div class="word-of-day" id="word-of-day"></div>
+      <label class="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+        <input type="search" id="word-search" placeholder="Sök bland orden" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
+      </label>
+      <div class="word-count" id="word-count"></div>
+      <div class="word-list" id="word-list"></div>
     </div>
   </dialog>
 

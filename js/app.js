@@ -30,7 +30,28 @@
   let mek = null; // pågående omgång meningskomplettering
   const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   // Kort vibration där enheten stöder det (Android). iOS ignorerar anropet.
-  const haptic = (pattern) => { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* ej stöd */ } };
+  let hapticLabel = null;
+  function haptic(pattern) {
+    try {
+      if (navigator.vibrate) { navigator.vibrate(pattern); return; }
+      if (prefs().haptics === false) return;
+      // iPhone: Safari saknar vibrate(), men ett dolt iOS-reglage ger en lätt stöt när det slås om.
+      // Hoppa över när tangentbordet används, så att fokus inte flyttas från textfältet.
+      if (document.activeElement && document.activeElement.id === "kb-input") return;
+      if (!hapticLabel) {
+        hapticLabel = document.createElement("label");
+        hapticLabel.className = "haptic";
+        hapticLabel.setAttribute("aria-hidden", "true");
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.setAttribute("switch", "");
+        input.tabIndex = -1;
+        hapticLabel.appendChild(input);
+        document.body.appendChild(hapticLabel);
+      }
+      hapticLabel.click();
+    } catch { /* ej stöd */ }
+  }
   const puzzleCache = new Map();
 
   // ---------- Lagring ----------
@@ -185,6 +206,10 @@
     if (d.getFullYear() !== new Date().getFullYear()) dateOpts.year = "numeric";
     const date = d.toLocaleDateString("sv-SE", dateOpts);
     $("date-title").textContent = isToday ? "Idag" : yesterday ? "Igår" : weekday.charAt(0).toUpperCase() + weekday.slice(1);
+    if (renderHeader.last !== cur.date) {
+      if (renderHeader.last) { animate($("date-title"), "swap", 400); animate($("kicker"), "swap", 400); }
+      renderHeader.last = cur.date;
+    }
     $("kicker").textContent = isToday || yesterday ? `${weekday} ${date}` : date;
     $("prev-day").disabled = cur.date <= FIRST_DAY;
     $("next-day").disabled = isToday;
@@ -267,11 +292,45 @@
     // Med svarsalternativ visas inte ordets längd, så att den inte avslöjar svaret.
     $("cc-clue").textContent = cw ? (mcOn() ? cw.clue : `${cw.clue} (${cw.word.length})`) : "";
     const ci = currentWordIndex();
-    if (ci !== lastClue) { lastClue = ci; animate($("cc-open"), "swap", 400); }
+    if (ci !== lastClue) {
+      lastClue = ci;
+      animate($("cc-open"), "swap", 400);
+      if (cw && !state.done) cellsOf(cw).forEach(([r, c], i) => { cellEls[r][c].style.setProperty("--i", i); if (!cellEls[r][c].classList.contains("flash")) animate(cellEls[r][c], "word-in", 600); });
+    }
+    renderStrip(cw);
+    const letters = puzzle.grid.flat().filter(Boolean).length;
+    const filled = entries.flat().filter(Boolean).length;
+    $("progress").style.setProperty("--p", Math.round((filled / letters) * 100) + "%");
+    if (document.body.classList.contains("compact")) keepInView();
     $("btn-solve").textContent = state.done ? "Visa lösningen" : "Ge upp och visa lösningen";
     $("btn-undo").disabled = state.done || !undoStack.length;
     for (const id of ["btn-erase", "btn-check", "btn-letter"]) $(id).disabled = state.done;
     renderChoices();
+  }
+
+  // Ordets bokstäver i ledtrådskortet, så att hela ordet syns även när rutnätet är skrollat.
+  function renderStrip(w) {
+    const strip = $("cc-strip");
+    if (!w) { strip.innerHTML = ""; return; }
+    strip.innerHTML = cellsOf(w).map(([r, c]) => {
+      const cls = r === state.sel.r && c === state.sel.c ? "cur" : state.locked[r][c] ? "ok" : state.wrong[r][c] ? "bad" : "";
+      return `<b class="${cls}">${state.entries[r][c] || ""}</b>`;
+    }).join("");
+  }
+
+  // I fokusläget (tangentbordet uppe) skrollas rutnätet så att hela ordet syns.
+  function keepInView() {
+    const area = $("board-area"), w = currentWord();
+    if (!w) return;
+    const cells = cellsOf(w).map(([r, c]) => cellEls[r][c].getBoundingClientRect());
+    const a = area.getBoundingClientRect();
+    const top = Math.min(...cells.map((x) => x.top)), bottom = Math.max(...cells.map((x) => x.bottom));
+    const sel = cellEls[state.sel.r][state.sel.c].getBoundingClientRect();
+    const pad = 10;
+    let t = top, b = bottom;
+    if (bottom - top > a.height - pad * 2) { t = sel.top; b = sel.bottom; }
+    if (t < a.top + pad) area.scrollTop -= a.top + pad - t;
+    else if (b > a.bottom - pad) area.scrollTop += b - (a.bottom - pad);
   }
 
   // ---------- Svarsalternativ (A–E), som på högskoleprovet ----------
@@ -999,6 +1058,45 @@
     });
   }
 
+  // ---------- Ordlista med sökning och dagens ord ----------
+  const normalize = (t) => t.toLowerCase();
+  function wordOfDay(date) {
+    const rng = mulberry32(hashString(`${SEED_VERSION}|dagens-ord|${date}`));
+    return HP_WORDS[Math.floor(rng() * HP_WORDS.length)];
+  }
+  function renderWordList() {
+    const q = normalize($("word-search").value.trim());
+    const hl = (t) => {
+      const safe = escapeHtml(t);
+      if (!q) return safe;
+      const i = t.toLowerCase().indexOf(q);
+      return i < 0 ? safe : escapeHtml(t.slice(0, i)) + "<mark>" + escapeHtml(t.slice(i, i + q.length)) + "</mark>" + escapeHtml(t.slice(i + q.length));
+    };
+    const hits = HP_WORDS.filter(([w, c]) => !q || w.toLowerCase().includes(q) || c.toLowerCase().includes(q));
+    $("word-count").textContent = q ? `${hits.length} träffar` : `${HP_WORDS.length} ord`;
+    let html = "", letter = "";
+    for (const [w, c] of hits.slice(0, 400)) {
+      if (w[0] !== letter) { letter = w[0]; html += `<div class="letter-head">${letter}</div>`; }
+      html += `<div class="w"><b>${hl(w.toLowerCase())}</b> <span>– ${hl(c)}</span></div>`;
+    }
+    if (hits.length > 400) html += `<div class="empty">Visar 400 av ${hits.length}. Sök för att hitta fler.</div>`;
+    $("word-list").innerHTML = html || `<div class="empty">Inga ord hittades.</div>`;
+  }
+  function showWords() {
+    kbInput.blur();
+    const [w, c] = wordOfDay(cur.date || todayKey());
+    $("word-of-day").innerHTML = `<div class="wod-label">Dagens ord</div><div class="wod-word">${escapeHtml(w)}</div><div class="wod-clue">${escapeHtml(c)}</div>`;
+    $("word-search").value = "";
+    renderWordList();
+    $("words-dialog").showModal();
+    animate($("word-of-day"), "enter", 700);
+    $("word-list").scrollTop = 0;
+  }
+  let searchTimer;
+  $("word-search").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(renderWordList, 120); });
+  $("btn-words").addEventListener("click", showWords);
+  $("open-words").addEventListener("click", () => { $("settings-dialog").close(); showWords(); });
+
   // ---------- Läge: korsord eller meningskomplettering ----------
   function openCurrent(date, level, dir) {
     if (mode() === "mek") openMek(date, level, dir);
@@ -1259,6 +1357,31 @@
   }
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 
+  // Rutstil, färgtema och typsnitt sparas som inställningar och sätts som attribut på <html>.
+  const STYLE_DEFAULTS = { cells: "rounded", accent: "blue", font: "standard" };
+  function applyStyle() {
+    for (const key of Object.keys(STYLE_DEFAULTS)) document.documentElement.dataset[key] = prefs()[key] || STYLE_DEFAULTS[key];
+  }
+  function renderStylePickers() {
+    for (const [key, picker] of [["cells", "cell-picker"], ["accent", "accent-picker"], ["font", "font-picker"]]) {
+      const value = prefs()[key] || STYLE_DEFAULTS[key];
+      document.querySelectorAll(`#${picker} button`).forEach((b) => b.setAttribute("aria-checked", b.dataset[key] === value));
+    }
+  }
+  // Små förhandsvisningar av rutstilarna.
+  document.querySelectorAll(".mini").forEach((m) => {
+    m.innerHTML = ["s", "w", "w", "b", "", "b", "", "", "b"].map((c) => `<i class="${c}"></i>`).join("");
+  });
+  for (const [key, picker] of [["cells", "cell-picker"], ["accent", "accent-picker"], ["font", "font-picker"]]) {
+    document.querySelectorAll(`#${picker} button`).forEach((b) => b.addEventListener("click", () => {
+      setPref(key, b.dataset[key]);
+      applyStyle();
+      renderStylePickers();
+      haptic(8);
+      if (key !== "accent" && state && mode() === "cross") animate(boardEl, "enter", 900);
+    }));
+  }
+
   // ---------- Ledtrådsark (telefon) ----------
   function setCluesOpen(open) {
     document.body.classList.toggle("clues-open", open);
@@ -1350,13 +1473,21 @@
   });
 
   // Anpassa appens höjd efter det som syns när iOS-tangentbordet är uppe.
+  // Höjden utan tangentbord (för aktuell orientering). Behövs eftersom iOS ibland krymper även
+  // layoutens höjd när tangentbordet visas, t.ex. när appen körs från hemskärmen.
+  let fullHeight = 0, fullWidth = 0;
   function syncViewport() {
     const typing = document.activeElement === kbInput;
     if (vv && Math.abs(vv.scale - 1) < 0.01) {
+      if (vv.width !== fullWidth) { fullWidth = vv.width; fullHeight = 0; } // ny orientering
+      if (!typing || vv.height > fullHeight) fullHeight = Math.max(vv.height, typing ? fullHeight : 0);
       document.documentElement.style.setProperty("--app-h", Math.round(vv.height) + "px");
-      const kbOpen = typing && document.documentElement.clientHeight - vv.height > 120;
+      const kbOpen = typing && (Math.max(document.documentElement.clientHeight, fullHeight) - vv.height > 120);
       document.body.classList.toggle("kb-open", kbOpen);
+      const wasCompact = document.body.classList.contains("compact");
       document.body.classList.toggle("compact", kbOpen && vv.height < 720);
+      if (wasCompact && !document.body.classList.contains("compact")) $("board-area").scrollTop = 0;
+      if (!wasCompact && document.body.classList.contains("compact") && state) requestAnimationFrame(keepInView);
     }
     if (window.scrollY) window.scrollTo(0, 0);
   }
@@ -1386,7 +1517,7 @@
   $("mek-next").addEventListener("click", () => nextMek());
   $("mek-resume").addEventListener("click", () => setPaused(false));
   $("btn-check").addEventListener("click", () => playable() && check());
-  $("btn-letter").addEventListener("click", () => playable() && reveal([[state.sel.r, state.sel.c]]));
+  $("btn-letter").addEventListener("click", () => { if (!playable()) return; animate($("btn-letter"), "used", 900); reveal([[state.sel.r, state.sel.c]]); });
   $("btn-undo").addEventListener("click", undo);
   $("btn-erase").addEventListener("click", erase);
   $("btn-word").addEventListener("click", () => { $("more-dialog").close(); if (playable()) reveal(cellsOf(currentWord())); });
@@ -1406,7 +1537,7 @@
   $("next-clue").addEventListener("click", () => stepWord(1));
   $("btn-stats").addEventListener("click", showStats);
   $("btn-archive").addEventListener("click", showArchive);
-  $("btn-settings").addEventListener("click", () => { renderThemePicker(); $("mc-toggle").checked = mcOn(); renderCheckPicker(); $("time-toggle").checked = showTime(); $("settings-dialog").showModal(); });
+  $("btn-settings").addEventListener("click", () => { renderThemePicker(); $("mc-toggle").checked = mcOn(); renderCheckPicker(); renderStylePickers(); $("time-toggle").checked = showTime(); $("settings-dialog").showModal(); });
   $("mc-toggle").addEventListener("change", (e) => { setPref("choices", e.target.checked); update(); });
   function renderCheckPicker() {
     const keys = ["off", "word", "letter"];
@@ -1466,12 +1597,14 @@
 
   // ---------- Start ----------
   applyTheme();
+  applyStyle();
   const firstVisit = !load(PREFS_KEY);
   const startAt = fromHash() || { date: todayKey(), level: LEVELS[prefs().level] ? prefs().level : "medium" };
   if (startAt.mode) setPref("mode", startAt.mode);
   open(startAt.date, startAt.level); // korsordet finns alltid i bakgrunden
   if (mode() === "mek") openMek(startAt.date, startAt.level);
   applyMode(false);
+  syncViewport();
   if (firstVisit) $("help-dialog").showModal();
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
