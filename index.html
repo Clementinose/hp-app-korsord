@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>HP-Korsord</title>
+  <meta name="description" content="Ett nytt korsord varje dag med ord från högskoleprovets ORD-del.">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HP-Korsord">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // Sätt tema innan sidan ritas, så att den inte blinkar.
+    try { const t = JSON.parse(localStorage.getItem("hpk-prefs-v2") || "{}").theme; if (t === "light" || t === "dark") { document.documentElement.dataset.theme = t; document.documentElement.dataset.themeByApp = ""; } } catch {}
+  </script>
+</head>
+<body>
+  <header class="navbar">
+    <div class="nav-side">
+      <button class="icon-btn" id="btn-archive" aria-label="Arkiv">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="16" rx="3.5"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/></svg>
+      </button>
+    </div>
+    <div class="nav-center">
+      <span class="timer" id="timer" aria-label="Tid">0:00</span>
+      <button class="pause" id="btn-pause" aria-label="Pausa"></button>
+    </div>
+    <div class="nav-side right">
+      <button class="icon-btn" id="btn-stats" aria-label="Statistik">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 20v-7M12 20V5M18.5 20v-10"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-settings" aria-label="Inställningar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M21.2 12h-2.4M5.2 12H2.8M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7M18.5 18.5l-1.7-1.7M7.2 7.2L5.5 5.5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="app">
+    <main class="play">
+      <div class="dayhead">
+        <button class="chev" id="prev-day" aria-label="Föregående dag">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <div class="day-text">
+          <div class="kicker" id="kicker">Idag</div>
+          <h1 class="date-title" id="date-title"></h1>
+        </div>
+        <button class="chev" id="next-day" aria-label="Nästa dag">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+
+      <div class="segmented" role="tablist" aria-label="Svårighetsgrad" id="difficulty">
+        <span class="seg-thumb" aria-hidden="true"></span>
+        <button data-level="easy" role="tab">Lätt</button>
+        <button data-level="medium" role="tab">Medel</button>
+        <button data-level="hard" role="tab">Svår</button>
+      </div>
+
+      <div class="board-area" id="board-area">
+        <div class="board" id="board" aria-label="Korsord"></div>
+        <div class="paused" id="paused" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"/></svg>
+          <p>Pausat</p>
+          <button class="pill" id="btn-resume">Fortsätt</button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <button class="tool" id="btn-check">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.7 2.7L16 9.5"/></svg><span>Kontrollera</span>
+        </button>
+        <button class="tool" id="btn-letter">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M9.3 16l2.7-8 2.7 8M10.2 13.5h3.6"/></svg><span>Bokstav</span>
+        </button>
+        <button class="tool" id="btn-word">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Visa ord</span>
+        </button>
+        <button class="tool sheet-only" id="btn-clues">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.5" cy="6.5" r=".6"/><circle cx="4.5" cy="12" r=".6"/><circle cx="4.5" cy="17.5" r=".6"/></svg><span>Ledtrådar</span>
+        </button>
+        <button class="tool" id="btn-more">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="12" r=".5"/><circle cx="12" cy="12" r=".5"/><circle cx="16" cy="12" r=".5"/></svg><span>Mer</span>
+        </button>
+      </div>
+    </main>
+
+    <aside class="clues" id="clues" aria-label="Ledtrådar">
+      <div class="sheet-bar sheet-only">
+        <span class="grabber" aria-hidden="true"></span>
+        <h2>Ledtrådar</h2>
+        <button class="text-btn" id="clues-close">Klar</button>
+      </div>
+      <div class="clues-scroll">
+        <section class="group">
+          <h3>Vågrätt</h3>
+          <ol id="clues-across"></ol>
+        </section>
+        <section class="group">
+          <h3>Lodrätt</h3>
+          <ol id="clues-down"></ol>
+        </section>
+      </div>
+    </aside>
+
+    <div class="dock">
+      <div class="current-clue" id="current-clue">
+        <button class="cc-nav" id="prev-clue" aria-label="Föregående ledtråd">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <button class="cc-text" id="cc-open" aria-label="Visa alla ledtrådar">
+          <span class="cc-num" id="cc-num"></span><span class="cc-clue" id="cc-clue"></span>
+        </button>
+        <button class="cc-nav" id="next-clue" aria-label="Nästa ledtråd">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+      <div class="keyboard" id="keyboard" aria-label="Tangentbord"></div>
+    </div>
+  </div>
+
+  <div class="scrim" id="scrim"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="win-dialog" class="sheet">
+    <div class="sheet-bar">
+      <span class="grabber" aria-hidden="true"></span>
+      <h2 id="win-title">Snyggt löst!</h2>
+      <button class="text-btn" data-close>Klar</button>
+    </div>
+    <div class="sheet-body">
+      <div class="hero">
+        <div class="hero-icon" id="win-icon">🎉</div>
+        <p id="win-summary"></p>
+      </div>
+      <div class="list-title">Orden i korsordet</div>
+      <ul class="list glossary" id="win-words"></ul>
+      <button class="pill wide" id="win-next">Nästa</button>
+    </div>
+  </dialog>
+
+  <dialog id="archive-dialog" class="sheet">
+    <div class="sheet-bar">
+      <span class="grabber" aria-hidden="true"></span>
+      <h2>Arkiv</h2>
+      <button class="text-btn" data-close>Klar</button>
+    </div>
+    <div class="sheet-body">
+      <div class="card cal-card">
+        <div class="cal-head">
+          <span id="cal-title"></span>
+          <span class="cal-arrows">
+            <button class="chev small" id="cal-prev" aria-label="Föregående månad"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <button class="chev small" id="cal-next" aria-label="Nästa månad"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+          </span>
+        </div>
+        <div class="calendar" id="calendar"></div>
+      </div>
+      <div class="cal-legend">
+        <span><i class="dot easy solved"></i>Lätt</span>
+        <span><i class="dot medium solved"></i>Medel</span>
+        <span><i class="dot hard solved"></i>Svår</span>
+      </div>
+      <button class="pill wide tinted" id="archive-today">Gå till idag</button>
+    </div>
+  </dialog>
+
+  <dialog id="stats-dialog" class="sheet">
+    <div class="sheet-bar">
+      <span class="grabber" aria-hidden="true"></span>
+      <h2>Statistik</h2>
+      <button class="text-btn" data-close>Klar</button>
+    </div>
+    <div class="sheet-body" id="stats-body"></div>
+  </dialog>
+
+  <dialog id="settings-dialog" class="sheet">
+    <div class="sheet-bar">
+      <span class="grabber" aria-hidden="true"></span>
+      <h2>Inställningar</h2>
+      <button class="text-btn" data-close>Klar</button>
+    </div>
+    <div class="sheet-body">
+      <div class="list-title">Utseende</div>
+      <div class="segmented" id="theme-picker" role="radiogroup" aria-label="Utseende">
+        <span class="seg-thumb" aria-hidden="true"></span>
+        <button data-theme-value="auto" role="radio">Auto</button>
+        <button data-theme-value="light" role="radio">Ljust</button>
+        <button data-theme-value="dark" role="radio">Mörkt</button>
+      </div>
+      <div class="list-title">Hjälp</div>
+      <ul class="list">
+        <li><button class="row" id="open-help">Så spelar du<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+      </ul>
+      <p class="footnote">HP-Korsord · Ett nytt korsord varje dag med ord från högskoleprovets ORD-del.</p>
+    </div>
+  </dialog>
+
+  <dialog id="help-dialog" class="sheet">
+    <div class="sheet-bar">
+      <span class="grabber" aria-hidden="true"></span>
+      <h2>Så spelar du</h2>
+      <button class="text-btn" data-close>Klar</button>
+    </div>
+    <div class="sheet-body">
+      <ul class="list help">
+        <li><b>Nytt varje dag.</b> Tre korsord om dagen – Lätt, Medel och Svår. Alla får samma.</li>
+        <li><b>Som på provet.</b> Ledtrådarna är synonymer eller förklaringar, precis som i ORD-delen.</li>
+        <li><b>Byt riktning.</b> Tryck på en ruta en gång till för att växla mellan vågrätt och lodrätt.</li>
+        <li><b>Tangentbord.</b> Piltangenter flyttar, Tab eller Enter går till nästa ord och mellanslag byter riktning.</li>
+        <li><b>Missat en dag?</b> Öppna arkivet uppe till vänster.</li>
+      </ul>
+      <button class="pill wide" data-close>Kör igång</button>
+    </div>
+  </dialog>
+
+  <dialog id="more-dialog" class="sheet actionsheet">
+    <div class="action-group">
+      <button class="action" id="btn-reset">Börja om korsordet</button>
+      <button class="action destructive" id="btn-solve">Ge upp och visa lösningen</button>
+    </div>
+    <button class="action cancel" data-close>Avbryt</button>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="alert">
+    <div class="alert-body">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text"></p>
+    </div>
+    <div class="alert-actions">
+      <button id="confirm-no">Avbryt</button>
+      <button id="confirm-yes" class="destructive">Ja</button>
+    </div>
+  </dialog>
+
+  <script src="js/words.js"></script>
+  <script src="js/generator.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
