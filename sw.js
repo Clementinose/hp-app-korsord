@@ -1,5 +1,5 @@
 // Enkel offline-cache så att appen fungerar utan nät när den lagts till på hemskärmen.
-const CACHE = "hp-korsord-v1";
+const CACHE = "hp-korsord-v2";
 const FILES = ["./", "index.html", "style.css", "js/words.js", "js/generator.js", "js/app.js", "icon.svg", "manifest.webmanifest"];
 
 self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES))));
