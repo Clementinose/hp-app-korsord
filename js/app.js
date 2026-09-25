@@ -41,8 +41,11 @@
     const { entries, revealed, wrong, seconds, hints, done, gaveUp } = state;
     all[puzzleId(state.date, state.level)] = { sig: state.sig, entries, revealed, wrong, seconds, hints, done, gaveUp };
     store(PROGRESS_KEY, all);
-    store(PREFS_KEY, { level: state.level });
+    setPref("level", state.level);
   }
+
+  const prefs = () => load(PREFS_KEY) || {};
+  function setPref(key, value) { store(PREFS_KEY, { ...prefs(), [key]: value }); }
 
   // ---------- Datum ----------
   const pad = (n) => String(n).padStart(2, "0");
@@ -52,7 +55,10 @@
   const addDays = (k, n) => { const d = fromKey(k); d.setDate(d.getDate() + n); return toKey(d); };
   const validDate = (k) => /^\d{4}-\d{2}-\d{2}$/.test(k) && toKey(fromKey(k)) === k && k >= FIRST_DAY && k <= todayKey();
   function longDate(k) {
-    const s = fromKey(k).toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "long" });
+    const d = fromKey(k);
+    const opts = { weekday: "long", day: "numeric", month: "long" };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+    const s = d.toLocaleDateString("sv-SE", opts);
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
@@ -133,8 +139,9 @@
   // ---------- Rendering ----------
   function renderHeader() {
     const isToday = state.date === todayKey();
-    $("kicker").textContent = isToday ? "Dagens korsord" : "Från arkivet";
-    $("date-title").innerHTML = `${longDate(state.date)}<span class="year"> ${state.date.slice(0, 4)}</span>`;
+    const yesterday = state.date === addDays(todayKey(), -1);
+    $("kicker").textContent = isToday ? "Idag" : yesterday ? "Igår" : "Arkiv";
+    $("date-title").textContent = longDate(state.date);
     $("prev-day").disabled = state.date <= FIRST_DAY;
     $("next-day").disabled = isToday;
     const all = progressAll();
@@ -143,7 +150,7 @@
       b.setAttribute("aria-selected", b.dataset.level === state.level);
       b.classList.toggle("is-solved", !!(p && p.done && !p.gaveUp));
     });
-    $("meta").textContent = `${state.puzzle.words.length} ord · ${LEVELS[state.level].label}`;
+    $("difficulty").style.setProperty("--i", LEVEL_KEYS.indexOf(state.level));
   }
 
   function renderBoard() {
@@ -182,7 +189,7 @@
         const li = document.createElement("li");
         li.dataset.index = i;
         li.innerHTML = `<span class="n">${w.number}</span><span class="clue-text">${w.clue} <span class="len">(${w.word.length})</span></span>`;
-        li.addEventListener("click", () => selectWord(i));
+        li.addEventListener("click", () => { selectWord(i); setCluesOpen(false); });
         list.appendChild(li);
       });
     }
@@ -211,11 +218,11 @@
     });
     $("cc-num").textContent = cw ? `${cw.number} ${DIR_NAME[cw.dir]}` : "";
     $("cc-clue").textContent = cw ? `${cw.clue} (${cw.word.length})` : "";
-    $("btn-solve").lastChild.textContent = state.done ? "Lösning" : "Ge upp";
+    $("btn-solve").textContent = state.done ? "Visa lösningen" : "Ge upp och visa lösningen";
   }
 
   function scrollClueIntoView() {
-    if (!matchMedia("(min-width: 900px)").matches) return;
+    if (!matchMedia("(min-width: 740px) and (min-height: 560px)").matches) return;
     const li = document.querySelector(`.clues li[data-index="${currentWordIndex()}"]`);
     if (li) li.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
@@ -411,7 +418,7 @@
 
   function showWinDialog() {
     $("win-title").textContent = state.gaveUp ? "Här är lösningen" : "Snyggt löst!";
-    document.querySelector("#win-dialog .confetti").textContent = state.gaveUp ? "📖" : "🎉";
+    $("win-icon").textContent = state.gaveUp ? "📖" : "🎉";
     const hints = state.hints ? ` med ${state.hints} ${state.hints === 1 ? "ledtråd" : "ledtrådar"}` : " helt utan hjälp";
     $("win-summary").textContent = state.gaveUp
       ? "Ingen fara – gå igenom orden nedan så sitter de nästa gång."
@@ -457,18 +464,19 @@
 
   function showStats() {
     const st = computeStats();
-    let html = `
-      <div class="stat big"><div class="v">🔥 ${st.streak}</div><div class="l">Dagar i rad</div></div>
+    let html = `<div class="stat-grid">
+      <div class="stat hero-stat"><div class="v">🔥 ${st.streak}</div><div class="l">${st.streak === 1 ? "dag" : "dagar"} i rad</div></div>
       <div class="stat"><div class="v">${st.bestStreak}</div><div class="l">Längsta svit</div></div>
-      <div class="stat"><div class="v">${st.words}</div><div class="l">HP-ord lösta</div></div>`;
+      <div class="stat"><div class="v">${st.days}</div><div class="l">Dagar spelade</div></div>
+      <div class="stat"><div class="v">${st.words}</div><div class="l">HP-ord lösta</div></div></div>`;
     for (const [key, lvl] of Object.entries(LEVELS)) {
       const s = st.per[key];
-      html += `<div class="head">${lvl.label}</div>
+      html += `<div class="list-title">${lvl.label}</div><div class="stat-grid">
         <div class="stat"><div class="v">${s.solved}</div><div class="l">Lösta</div></div>
         <div class="stat"><div class="v">${s.clean}</div><div class="l">Utan hjälp</div></div>
-        <div class="stat"><div class="v">${s.best === null ? "–" : formatTime(s.best)}</div><div class="l">Bästa tid</div></div>`;
+        <div class="stat"><div class="v">${s.best === null ? "–" : formatTime(s.best)}</div><div class="l">Bästa tid</div></div></div>`;
     }
-    $("stats-grid").innerHTML = html;
+    $("stats-body").innerHTML = html;
     $("stats-dialog").showModal();
   }
 
@@ -546,7 +554,7 @@
     boardEl.classList.toggle("blurred", paused);
     $("btn-pause").disabled = state.done;
     $("btn-pause").innerHTML = paused
-      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10-6.5z"/></svg>'
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="solid" d="M8 5.5v13l10-6.5z"/></svg>'
       : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"/></svg>';
     $("btn-pause").setAttribute("aria-label", paused ? "Fortsätt" : "Pausa");
   }
@@ -590,7 +598,8 @@
       for (const k of row) {
         const b = document.createElement("button");
         b.className = "key" + (k === "⌫" ? " wide" : "");
-        b.textContent = k;
+        if (k === "⌫") b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.5H20a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H8.5L2.5 12z"/><path d="M11.5 9.5l5 5M16.5 9.5l-5 5"/></svg>';
+        else b.textContent = k;
         b.setAttribute("aria-label", k === "⌫" ? "Sudda" : k);
         b.addEventListener("click", () => (k === "⌫" ? backspace() : typeLetter(k)));
         rowEl.appendChild(b);
@@ -599,10 +608,36 @@
     }
   }
 
+  // ---------- Tema ----------
+  function applyTheme() {
+    const t = prefs().theme;
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+    else delete document.documentElement.dataset.theme;
+    const dark = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => (m.content = dark ? "#000000" : "#f2f2f7"));
+  }
+  function renderThemePicker() {
+    const t = prefs().theme || "auto";
+    const keys = ["auto", "light", "dark"];
+    document.querySelectorAll("#theme-picker button").forEach((b) => b.setAttribute("aria-checked", b.dataset.themeValue === t));
+    $("theme-picker").style.setProperty("--i", keys.indexOf(t));
+  }
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+
+  // ---------- Ledtrådsark (telefon) ----------
+  function setCluesOpen(open) {
+    document.body.classList.toggle("clues-open", open);
+    if (open) {
+      const li = document.querySelector(`.clues li[data-index="${currentWordIndex()}"]`);
+      if (li) li.scrollIntoView({ block: "center" });
+    }
+  }
+
   // ---------- Händelser ----------
   document.addEventListener("keydown", (e) => {
     if (document.querySelector("dialog[open]") || e.ctrlKey || e.metaKey || e.altKey || paused) return;
     const k = e.key;
+    if (k === "Escape") return setCluesOpen(false);
     if (/^[a-zåäö]$/i.test(k)) { typeLetter(k.toUpperCase()); e.preventDefault(); }
     else if (k === "Backspace" || k === "Delete") { backspace(); e.preventDefault(); }
     else if (k === "ArrowRight") { arrow(0, 1); e.preventDefault(); }
@@ -621,13 +656,15 @@
   $("btn-check").addEventListener("click", () => playable() && check());
   $("btn-letter").addEventListener("click", () => playable() && reveal([[state.sel.r, state.sel.c]]));
   $("btn-word").addEventListener("click", () => playable() && reveal(cellsOf(currentWord())));
+  $("btn-more").addEventListener("click", () => $("more-dialog").showModal());
   $("btn-reset").addEventListener("click", async () => {
-    if (await confirmBox("Börja om?", "Allt du fyllt i på det här korsordet rensas och tiden nollställs.", "Börja om")) resetPuzzle();
+    $("more-dialog").close();
+    if (await confirmBox("Börja om?", "Allt du fyllt i rensas och tiden nollställs.", "Börja om")) resetPuzzle();
   });
   $("btn-solve").addEventListener("click", async () => {
+    $("more-dialog").close();
     if (state.done) return showWinDialog();
-    if (paused) return;
-    if (await confirmBox("Ge upp?", "Hela lösningen visas och korsordet räknas inte som löst.", "Visa lösningen")) solveAll();
+    if (await confirmBox("Ge upp?", "Lösningen visas och korsordet räknas inte som löst.", "Ge upp")) { setPaused(false); solveAll(); }
   });
   $("btn-pause").addEventListener("click", () => setPaused(!paused));
   $("btn-resume").addEventListener("click", () => setPaused(false));
@@ -635,14 +672,23 @@
   $("next-clue").addEventListener("click", () => stepWord(1));
   $("btn-stats").addEventListener("click", showStats);
   $("btn-archive").addEventListener("click", showArchive);
-  $("btn-help").addEventListener("click", () => $("help-dialog").showModal());
+  $("btn-settings").addEventListener("click", () => { renderThemePicker(); $("settings-dialog").showModal(); });
+  $("open-help").addEventListener("click", () => { $("settings-dialog").close(); $("help-dialog").showModal(); });
+  document.querySelectorAll("#theme-picker button").forEach((b) =>
+    b.addEventListener("click", () => { setPref("theme", b.dataset.themeValue); applyTheme(); renderThemePicker(); })
+  );
+  $("btn-clues").addEventListener("click", () => setCluesOpen(true));
+  $("cc-open").addEventListener("click", () => setCluesOpen(true));
+  $("clues-close").addEventListener("click", () => setCluesOpen(false));
+  $("scrim").addEventListener("click", () => setCluesOpen(false));
+  // Stäng ark med "Klar"/"Avbryt" eller genom att trycka utanför.
+  document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => b.closest("dialog").close()));
+  document.querySelectorAll("dialog.sheet").forEach((d) =>
+    d.addEventListener("click", (e) => { if (e.target === d) d.close(); })
+  );
   $("cal-prev").addEventListener("click", () => shiftMonth(-1));
   $("cal-next").addEventListener("click", () => shiftMonth(1));
   $("archive-today").addEventListener("click", () => { $("archive-dialog").close(); open(todayKey(), state.level); });
-  $("archive-close").addEventListener("click", () => $("archive-dialog").close());
-  $("stats-close").addEventListener("click", () => $("stats-dialog").close());
-  $("help-close").addEventListener("click", () => $("help-dialog").close());
-  $("win-close").addEventListener("click", () => $("win-dialog").close());
   window.addEventListener("pagehide", save);
   document.addEventListener("visibilitychange", () => document.hidden && save());
   window.addEventListener("hashchange", () => {
@@ -652,15 +698,16 @@
 
   function fromHash() {
     const [date, level] = location.hash.slice(1).split("/");
-    return validDate(date) ? { date, level: LEVELS[level] ? level : (load(PREFS_KEY) || {}).level || "medium" } : null;
+    return validDate(date) ? { date, level: LEVELS[level] ? level : LEVELS[prefs().level] ? prefs().level : "medium" } : null;
   }
 
   // ---------- Start ----------
+  applyTheme();
   buildKeyboard();
-  const prefs = load(PREFS_KEY);
-  const startAt = fromHash() || { date: todayKey(), level: prefs && LEVELS[prefs.level] ? prefs.level : "medium" };
+  const firstVisit = !load(PREFS_KEY);
+  const startAt = fromHash() || { date: todayKey(), level: LEVELS[prefs().level] ? prefs().level : "medium" };
   open(startAt.date, startAt.level);
-  if (!prefs) $("help-dialog").showModal();
+  if (firstVisit) $("help-dialog").showModal();
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
