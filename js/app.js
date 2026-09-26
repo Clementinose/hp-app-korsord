@@ -333,6 +333,13 @@
     if (bottom - top > a.height - pad * 2) { t = sel.top; b = sel.bottom; }
     if (t < a.top + pad) area.scrollTop -= a.top + pad - t;
     else if (b > a.bottom - pad) area.scrollTop += b - (a.bottom - pad);
+    // I sidled (när rutorna är förstorade): hela ordet om det får plats, annars rutan man står i.
+    if (area.scrollWidth > area.clientWidth + 1) {
+      let l = Math.min(...cells.map((x) => x.left)), r = Math.max(...cells.map((x) => x.right));
+      if (r - l > a.width - pad * 2) { l = sel.left; r = sel.right; }
+      if (l < a.left + pad) area.scrollLeft -= a.left + pad - l;
+      else if (r > a.right - pad) area.scrollLeft += r - (a.right - pad);
+    }
   }
 
   // ---------- Svarsalternativ (A–E), som på högskoleprovet ----------
@@ -867,33 +874,84 @@
     $("win-dialog").showModal();
   }
 
-  // ---------- Statistik (räknas fram ur sparade korsord) ----------
+  // ---------- Statistik (räknas fram ur allt som sparats) ----------
+  const AREA_NAMES = { cross: "Korsord", ord: "Ord", mek: "Meningar", eng: "Engelska", mat: "Matte" };
+  // Korta tips per område, visas i "Öva på det här".
+  const AREA_TIPS = {
+    cross: "Lös korsordet utan tips först – och använd Ordlistan för ord du fastnar på.",
+    ord: "Läs betydelsen efter varje fel och slå upp ordet i Ordlistan. Ordstammar och prefix hjälper dig att gissa smart.",
+    mek: "Läs hela meningen innan du tittar på alternativen, och leta efter signalord som men, därför och trots.",
+    eng: "Läs meningen högt i huvudet med varje alternativ. Tänk på vanliga ordpar (depend on, interested in).",
+    mat: "Tryck på 💡 Visa hur man tänker efter varje uppgift du missar.",
+    procent: "Procent av = gånger. Förändring jämförs alltid med det ursprungliga värdet.",
+    brak: "Gemensam nämnare först – lägg aldrig ihop nämnarna.",
+    ekv: "Gör samma sak på båda sidor och kontrollera svaret genom att sätta in det.",
+    stat: "Medelvärde: summa / antal. Median: sortera först.",
+    rakna: "Parenteser → potenser → gånger/delat → plus/minus.",
+    geo: "Rita en figur. Vinkelsumma 180°, area π·r², Pythagoras a² + b² = c².",
+    prop: "Räkna ut värdet för en del eller en enhet först.",
+    fart: "Hastighet = sträcka / tid, och tid i timmar: 45 min = 0,75 h.",
+    pot: "Samma bas: addera exponenter vid gånger, subtrahera vid delat.",
+    alg: "Kvadreringsregeln har en mittenterm: (a + b)² = a² + 2ab + b².",
+    fun: "Lutning k = Δy / Δx. Sätt parentes runt negativa tal.",
+    sann: "Sannolikhet = gynnsamma / möjliga. \"Och\" betyder gånger.",
+    kva: "Testa flera värden: 0, 1, ett bråk och ett negativt tal.",
+    nog: "Lös inte – pröva (1) ensam, (2) ensam och sist båda tillsammans.",
+  };
+  const ACC_MIN = 3; // så få svar räcker inte för att dra slutsatser
+
+  let wordClueMap = null, engClueMap = null;
+  const wordClues = () => wordClueMap || (wordClueMap = new Map(HP_WORDS));
+  const engClues = () => engClueMap || (engClueMap = new Map(HP_ENG_VOCAB));
+
   function computeStats() {
     const all = progressAll();
     const per = Object.fromEntries(LEVEL_KEYS.map((k) => [k, { solved: 0, clean: 0, best: null }]));
     const solvedDays = new Set();
-    let words = 0;
-    const quiz = Object.fromEntries(["ord", "mek", "eng", "mat"].map((k) => [k, { rounds: 0, right: 0, total: 0, perfect: 0, bolts: 0 }]));
+    let words = 0, crossDone = 0, crossClean = 0;
+    const quiz = Object.fromEntries(["ord", "mek", "eng", "mat"].map((k) => [k, { rounds: 0, right: 0, total: 0, perfect: 0, bolts: 0, helped: 0 }]));
+    const cats = {}; // matteområden
+    const missed = { ord: new Map(), eng: new Map() };
+    const days = {}; // datum → { cross, ord, mek, eng, mat }
+    const bump = (date, k, n) => { (days[date] = days[date] || {})[k] = (days[date][k] || 0) + n; };
     for (const [id, p] of Object.entries(all)) {
       const [date, level] = id.split("|");
       const qk = level.split("-")[0];
       if (quiz[qk]) {
-        if (!p.done) continue;
         const st = quiz[qk];
         const ok = (a, i) => a !== null && p.correct && a === p.correct[i];
+        const answered = p.answers.filter((a) => a !== null).length;
         const right = p.answers.filter(ok).length;
-        st.rounds++; st.right += right; st.total += p.answers.length;
-        if (qk === "mat" && p.times) st.bolts += p.answers.filter((a, i) => ok(a, i) && p.times[i] !== null && p.times[i] <= 10).length;
+        // Träffsäkerhet räknas på alla besvarade frågor, även i omgångar som inte är klara.
+        st.right += right; st.total += answered;
+        if (answered) bump(date, qk, answered);
+        if (p.helped) st.helped += p.helped.filter(Boolean).length;
+        if (qk === "mat" && p.times) st.bolts += p.answers.filter((a, i) => ok(a, i) && !(p.helped && p.helped[i]) && p.times[i] !== null && p.times[i] <= 10).length;
+        if (qk === "mat" && p.cats) p.cats.forEach((c, i) => {
+          if (!c || p.answers[i] === null) return;
+          const s = (cats[c] = cats[c] || { right: 0, total: 0 });
+          s.total++; if (ok(p.answers[i], i)) s.right++;
+        });
+        // Missade ord i Ord och Engelska.
+        if ((qk === "ord" || qk === "eng") && p.keys) p.keys.forEach((w, i) => {
+          if (!w || p.answers[i] === null || ok(p.answers[i], i)) return;
+          const clue = (qk === "ord" ? wordClues() : engClues()).get(w);
+          if (clue) missed[qk].set(w, clue);
+        });
+        if (!p.done) continue;
+        st.rounds++;
         if (right === p.answers.length) st.perfect++;
         solvedDays.add(date);
         continue;
       }
       if (!per[level] || !p.done || p.gaveUp) continue;
       const s = per[level];
-      s.solved++;
-      if (!p.hints) { s.clean++; if (s.best === null || p.seconds < s.best) s.best = p.seconds; }
+      s.solved++; crossDone++;
+      if (!p.hints) { s.clean++; crossClean++; if (s.best === null || p.seconds < s.best) s.best = p.seconds; }
       solvedDays.add(date);
-      words += p.words || puzzleFor(date, level).words.length;
+      const n = p.words || puzzleFor(date, level).words.length;
+      words += n;
+      bump(date, "cross", n);
     }
     let streak = 0;
     let d = solvedDays.has(todayKey()) ? todayKey() : addDays(todayKey(), -1);
@@ -904,32 +962,127 @@
       best = Math.max(best, run);
       prev = day;
     }
-    return { per, streak, bestStreak: best, words, days: solvedDays.size, quiz };
+    // Träffsäkerhet per del (0–1, null = för lite data). Korsord: andel lösta utan tips.
+    const acc = { cross: crossDone ? crossClean / crossDone : null };
+    for (const k of ["ord", "mek", "eng", "mat"]) acc[k] = quiz[k].total >= ACC_MIN ? quiz[k].right / quiz[k].total : null;
+    const answeredTotal = Object.values(quiz).reduce((s, q) => s + q.total, 0);
+    const rightTotal = Object.values(quiz).reduce((s, q) => s + q.right, 0);
+    return { per, streak, bestStreak: best, words, days: solvedDays.size, quiz, cats, missed, activity: days, acc, crossDone, answeredTotal, rightTotal };
+  }
+
+  // Förslag på vad man bör öva på: svagaste områdena först, sedan delar man inte provat.
+  function recommendations(st) {
+    const recs = [];
+    const areas = [];
+    for (const k of ["ord", "mek", "eng", "mat"]) if (st.acc[k] !== null) areas.push({ key: k, mode: k, name: AREA_NAMES[k], acc: st.acc[k], n: st.quiz[k].total });
+    for (const [c, s] of Object.entries(st.cats)) if (s.total >= ACC_MIN) areas.push({ key: c, mode: "mat", name: "Matte · " + HP_MATH.CATS[c], acc: s.right / s.total, n: s.total });
+    if (st.crossDone >= 2 && st.acc.cross < 0.5) areas.push({ key: "cross", mode: "cross", name: "Korsord utan tips", acc: st.acc.cross, n: st.crossDone });
+    areas.sort((a, b) => a.acc - b.acc);
+    for (const a of areas.filter((x) => x.acc < 0.8).slice(0, 3)) recs.push({ ...a, tip: AREA_TIPS[a.key] });
+    for (const k of ["cross", "ord", "mek", "eng", "mat"]) {
+      const tried = k === "cross" ? st.crossDone > 0 : st.quiz[k].total > 0;
+      if (!tried && recs.length < 4) recs.push({ key: k, mode: k, name: AREA_NAMES[k], acc: null, tip: `Du har inte provat ${AREA_NAMES[k]} än – en omgång tar bara några minuter.` });
+    }
+    return recs;
+  }
+
+  const MODE_COLORS = { cross: "var(--c-cross)", ord: "var(--c-ord)", mek: "var(--c-mek)", eng: "var(--c-eng)", mat: "var(--c-mat)" };
+  const pctText = (x) => (x === null ? "–" : Math.round(x * 100) + "%");
+
+  // Radardiagram (spindeldiagram) över alla fem delar.
+  function radarSvg(acc) {
+    const keys = ["cross", "ord", "mek", "eng", "mat"], R = 78, cx = 110, cy = 100;
+    const pt = (i, r) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / keys.length; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; };
+    const ring = (f) => keys.map((_, i) => pt(i, R * f).map((v) => v.toFixed(1)).join(",")).join(" ");
+    const shape = keys.map((k, i) => pt(i, R * Math.max(0.04, acc[k] || 0)).map((v) => v.toFixed(1)).join(",")).join(" ");
+    const labels = keys.map((k, i) => {
+      const [x, y] = pt(i, R + 16);
+      return `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="${x < cx - 5 ? "end" : x > cx + 5 ? "start" : "middle"}"><tspan class="r-name">${AREA_NAMES[k]}</tspan><tspan class="r-val" x="${x.toFixed(1)}" dy="13">${pctText(acc[k])}</tspan></text>`;
+    }).join("");
+    const dots = keys.map((k, i) => acc[k] === null ? "" : `<circle class="r-dot" style="--i:${i}" cx="${pt(i, R * Math.max(0.04, acc[k])).map((v) => v.toFixed(1)).join('" cy="')}" r="3.5" fill="${MODE_COLORS[k]}"/>`).join("");
+    return `<svg class="radar" viewBox="0 0 220 215" role="img" aria-label="Träffsäkerhet per del">
+      ${[0.25, 0.5, 0.75, 1].map((f) => `<polygon class="r-ring" points="${ring(f)}"/>`).join("")}
+      ${keys.map((_, i) => { const [x, y] = pt(i, R); return `<line class="r-axis" x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"/>`; }).join("")}
+      <polygon class="r-shape" points="${shape}" style="transform-origin:${cx}px ${cy}px"/>${dots}${labels}</svg>`;
+  }
+
+  // Staplar för de senaste 14 dagarna, uppdelade per del.
+  function activityHtml(activity) {
+    const keys = ["cross", "ord", "mek", "eng", "mat"];
+    const dayList = Array.from({ length: 14 }, (_, i) => addDays(todayKey(), i - 13));
+    const totals = dayList.map((d) => keys.reduce((s, k) => s + ((activity[d] || {})[k] || 0), 0));
+    const max = Math.max(10, ...totals);
+    const bars = dayList.map((d, i) => {
+      const a = activity[d] || {};
+      const segs = keys.filter((k) => a[k]).map((k) => `<i style="height:${(a[k] / max) * 100}%;background:${MODE_COLORS[k]}"></i>`).join("");
+      const wd = new Date(d + "T12:00").toLocaleDateString("sv-SE", { weekday: "narrow" });
+      return `<div class="bar${d === todayKey() ? " today" : ""}" style="--i:${i}" title="${d}: ${totals[i]}"><div class="bar-stack">${segs}</div><span>${wd}</span></div>`;
+    }).join("");
+    const legend = keys.map((k) => `<span><i style="background:${MODE_COLORS[k]}"></i>${AREA_NAMES[k]}</span>`).join("");
+    const sum = totals.reduce((s, v) => s + v, 0);
+    return `<div class="chart-card"><div class="chart-head"><b>Senaste två veckorna</b><span>${sum} ord och frågor</span></div><div class="bars">${bars}</div><div class="legend">${legend}</div></div>`;
+  }
+
+  function hbar(name, acc, n, color, i) {
+    return `<div class="hbar" style="--i:${i}"><div class="hbar-top"><span>${name}</span><span>${n ? `<small>${n} svar</small>` : ""}<b>${pctText(acc)}</b></span></div>
+      <div class="hbar-track"><i style="--w:${acc === null ? 0 : Math.round(acc * 100)}%;background:${color}"></i></div></div>`;
   }
 
   function showStats() {
     const st = computeStats();
+    const empty = !st.answeredTotal && !st.crossDone;
     let html = `<div class="stat-grid">
-      <div class="stat hero-stat"><div class="v">🔥 ${st.streak}</div><div class="l">${st.streak === 1 ? "dag" : "dagar"} i rad</div></div>
-      <div class="stat"><div class="v">${st.bestStreak}</div><div class="l">Längsta svit</div></div>
+      <div class="stat hero-stat"><div class="v">🔥 ${st.streak}</div><div class="l">${st.streak === 1 ? "dag" : "dagar"} i rad<br><small>Längsta svit: ${st.bestStreak}</small></div></div>
       <div class="stat"><div class="v">${st.days}</div><div class="l">Dagar spelade</div></div>
-      <div class="stat"><div class="v">${st.words}</div><div class="l">HP-ord lösta</div></div></div>`;
-    for (const [key, lvl] of Object.entries(LEVELS)) {
+      <div class="stat"><div class="v">${st.answeredTotal + st.words}</div><div class="l">Ord och frågor</div></div>
+      <div class="stat"><div class="v">${st.answeredTotal ? Math.round((st.rightTotal / st.answeredTotal) * 100) : 0}%</div><div class="l">Rätt totalt</div></div></div>`;
+    if (empty) {
+      html += `<div class="chart-card empty-stats"><div class="big-emoji">📊</div><b>Här samlas allt du gör</b><p>Spela ett korsord eller en omgång Ord, Meningar, Engelska eller Matte så visas diagram och förslag på vad du bör öva på.</p></div>`;
+    } else {
+      html += activityHtml(st.activity);
+      html += `<div class="chart-card"><div class="chart-head"><b>Din profil</b><span>andel rätt per del</span></div>${radarSvg(st.acc)}</div>`;
+      // Öva på det här
+      const recs = recommendations(st);
+      if (recs.length) {
+        html += `<div class="list-title">Öva på det här</div><div class="recs">` + recs.map((r, i) => `
+          <div class="rec" style="--i:${i}">
+            <div class="rec-top"><span class="rec-dot" style="background:${MODE_COLORS[r.mode]}"></span><b>${r.name}</b>${r.acc !== null ? `<span class="rec-pct">${pctText(r.acc)} rätt</span>` : ""}</div>
+            <p>${r.tip}</p>
+            <button class="rec-go" data-go="${r.mode}">Öva nu</button>
+          </div>`).join("") + `</div>`;
+      } else {
+        html += `<div class="list-title">Öva på det här</div><div class="chart-card"><p class="all-good">🌟 Du har minst 80 % rätt överallt – höj nivån till Svår!</p></div>`;
+      }
+      // Matte per område
+      const catRows = Object.entries(st.cats).filter(([, s]) => s.total).sort((a, b) => a[1].right / a[1].total - b[1].right / b[1].total);
+      if (catRows.length) {
+        html += `<div class="list-title">Matte per område</div><div class="chart-card hbars two">` +
+          catRows.map(([c, s], i) => hbar(HP_MATH.CATS[c], s.right / s.total, s.total, "var(--c-mat)", i)).join("") + `</div>`;
+      }
+      // Delarna
+      html += `<div class="list-title">Frågelägen</div><div class="chart-card hbars">` +
+        ["ord", "mek", "eng", "mat"].map((k, i) => hbar(AREA_NAMES[k] + (st.quiz[k].rounds ? ` · ${st.quiz[k].rounds} omg.` : ""), st.quiz[k].total ? st.quiz[k].right / st.quiz[k].total : null, st.quiz[k].total, MODE_COLORS[k], i)).join("") +
+        `<div class="mini-stats"><span>⚡ ${st.quiz.mat.bolts} blixtsvar</span><span>💡 ${st.quiz.mat.helped} med tankehjälp</span><span>🏆 ${Object.values(st.quiz).reduce((s, q) => s + q.perfect, 0)} omgångar med alla rätt</span></div></div>`;
+      // Missade ord
+      const missOrd = [...st.missed.ord.keys()].slice(-12).reverse(), missEng = [...st.missed.eng.keys()].slice(-12).reverse();
+      if (missOrd.length || missEng.length) {
+        html += `<div class="list-title">Ord att repetera</div><div class="chart-card"><ul class="miss">` +
+          missOrd.map((w) => `<li><b>${escapeHtml(w.toLowerCase())}</b><span>${escapeHtml(st.missed.ord.get(w))}</span></li>`).join("") +
+          missEng.map((w) => `<li class="en"><b>${escapeHtml(w)}</b><span>${escapeHtml(st.missed.eng.get(w))}</span></li>`).join("") + `</ul></div>`;
+      }
+    }
+    // Korsord per nivå
+    html += `<div class="list-title">Korsord</div><div class="stat-grid">` + Object.entries(LEVELS).map(([key, lvl]) => {
       const s = st.per[key];
-      html += `<div class="list-title">${lvl.label}</div><div class="stat-grid">
-        <div class="stat"><div class="v">${s.solved}</div><div class="l">Lösta</div></div>
-        <div class="stat"><div class="v">${s.clean}</div><div class="l">Utan hjälp</div></div>
-        <div class="stat"><div class="v">${s.best === null ? "–" : formatTime(s.best)}</div><div class="l">Bästa tid</div></div></div>`;
-    }
-    const titles = { ord: "Ord (ORD-delen)", mek: "Meningskomplettering", eng: "Engelska (ELF)", mat: "Matte" };
-    for (const [key, title] of Object.entries(titles)) {
-      const m = st.quiz[key];
-      html += `<div class="list-title">${title}</div><div class="stat-grid">
-        <div class="stat"><div class="v">${m.rounds}</div><div class="l">Omgångar</div></div>
-        <div class="stat"><div class="v">${m.total ? Math.round((m.right / m.total) * 100) : 0}%</div><div class="l">Rätt svar</div></div>
-        <div class="stat"><div class="v">${key === "mat" ? "⚡ " + m.bolts : m.perfect}</div><div class="l">${key === "mat" ? "Blixtsvar" : "Alla rätt"}</div></div></div>`;
-    }
+      return `<div class="stat"><div class="v">${s.solved}</div><div class="l">${lvl.label}${s.best !== null ? `<br><small>Bäst ${formatTime(s.best)}</small>` : ""}</div></div>`;
+    }).join("") + `</div>`;
     $("stats-body").innerHTML = html;
+    $("stats-body").classList.remove("anim"); void $("stats-body").offsetWidth; $("stats-body").classList.add("anim");
+    $("stats-body").querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => {
+      $("stats-dialog").close();
+      if (b.dataset.go !== mode()) setMode(b.dataset.go);
+      haptic(10);
+    }));
     if (!reduceMotion()) {
       $("stats-body").querySelectorAll(".stat .v").forEach((el) => {
         const m = el.textContent.match(/^(\D*)(\d+)(%?)$/);
@@ -1199,7 +1352,7 @@
       if (near.length >= 4) cand = near;
       const opts = shuffled([id, ...shuffled(cand, rng).slice(0, 4)], rng);
       return {
-        id, label: "Vad betyder ordet?", big: true,
+        id, key: w, label: "Vad betyder ordet?", big: true,
         prompt: () => `<span class="ord-word">${escapeHtml(w.toLowerCase())}</span>`,
         options: opts.map((j) => escapeHtml(HP_WORDS[j][1])),
         correct: opts.indexOf(id),
@@ -1226,7 +1379,7 @@
       const others = shuffled(HP_ENG_VOCAB.map((_, j) => j).filter((j) => j !== id), rng).slice(0, 3);
       const opts = shuffled([id, ...others], rng);
       return {
-        id: "v" + id, label: "Which is closest in meaning?", big: true,
+        id: "v" + id, key: w, label: "Which is closest in meaning?", big: true,
         prompt: () => `<span class="ord-word eng">${escapeHtml(w)}</span>`,
         options: opts.map((j) => escapeHtml(HP_ENG_VOCAB[j][1])),
         correct: opts.indexOf(id),
@@ -1246,9 +1399,9 @@
   // Matte: nya uppgifter varje dag från generatorn i mat.js.
   function matRound(rng, level) {
     return HP_MATH.round(rng, level, shuffled).map((t, i) => ({
-      id: t.type + i, label: t.type === "kva" ? "Jämför kvantiteterna" : "Beräkna",
+      id: t.type + i, label: { kva: "KVA · Jämför kvantiteterna", nog: "NOG · Räcker informationen?" }[t.type] || "XYZ · Beräkna",
       prompt: () => `<span class="math">${t.prompt}</span>`,
-      options: t.options, correct: t.correct, fixed: t.fixed,
+      options: t.options, correct: t.correct, fixed: t.fixed, cat: t.cat, steps: t.steps,
       explain: t.why, review: `<span class="math">${t.prompt}</span> <b>${t.options[t.correct]}</b>`,
     }));
   }
@@ -1268,8 +1421,8 @@
     const kind = mode();
     const round = quizRound(kind, date, level);
     const saved = progressAll()[mekId(date, level, kind)];
-    mek = { kind, date, level, ...round, answers: round.qs.map(() => null), times: round.qs.map(() => null), seconds: 0, done: false };
-    if (saved && saved.sig === round.sig) Object.assign(mek, { answers: saved.answers, times: saved.times || mek.times, seconds: saved.seconds, done: saved.done });
+    mek = { kind, date, level, ...round, answers: round.qs.map(() => null), times: round.qs.map(() => null), helped: round.qs.map(() => false), shown: 0, seconds: 0, done: false };
+    if (saved && saved.sig === round.sig) Object.assign(mek, { answers: saved.answers, times: saved.times || mek.times, helped: saved.helped || mek.helped, seconds: saved.seconds, done: saved.done });
     mek.idx = Math.max(0, mek.answers.findIndex((a) => a === null));
     if (mek.done || mek.answers.every((a) => a !== null)) mek.idx = mek.qs.length - 1;
     paused = false;
@@ -1285,7 +1438,9 @@
     if (!mek) return;
     const all = progressAll();
     all[mekId(mek.date, mek.level, mek.kind)] = {
-      sig: mek.sig, answers: mek.answers, correct: mek.correct, times: mek.times, seconds: mek.seconds, done: mek.done,
+      sig: mek.sig, answers: mek.answers, correct: mek.correct, times: mek.times, helped: mek.helped, seconds: mek.seconds, done: mek.done,
+      cats: mek.qs.map((q) => q.cat || null),
+      keys: mek.qs.map((q) => q.key || null), // ordet självt, så att statistiken tål att ordlistan växer
     };
     store(PROGRESS_KEY, all);
     setPref("level", mek.level);
@@ -1318,6 +1473,8 @@
         `<span class="opt">${MEK_LABELS[k]}</span><span class="opt-word">${text}</span></button>`;
     }).join("");
     renderMekFeedback();
+    mek.shown = answered === null && !mek.helped[i] ? 0 : mek.shown;
+    renderSteps(false);
     if (answered === null) questionShownAt = performance.now();
     if (enter !== undefined) {
       animate($("mek-card"), "enter" + (enter ? " " + enter : ""), 600);
@@ -1325,9 +1482,37 @@
     }
   }
 
-  // Blixtsvar i Matte: rätt svar inom 10 sekunder.
+  // Blixtsvar i Matte: rätt svar inom 10 sekunder, utan att ha tittat på stegen först.
   const BOLT_SECONDS = 10;
-  const isBolt = (i) => mek.kind === "mat" && mek.answers[i] === mek.correct[i] && mek.times[i] !== null && mek.times[i] <= BOLT_SECONDS;
+  const isBolt = (i) => mek.kind === "mat" && mek.answers[i] === mek.correct[i] && !mek.helped[i] && mek.times[i] !== null && mek.times[i] <= BOLT_SECONDS;
+
+  // "Visa hur man tänker": stegen visas ett i taget. Före svaret räknas det som hjälp (inget blixtsvar).
+  function renderSteps(animLast) {
+    const q = mek.qs[mek.idx], box = $("mek-think");
+    box.hidden = !q.steps;
+    if (!q.steps) return;
+    const answered = mek.answers[mek.idx] !== null;
+    const n = q.steps.length, shown = Math.min(mek.shown, n);
+    $("mek-steps").innerHTML = q.steps.slice(0, shown).map((s, k) =>
+      `<li class="${animLast && (k === shown - 1 || animLast === "all") ? "in" : ""}${k === n - 1 ? " final" : ""}" style="--i:${animLast === "all" ? k : 0}"><span class="step-n">${k + 1}</span><span class="step-t">${s}</span></li>`).join("");
+    const btn = $("mek-think-btn");
+    btn.hidden = shown >= n;
+    $("mek-think-label").textContent = shown === 0 ? (answered ? "Visa lösningen steg för steg" : "Visa hur man tänker") : answered ? "Visa resten av lösningen" : `Nästa steg (${shown + 1}/${n})`;
+    box.classList.toggle("open", shown > 0);
+  }
+  function showStep() {
+    const q = mek.qs[mek.idx];
+    if (!q || !q.steps || paused) return;
+    const answered = mek.answers[mek.idx] !== null;
+    if (!answered && !mek.helped[mek.idx]) { mek.helped[mek.idx] = true; saveMek(); }
+    // Efter svaret visas alla steg på en gång (med animation), före svaret ett i taget.
+    const all = answered && mek.shown === 0;
+    mek.shown = answered ? q.steps.length : mek.shown + 1;
+    renderSteps(all ? "all" : true);
+    haptic(8);
+    const last = $("mek-steps").lastElementChild;
+    if (last) requestAnimationFrame(() => ($("mek-think-btn").hidden ? last : $("mek-think-btn")).scrollIntoView({ block: "nearest", behavior: reduceMotion() ? "auto" : "smooth" }));
+  }
 
   function renderMekFeedback() {
     const i = mek.idx, a = mek.answers[i], q = mek.qs[i];
@@ -1385,6 +1570,7 @@
     if (!mek || mek.answers[mek.idx] === null) return;
     if (mek.idx < mek.qs.length - 1) {
       mek.idx++;
+      mek.shown = 0;
       renderMek("from-next");
       $("mek").scrollTop = 0;
       return;
@@ -1408,7 +1594,7 @@
     const circ = 2 * Math.PI * 54;
     const items = mek.qs.map((q, i) => {
       const ok = mek.answers[i] === mek.correct[i];
-      return `<li class="${ok ? "ok" : "bad"}" style="--i:${i}"><span class="mark">${ok ? "✓" : "✕"}</span><span>${q.review || q.explain}${isBolt(i) ? " ⚡" : ""}</span></li>`;
+      return `<li class="${ok ? "ok" : "bad"}" style="--i:${i}"><span class="mark">${ok ? "✓" : "✕"}</span><span>${q.review || q.explain}${isBolt(i) ? " ⚡" : ""}${mek.helped[i] ? " 💡" : ""}</span></li>`;
     }).join("");
     const nextLevel = LEVEL_KEYS.slice(LEVEL_KEYS.indexOf(mek.level) + 1).find((l) => { const p = progressAll()[mekId(mek.date, l, mek.kind)]; return !(p && p.done); });
     $("mek-result").innerHTML = `
@@ -1576,6 +1762,7 @@
       const n = mek.qs[mek.idx].options.length;
       const idx = "12345".slice(0, n).indexOf(k) >= 0 ? "12345".indexOf(k) : "abcde".slice(0, n).indexOf(k.toLowerCase());
       if (k.length === 1 && idx >= 0) { answerMek(idx); e.preventDefault(); }
+      else if ((k === "h" || k === "?") && mek.qs[mek.idx].steps) { showStep(); e.preventDefault(); }
       else if ((k === "Enter" || k === " " || k === "ArrowRight") && mek.answers[mek.idx] !== null && !mek.done) { nextMek(); e.preventDefault(); }
       return;
     }
@@ -1608,7 +1795,7 @@
       document.body.classList.toggle("kb-open", kbOpen);
       const wasCompact = document.body.classList.contains("compact");
       document.body.classList.toggle("compact", kbOpen && vv.height < 720);
-      if (wasCompact && !document.body.classList.contains("compact")) $("board-area").scrollTop = 0;
+      if (wasCompact && !document.body.classList.contains("compact")) { $("board-area").scrollTop = 0; $("board-area").scrollLeft = 0; }
       if (!wasCompact && document.body.classList.contains("compact") && state) requestAnimationFrame(keepInView);
     }
     if (window.scrollY) window.scrollTo(0, 0);
@@ -1637,6 +1824,7 @@
   document.querySelectorAll("button[data-mode]").forEach((b) => b.addEventListener("click", () => { setMode(b.dataset.mode); haptic(8); }));
   $("mek-options").addEventListener("click", (e) => { const b = e.target.closest(".mek-opt"); if (b && !b.disabled) answerMek(+b.dataset.k); });
   $("mek-next").addEventListener("click", () => nextMek());
+  $("mek-think-btn").addEventListener("click", showStep);
   $("mek-resume").addEventListener("click", () => setPaused(false));
   $("btn-check").addEventListener("click", () => playable() && check());
   $("btn-letter").addEventListener("click", () => { if (!playable()) return; animate($("btn-letter"), "used", 900); reveal([[state.sel.r, state.sel.c]]); });
