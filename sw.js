@@ -1,8 +1,8 @@
 // Offline-stöd: allt sparas vid installation. Appen startar direkt från cachen
 // och hämtar samtidigt en ny version i bakgrunden (visas nästa gång den öppnas).
-const CACHE = "hp-korsord-v11";
+const CACHE = "hp-korsord-v12";
 const FILES = [
-  "./", "index.html", "style.css", "js/words.js", "js/mek.js", "js/generator.js", "js/app.js",
+  "./", "index.html", "style.css", "js/words.js", "js/mek.js", "js/eng.js", "js/mat.js", "js/generator.js", "js/app.js",
   "icon.svg", "icon-180.png", "icon-192.png", "icon-512.png", "manifest.webmanifest",
 ];
 

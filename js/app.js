@@ -80,7 +80,7 @@
   }
 
   const prefs = () => load(PREFS_KEY) || {};
-  const MODES = ["cross", "ord", "mek"];
+  const MODES = ["cross", "ord", "mek", "eng", "mat"];
   const mode = () => (MODES.includes(prefs().mode) ? prefs().mode : "cross");
   const isQuiz = () => mode() !== "cross"; // Ord och Meningar är frågelägen
   function setPref(key, value) { store(PREFS_KEY, { ...prefs(), [key]: value }); }
@@ -873,15 +873,17 @@
     const per = Object.fromEntries(LEVEL_KEYS.map((k) => [k, { solved: 0, clean: 0, best: null }]));
     const solvedDays = new Set();
     let words = 0;
-    const mekStat = { rounds: 0, right: 0, total: 0, perfect: 0 };
-    const ordStat = { rounds: 0, right: 0, total: 0, perfect: 0 };
+    const quiz = Object.fromEntries(["ord", "mek", "eng", "mat"].map((k) => [k, { rounds: 0, right: 0, total: 0, perfect: 0, bolts: 0 }]));
     for (const [id, p] of Object.entries(all)) {
       const [date, level] = id.split("|");
-      if (level.startsWith("mek-") || level.startsWith("ord-")) {
+      const qk = level.split("-")[0];
+      if (quiz[qk]) {
         if (!p.done) continue;
-        const st = level.startsWith("ord-") ? ordStat : mekStat;
-        const right = p.answers.filter((a, i) => a !== null && p.correct && a === p.correct[i]).length;
+        const st = quiz[qk];
+        const ok = (a, i) => a !== null && p.correct && a === p.correct[i];
+        const right = p.answers.filter(ok).length;
         st.rounds++; st.right += right; st.total += p.answers.length;
+        if (qk === "mat" && p.times) st.bolts += p.answers.filter((a, i) => ok(a, i) && p.times[i] !== null && p.times[i] <= 10).length;
         if (right === p.answers.length) st.perfect++;
         solvedDays.add(date);
         continue;
@@ -902,7 +904,7 @@
       best = Math.max(best, run);
       prev = day;
     }
-    return { per, streak, bestStreak: best, words, days: solvedDays.size, mek: mekStat, ord: ordStat };
+    return { per, streak, bestStreak: best, words, days: solvedDays.size, quiz };
   }
 
   function showStats() {
@@ -919,11 +921,13 @@
         <div class="stat"><div class="v">${s.clean}</div><div class="l">Utan hjälp</div></div>
         <div class="stat"><div class="v">${s.best === null ? "–" : formatTime(s.best)}</div><div class="l">Bästa tid</div></div></div>`;
     }
-    for (const [title, m] of [["Ord (ORD-delen)", st.ord], ["Meningskomplettering", st.mek]]) {
+    const titles = { ord: "Ord (ORD-delen)", mek: "Meningskomplettering", eng: "Engelska (ELF)", mat: "Matte" };
+    for (const [key, title] of Object.entries(titles)) {
+      const m = st.quiz[key];
       html += `<div class="list-title">${title}</div><div class="stat-grid">
         <div class="stat"><div class="v">${m.rounds}</div><div class="l">Omgångar</div></div>
         <div class="stat"><div class="v">${m.total ? Math.round((m.right / m.total) * 100) : 0}%</div><div class="l">Rätt svar</div></div>
-        <div class="stat"><div class="v">${m.perfect}</div><div class="l">Alla rätt</div></div></div>`;
+        <div class="stat"><div class="v">${key === "mat" ? "⚡ " + m.bolts : m.perfect}</div><div class="l">${key === "mat" ? "Blixtsvar" : "Alla rätt"}</div></div></div>`;
     }
     $("stats-body").innerHTML = html;
     if (!reduceMotion()) {
@@ -1102,29 +1106,40 @@
   $("btn-words").addEventListener("click", showWords);
   $("open-words").addEventListener("click", () => { $("settings-dialog").close(); showWords(); });
 
-  // ---------- Läge: korsord eller meningskomplettering ----------
+  // ---------- Lägen: korsord och frågelägen (Ord, Meningar, Engelska, Matte) ----------
+  const MODE_NAMES = { cross: "Korsord", ord: "Ord", mek: "Meningar", eng: "Engelska", mat: "Matte" };
+  const SEEN_KEYS = { ord: "seenOrd", mek: "seenMek", eng: "seenEng", mat: "seenMat" };
   function openCurrent(date, level, dir) {
     if (isQuiz()) openMek(date, level, dir);
     else open(date, level, dir);
   }
   function renderModeSwitch() {
     const m = mode();
-    const seenKey = { mek: "seenMek", ord: "seenOrd" };
-    if (seenKey[m] && !prefs()[seenKey[m]]) setPref(seenKey[m], true);
+    if (SEEN_KEYS[m] && !prefs()[SEEN_KEYS[m]]) setPref(SEEN_KEYS[m], true);
     // Samma knappar finns i navigationsfältet (iPad) och i flikraden (iPhone).
     document.querySelectorAll("[data-mode]").forEach((b) => {
       b.setAttribute("aria-selected", b.dataset.mode === m);
-      b.classList.toggle("is-new", !!seenKey[b.dataset.mode] && !prefs()[seenKey[b.dataset.mode]]);
+      b.classList.toggle("is-new", !!SEEN_KEYS[b.dataset.mode] && !prefs()[SEEN_KEYS[b.dataset.mode]]);
     });
-    $("mode-switch").style.setProperty("--i", MODES.indexOf(m));
-    $("nav-title").textContent = { cross: "Korsord", ord: "Ord", mek: "Meningar" }[m];
+    placeModeThumb();
+    $("nav-title").textContent = MODE_NAMES[m];
   }
+  // Tummen i lägesväljaren följer den valda knappen (segmenten är olika breda).
+  function placeModeThumb() {
+    const sw = $("mode-switch"), btn = sw.querySelector("button[aria-selected=true]");
+    if (!btn || !btn.offsetWidth) return;
+    sw.style.setProperty("--tw", btn.offsetWidth + "px");
+    sw.style.setProperty("--tx", btn.offsetLeft - 2 + "px");
+  }
+  addEventListener("resize", placeModeThumb);
+  if (document.fonts) document.fonts.ready.then(placeModeThumb);
+
   function applyMode(anim) {
-    const inMek = isQuiz();
-    document.body.classList.toggle("mode-mek", inMek);
-    document.body.classList.toggle("quiz-ord", mode() === "ord");
-    $("mek").hidden = !inMek;
-    if (inMek) { kbInput.blur(); setCluesOpen(false); }
+    const inQuiz = isQuiz();
+    document.body.classList.toggle("mode-mek", inQuiz);
+    for (const k of ["ord", "mek", "eng", "mat"]) document.body.classList.toggle("quiz-" + k, mode() === k);
+    $("mek").hidden = !inQuiz;
+    if (inQuiz) { kbInput.blur(); setCluesOpen(false); }
     renderModeSwitch();
     renderHeader();
     renderPause();
@@ -1142,43 +1157,107 @@
     setHash();
   }
 
-  // ---------- Meningskomplettering (MEK) ----------
-  // Lätt: 8 frågor på nivå 1. Medel: 10 frågor, mest nivå 2. Svår: 10 frågor, mest nivå 3.
+  // ---------- Frågeomgångar ----------
+  // Alla frågelägen byggs som en lista frågor: { label, prompt(svar, rätt), options[], correct, explain, review }.
+  // Omgången räknas fram ur datum och nivå, så bara svaren behöver sparas.
   const MEK_SETS = { easy: { 1: 8 }, medium: { 1: 3, 2: 7 }, hard: { 2: 4, 3: 6 } };
+  const ENG_SETS = { easy: { vocab: 6, 1: 4 }, medium: { vocab: 5, 1: 2, 2: 3 }, hard: { vocab: 4, 2: 2, 3: 4 } };
   const MEK_LABELS = ["A", "B", "C", "D", "E"];
+  const escapeHtml = (t) => t.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
 
-  // Ord, som ORD-delen på högskoleprovet: ett ord och fem betydelser att välja mellan.
-  // Lätt: kortare ord och slumpade felsvar. Medel: felsvar från ord av ungefär samma längd.
-  // Svår: längre ord och felsvar från ord som liknar rätt ord (samma begynnelse eller längd).
-  const ORD_COUNT = { easy: 10, medium: 10, hard: 10 };
-  function ordRoundFor(date, level) {
-    const rng = mulberry32(hashString(`${SEED_VERSION}|ord|${date}|${level}`));
+  // Delar upp en mening i text och luckor; luckorna fylls med rätt ord när frågan är besvarad.
+  function gapSentence(text, fill, cls) {
+    const parts = text.split("___");
+    return parts.map((t, i) => {
+      if (i === parts.length - 1) return escapeHtml(t);
+      const word = fill ? fill[i] : "";
+      return `${escapeHtml(t)}<span class="gap ${word ? "filled " + (cls || "") : ""}" style="--g:${i}"><span class="gap-word">${escapeHtml(word) || "&nbsp;"}</span></span>`;
+    }).join("");
+  }
+
+  function gapQuestion(q, rng, label) {
+    const order = shuffled(q[1].map((_, i) => i), rng);
+    return {
+      label,
+      prompt: (answered, right) => gapSentence(q[0], answered ? q[1][0] : null, right ? "ok" : "fixed"),
+      options: order.map((src) => q[1][src].map(escapeHtml).join(" – ")),
+      correct: order.indexOf(0),
+      review: gapSentence(q[0], q[1][0], "plain"),
+    };
+  }
+
+  // Ord: som ORD-delen – ett ord och fem betydelser. Svår nivå har felsvar från ord som liknar rätt ord.
+  function ordRound(rng, level) {
     const lenOk = { easy: (L) => L <= 7, medium: (L) => L >= 6 && L <= 10, hard: (L) => L >= 8 }[level];
     const all = HP_WORDS.map((_, i) => i);
-    const ids = shuffled(all.filter((i) => lenOk(HP_WORDS[i][0].length)), rng).slice(0, ORD_COUNT[level]);
-    const opts = ids.map((id) => {
+    return shuffled(all.filter((i) => lenOk(HP_WORDS[i][0].length)), rng).slice(0, 10).map((id) => {
       const [w, clue] = HP_WORDS[id];
       let cand = all.filter((j) => j !== id && HP_WORDS[j][1] !== clue);
       const near = level === "hard"
         ? cand.filter((j) => HP_WORDS[j][0].slice(0, 2) === w.slice(0, 2) || HP_WORDS[j][0].length === w.length)
         : level === "medium" ? cand.filter((j) => Math.abs(HP_WORDS[j][0].length - w.length) <= 1) : [];
       if (near.length >= 4) cand = near;
-      return shuffled([id, ...shuffled(cand, rng).slice(0, 4)], rng);
+      const opts = shuffled([id, ...shuffled(cand, rng).slice(0, 4)], rng);
+      return {
+        id, label: "Vad betyder ordet?", big: true,
+        prompt: () => `<span class="ord-word">${escapeHtml(w.toLowerCase())}</span>`,
+        options: opts.map((j) => escapeHtml(HP_WORDS[j][1])),
+        correct: opts.indexOf(id),
+        explain: `${escapeHtml(w.toLowerCase())} = ${escapeHtml(clue)}`,
+        review: `<b>${escapeHtml(w.toLowerCase())}</b> – ${escapeHtml(clue)}`,
+      };
     });
-    return { ids, opts, correct: opts.map((o, i) => o.indexOf(ids[i])) };
   }
 
-  function mekRoundFor(date, level) {
-    const rng = mulberry32(hashString(`${SEED_VERSION}|mek|${date}|${level}`));
+  function mekRound(rng, level) {
     let ids = [];
     for (const [d, n] of Object.entries(MEK_SETS[level])) {
       const pool = HP_MEK.map((q, i) => [q, i]).filter(([q]) => q[2] === +d).map(([, i]) => i);
       ids = ids.concat(shuffled(pool, rng).slice(0, n));
     }
-    ids = shuffled(ids, rng);
-    // Ordningen på alternativen blandas per fråga. correct[i] = platsen där rätt svar hamnade.
-    const order = ids.map(() => shuffled([0, 1, 2, 3], rng));
-    return { ids, order, correct: order.map((o) => o.indexOf(0)) };
+    return shuffled(ids, rng).map((id) => ({ id, ...gapQuestion(HP_MEK[id], rng, "Välj det som passar bäst") }));
+  }
+
+  // Engelska (ELF): ordförråd och meningar med luckor, fyra alternativ som på provet.
+  function engRound(rng, level) {
+    const set = ENG_SETS[level];
+    const vocab = shuffled(HP_ENG_VOCAB.map((_, i) => i), rng).slice(0, set.vocab).map((id) => {
+      const [w, meaning] = HP_ENG_VOCAB[id];
+      const others = shuffled(HP_ENG_VOCAB.map((_, j) => j).filter((j) => j !== id), rng).slice(0, 3);
+      const opts = shuffled([id, ...others], rng);
+      return {
+        id: "v" + id, label: "Which is closest in meaning?", big: true,
+        prompt: () => `<span class="ord-word eng">${escapeHtml(w)}</span>`,
+        options: opts.map((j) => escapeHtml(HP_ENG_VOCAB[j][1])),
+        correct: opts.indexOf(id),
+        explain: `${escapeHtml(w)} = ${escapeHtml(meaning)}`,
+        review: `<b>${escapeHtml(w)}</b> – ${escapeHtml(meaning)}`,
+      };
+    });
+    let gaps = [];
+    for (const [d, n] of Object.entries(set)) {
+      if (d === "vocab") continue;
+      const pool = HP_ENG_GAP.map((q, i) => [q, i]).filter(([q]) => q[2] === +d).map(([, i]) => i);
+      gaps = gaps.concat(shuffled(pool, rng).slice(0, n).map((id) => ({ id: "g" + id, ...gapQuestion(HP_ENG_GAP[id], rng, "Choose the best alternative") })));
+    }
+    return shuffled(vocab.concat(gaps), rng);
+  }
+
+  // Matte: nya uppgifter varje dag från generatorn i mat.js.
+  function matRound(rng, level) {
+    return HP_MATH.round(rng, level, shuffled).map((t, i) => ({
+      id: t.type + i, label: t.type === "kva" ? "Jämför kvantiteterna" : "Beräkna",
+      prompt: () => `<span class="math">${t.prompt}</span>`,
+      options: t.options, correct: t.correct, fixed: t.fixed,
+      explain: t.why, review: `<span class="math">${t.prompt}</span> <b>${t.options[t.correct]}</b>`,
+    }));
+  }
+
+  const ROUNDS = { ord: ordRound, mek: mekRound, eng: engRound, mat: matRound };
+  function quizRound(kind, date, level) {
+    const rng = mulberry32(hashString(`${SEED_VERSION}|${kind}|${date}|${level}`));
+    const qs = ROUNDS[kind](rng, level);
+    return { qs, sig: qs.map((q) => q.id).join(","), correct: qs.map((q) => q.correct) };
   }
 
   function openMek(date, level, dir) {
@@ -1186,16 +1265,13 @@
     if (state) save();
     if (mek) saveMek();
     cur = { date, level };
-    const kind = mode() === "ord" ? "ord" : "mek";
-    const round = kind === "ord" ? ordRoundFor(date, level) : mekRoundFor(date, level);
+    const kind = mode();
+    const round = quizRound(kind, date, level);
     const saved = progressAll()[mekId(date, level, kind)];
-    mek = {
-      kind, date, level, ...round,
-      answers: round.ids.map(() => null), seconds: 0, done: false,
-    };
-    if (saved && saved.sig === round.ids.join(",")) Object.assign(mek, { answers: saved.answers, seconds: saved.seconds, done: saved.done });
+    mek = { kind, date, level, ...round, answers: round.qs.map(() => null), times: round.qs.map(() => null), seconds: 0, done: false };
+    if (saved && saved.sig === round.sig) Object.assign(mek, { answers: saved.answers, times: saved.times || mek.times, seconds: saved.seconds, done: saved.done });
     mek.idx = Math.max(0, mek.answers.findIndex((a) => a === null));
-    if (mek.done || mek.idx < 0) mek.idx = mek.ids.length - 1;
+    if (mek.done || mek.answers.every((a) => a !== null)) mek.idx = mek.qs.length - 1;
     paused = false;
     combo = 0;
     setHash();
@@ -1209,84 +1285,68 @@
     if (!mek) return;
     const all = progressAll();
     all[mekId(mek.date, mek.level, mek.kind)] = {
-      sig: mek.ids.join(","), answers: mek.answers, correct: mek.correct, seconds: mek.seconds, done: mek.done,
+      sig: mek.sig, answers: mek.answers, correct: mek.correct, times: mek.times, seconds: mek.seconds, done: mek.done,
     };
     store(PROGRESS_KEY, all);
     setPref("level", mek.level);
   }
 
-  // Delar upp meningen i text och luckor.
-  function mekSentence(q, fill, cls) {
-    const parts = q[0].split("___");
-    return parts.map((t, i) => {
-      if (i === parts.length - 1) return escapeHtml(t);
-      const word = fill ? fill[i] : "";
-      return `${escapeHtml(t)}<span class="gap ${word ? "filled " + (cls || "") : ""}" style="--g:${i}"><span class="gap-word">${escapeHtml(word) || "&nbsp;"}</span></span>`;
-    }).join("");
-  }
-  const escapeHtml = (t) => t.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
-
   function renderMekDots() {
-    $("mek-dots").innerHTML = mek.ids.map((_, i) => {
+    $("mek-dots").innerHTML = mek.qs.map((_, i) => {
       const a = mek.answers[i];
       const cls = a === null ? (i === mek.idx && !mek.done ? "current" : "") : a === mek.correct[i] ? "right" : "wrong";
       return `<i class="${cls}"></i>`;
     }).join("");
-    const answered = mek.answers.filter((a) => a !== null).length;
-    $("mek-count").textContent = mek.done ? "Klart" : `Fråga ${mek.idx + 1} av ${mek.ids.length}`;
-    $("mek-count").dataset.answered = answered;
+    $("mek-count").textContent = mek.done ? "Klart" : `Fråga ${mek.idx + 1} av ${mek.qs.length}`;
   }
 
+  let questionShownAt = 0;
   function renderMek(enter) {
     renderMekDots();
     if (mek.done) return showMekResult(false);
     $("mek-body").hidden = false;
     $("mek-result").hidden = true;
-    const i = mek.idx;
-    const answered = mek.answers[i];
-    let optTexts;
-    if (mek.kind === "ord") {
-      // Ordet visas utan ledtråd om längden – precis som på provet.
-      $("mek-label").textContent = "Vad betyder ordet?";
-      $("mek-text").innerHTML = `<span class="ord-word">${escapeHtml(HP_WORDS[mek.ids[i]][0].toLowerCase())}</span>`;
-      optTexts = mek.opts[i].map((j) => escapeHtml(HP_WORDS[j][1]));
-    } else {
-      const q = HP_MEK[mek.ids[i]];
-      $("mek-label").textContent = "Välj det som passar bäst";
-      $("mek-text").innerHTML = mekSentence(q, answered !== null ? q[1][0] : null, answered === mek.correct[i] ? "ok" : "fixed");
-      optTexts = mek.order[i].map((src) => q[1][src].map(escapeHtml).join(" – "));
-    }
-    $("mek-options").innerHTML = optTexts.map((text, k) => {
+    const i = mek.idx, q = mek.qs[i], answered = mek.answers[i];
+    $("mek-label").textContent = q.label;
+    $("mek-card").classList.toggle("big", !!q.big);
+    $("mek-text").innerHTML = q.prompt(answered !== null, answered === q.correct);
+    $("mek-options").classList.toggle("fixed", !!q.fixed);
+    $("mek-options").innerHTML = q.options.map((text, k) => {
       let cls = "";
-      if (answered !== null) cls = k === mek.correct[i] ? "right" : k === answered ? "wrong" : "dim";
+      if (answered !== null) cls = k === q.correct ? "right" : k === answered ? "wrong" : "dim";
       return `<button class="mek-opt ${cls}" data-k="${k}" style="--i:${k}" ${answered !== null ? "disabled" : ""}>` +
         `<span class="opt">${MEK_LABELS[k]}</span><span class="opt-word">${text}</span></button>`;
     }).join("");
     renderMekFeedback();
+    if (answered === null) questionShownAt = performance.now();
     if (enter !== undefined) {
       animate($("mek-card"), "enter" + (enter ? " " + enter : ""), 600);
       animate($("mek-options"), "rise", 800);
     }
   }
 
+  // Blixtsvar i Matte: rätt svar inom 10 sekunder.
+  const BOLT_SECONDS = 10;
+  const isBolt = (i) => mek.kind === "mat" && mek.answers[i] === mek.correct[i] && mek.times[i] !== null && mek.times[i] <= BOLT_SECONDS;
+
   function renderMekFeedback() {
-    const i = mek.idx, a = mek.answers[i];
-    const fb = $("mek-feedback");
-    const next = $("mek-next");
+    const i = mek.idx, a = mek.answers[i], q = mek.qs[i];
+    const fb = $("mek-feedback"), next = $("mek-next");
     if (a === null) { fb.innerHTML = ""; next.hidden = true; return; }
-    const right = a === mek.correct[i];
-    const meaning = mek.kind === "ord" ? ` <span class="fb-note">${escapeHtml(HP_WORDS[mek.ids[i]][0].toLowerCase())} = ${escapeHtml(HP_WORDS[mek.ids[i]][1])}</span>` : "";
-    fb.innerHTML = right
-      ? `<span class="fb ok">✓ Rätt!</span>${meaning}`
-      : `<span class="fb bad">✕ Fel – rätt svar är ${MEK_LABELS[mek.correct[i]]}</span>${meaning}`;
+    const right = a === q.correct;
+    const bolt = isBolt(i) ? ` <span class="bolt">⚡ Blixtsvar på ${mek.times[i]} s</span>` : "";
+    const note = q.explain ? `<span class="fb-note">${q.explain}</span>` : "";
+    fb.innerHTML = (right ? `<span class="fb ok">✓ Rätt!</span>${bolt}` : `<span class="fb bad">✕ Fel – rätt svar är ${MEK_LABELS[q.correct]}</span>`) + note;
     next.hidden = false;
-    next.textContent = i === mek.ids.length - 1 ? "Se resultatet" : "Nästa fråga";
+    next.textContent = i === mek.qs.length - 1 ? "Se resultatet" : "Nästa fråga";
   }
 
   function answerMek(k) {
     if (!mek || mek.done || paused || mek.answers[mek.idx] !== null) return;
     const i = mek.idx;
+    if (k < 0 || k >= mek.qs[i].options.length) return;
     mek.answers[i] = k;
+    mek.times[i] = Math.max(1, Math.round((performance.now() - questionShownAt) / 1000));
     const right = k === mek.correct[i];
     renderMek();
     const btn = $("mek-options").querySelector(`[data-k="${k}"]`);
@@ -1294,7 +1354,8 @@
       combo++;
       haptic(12);
       if (btn) animate(btn, "pulse", 700);
-      if (combo >= 2) comboToast(combo);
+      if (isBolt(i)) boltFx(btn);
+      else if (combo >= 2) comboToast(combo);
       sparkleAt($("mek-card"));
     } else {
       combo = 0;
@@ -1305,13 +1366,27 @@
     saveMek();
     renderMekDots();
     if (matchMedia("(pointer: fine)").matches) $("mek-next").focus({ preventScroll: true });
+    // På iPhone: se till att förklaringen och Nästa-knappen syns.
+    requestAnimationFrame(() => $("mek-next").scrollIntoView({ block: "nearest", behavior: reduceMotion() ? "auto" : "smooth" }));
+  }
+
+  // En blixt som slår ner vid ett snabbt, rätt svar.
+  function boltFx(btn) {
+    const el = $("combo");
+    el.textContent = combo >= 3 ? `⚡ Blixt! ${combo} i rad` : "⚡ Blixtsvar!";
+    el.classList.add("bolt-toast");
+    el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.classList.remove("show", "bolt-toast"); }, 1500);
+    if (btn) animate(btn, "zap", 700);
   }
 
   function nextMek() {
     if (!mek || mek.answers[mek.idx] === null) return;
-    if (mek.idx < mek.ids.length - 1) {
+    if (mek.idx < mek.qs.length - 1) {
       mek.idx++;
       renderMek("from-next");
+      $("mek").scrollTop = 0;
       return;
     }
     mek.done = true;
@@ -1320,21 +1395,20 @@
     renderHeader();
     renderPause();
     showMekResult(true);
+    $("mek").scrollTop = 0;
   }
 
   function showMekResult(celebrate) {
     renderMekDots();
+    const n = mek.qs.length;
     const right = mek.answers.filter((a, i) => a === mek.correct[i]).length;
-    const n = mek.ids.length;
+    const bolts = mek.qs.filter((_, i) => isBolt(i)).length;
     const pct = right / n;
     const msg = right === n ? "Alla rätt – perfekt!" : pct >= 0.8 ? "Riktigt bra!" : pct >= 0.5 ? "Bra jobbat!" : "Fortsätt öva – det sitter snart!";
     const circ = 2 * Math.PI * 54;
-    const items = mek.ids.map((id, i) => {
+    const items = mek.qs.map((q, i) => {
       const ok = mek.answers[i] === mek.correct[i];
-      const text = mek.kind === "ord"
-        ? `<b>${escapeHtml(HP_WORDS[id][0].toLowerCase())}</b> – ${escapeHtml(HP_WORDS[id][1])}`
-        : mekSentence(HP_MEK[id], HP_MEK[id][1][0], "plain");
-      return `<li class="${ok ? "ok" : "bad"}" style="--i:${i}"><span class="mark">${ok ? "✓" : "✕"}</span><span>${text}</span></li>`;
+      return `<li class="${ok ? "ok" : "bad"}" style="--i:${i}"><span class="mark">${ok ? "✓" : "✕"}</span><span>${q.review || q.explain}${isBolt(i) ? " ⚡" : ""}</span></li>`;
     }).join("");
     const nextLevel = LEVEL_KEYS.slice(LEVEL_KEYS.indexOf(mek.level) + 1).find((l) => { const p = progressAll()[mekId(mek.date, l, mek.kind)]; return !(p && p.done); });
     $("mek-result").innerHTML = `
@@ -1344,10 +1418,11 @@
           <div class="ring-num"><b id="mek-score">${right}</b><span>av ${n}</span></div>
         </div>
         <h2>${msg}</h2>
-        <p>${LEVELS[mek.level].label}${showTime() ? " · " + formatTime(mek.seconds) : ""}</p>
+        <p>${MODE_NAMES[mek.kind]} · ${LEVELS[mek.level].label}${showTime() ? " · " + formatTime(mek.seconds) : ""}</p>
+        ${mek.kind === "mat" ? `<p class="bolts">${"⚡".repeat(Math.min(bolts, 10)) || "–"} <span>${bolts} blixtsvar</span></p>` : ""}
         ${nextLevel ? `<button class="pill" id="mek-next-level">Spela ${LEVELS[nextLevel].label.toLowerCase()}</button>` : ""}
       </div>
-      <div class="list-title">Rätt svar</div>
+      <div class="list-title">${mek.kind === "mat" ? "Uppgifter och svar" : "Rätt svar"}</div>
       <ul class="list mek-review">${items}</ul>`;
     $("mek-body").hidden = true;
     $("mek-result").hidden = false;
@@ -1498,7 +1573,7 @@
     const k = e.key;
     if (isQuiz()) {
       if (e.ctrlKey || e.metaKey || e.altKey || paused || !mek) return;
-      const n = mek.kind === "ord" ? 5 : 4;
+      const n = mek.qs[mek.idx].options.length;
       const idx = "12345".slice(0, n).indexOf(k) >= 0 ? "12345".indexOf(k) : "abcde".slice(0, n).indexOf(k.toLowerCase());
       if (k.length === 1 && idx >= 0) { answerMek(idx); e.preventDefault(); }
       else if ((k === "Enter" || k === " " || k === "ArrowRight") && mek.answers[mek.idx] !== null && !mek.done) { nextMek(); e.preventDefault(); }
@@ -1638,7 +1713,7 @@
   function fromHash() {
     const [date, level, m] = location.hash.slice(1).split("/");
     if (!validDate(date)) return null;
-    return { date, level: LEVELS[level] ? level : LEVELS[prefs().level] ? prefs().level : "medium", mode: m === "mek" || m === "ord" ? m : null };
+    return { date, level: LEVELS[level] ? level : LEVELS[prefs().level] ? prefs().level : "medium", mode: MODES.includes(m) && m !== "cross" ? m : null };
   }
 
   // ---------- Start ----------
