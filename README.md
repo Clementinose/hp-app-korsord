@@ -9,7 +9,9 @@ Ett nytt korsord varje dag med över 2 000 ord från högskoleprovets ORD-del �
 - Timer med paus, och en svit (🔥 dagar i rad) i statistiken
 - Skriv med iPhonens/iPadens eget tangentbord eller ett externt tangentbord som Magic Keyboard (piltangenter, Tab/Enter för nästa ord, mellanslag byter riktning, ⌘Z ångrar)
 - Fem lägen: **Korsord**, **Ord** (som ORD-delen: ett ord och fem betydelser, A–E), **Meningar** (meningskomplettering som i MEK-delen), **Engelska** (som ELF-delen: ordförråd och meningar med luckor) och **Matte** (XYZ- och KVA-uppgifter). En ny omgång varje dag på tre nivåer
-- Matte genereras varje dag med nya siffror (procent, bråk, ekvationer, medelvärde, geometri, potenser, kvantitetsjämförelser m.m.) och visar lösningen efter varje svar. Rätt svar inom 10 sekunder ger ⚡ blixtsvar
+- Matte genereras varje dag med nya siffror: 26 uppgiftstyper i XYZ-, KVA- och NOG-stil (procent, bråk, ekvationer, statistik, geometri, potenser, algebra, funktioner, sannolikhet m.m.). Knappen 💡 Visa hur man tänker visar lösningen steg för steg. Rätt svar inom 10 sekunder utan hjälp ger ⚡ blixtsvar
+- Statistik med diagram: aktivitet senaste två veckorna, profil per del (radardiagram), träffsäkerhet per matteområde, ord att repetera och förslag på vad du bör öva på
+- Innehåll: 2 365 HP-ord, 188 MEK-frågor, 118 engelska meningar och 481 engelska ord
 - Visa fel: per ord (standard – rätt eller fel visas först när ordet är ifyllt), direkt eller av. Ord som visats som rätt låses
 - Stilval: fyra rutformer (Rundad, Bubblor, Mjuk, Klassisk), sex färgteman och fyra typsnitt
 - Flikrad i botten på iPhone som i iOS-appar
