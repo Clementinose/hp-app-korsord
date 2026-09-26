@@ -8,7 +8,8 @@ Ett nytt korsord varje dag med över 2 000 ord från högskoleprovets ORD-del �
 - Arkiv med kalender där du ser vilka dagar du löst och kan spela missade korsord
 - Timer med paus, och en svit (🔥 dagar i rad) i statistiken
 - Skriv med iPhonens/iPadens eget tangentbord eller ett externt tangentbord som Magic Keyboard (piltangenter, Tab/Enter för nästa ord, mellanslag byter riktning, ⌘Z ångrar)
-- Tre lägen: **Korsord**, **Ord** (som ORD-delen: ett ord och fem betydelser, A–E) och **Meningar** (meningskomplettering som i MEK-delen). En ny omgång varje dag på tre nivåer
+- Fem lägen: **Korsord**, **Ord** (som ORD-delen: ett ord och fem betydelser, A–E), **Meningar** (meningskomplettering som i MEK-delen), **Engelska** (som ELF-delen: ordförråd och meningar med luckor) och **Matte** (XYZ- och KVA-uppgifter). En ny omgång varje dag på tre nivåer
+- Matte genereras varje dag med nya siffror (procent, bråk, ekvationer, medelvärde, geometri, potenser, kvantitetsjämförelser m.m.) och visar lösningen efter varje svar. Rätt svar inom 10 sekunder ger ⚡ blixtsvar
 - Visa fel: per ord (standard – rätt eller fel visas först när ordet är ifyllt), direkt eller av. Ord som visats som rätt låses
 - Stilval: fyra rutformer (Rundad, Bubblor, Mjuk, Klassisk), sex färgteman och fyra typsnitt
 - Flikrad i botten på iPhone som i iOS-appar

@@ -38,11 +38,13 @@
     </div>
     <div class="nav-center">
       <span class="nav-title" id="nav-title">Korsord</span>
-      <div class="segmented mode-switch" id="mode-switch" role="tablist" aria-label="Läge">
+      <div class="segmented five mode-switch" id="mode-switch" role="tablist" aria-label="Läge">
         <span class="seg-thumb" aria-hidden="true"></span>
         <button data-mode="cross" role="tab">Korsord</button>
         <button data-mode="ord" role="tab">Ord</button>
         <button data-mode="mek" role="tab">Meningar</button>
+        <button data-mode="eng" role="tab">Engelska</button>
+        <button data-mode="mat" role="tab">Matte</button>
       </div>
     </div>
     <div class="nav-side right">
@@ -190,6 +192,14 @@
     <button data-mode="mek" role="tab">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M4 11.5h5M15 11.5h5M4 16.5h16"/><rect x="10" y="9.5" width="4" height="4" rx="1"/></svg>
       <span>Meningar</span>
+    </button>
+    <button data-mode="eng" role="tab">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h15a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5V17h-1A1.5 1.5 0 0 1 3 15.5V7a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M7.5 14V8.5h3M7.5 11.2h2.6M7.5 14h3M13 14V8.5l3.5 5.5V8.5"/></svg>
+      <span>Engelska</span>
+    </button>
+    <button data-mode="mat" role="tab">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M7 8.5h3.5M8.75 6.75v3.5M13.5 8.5H17M7.2 14.3l3.1 3.1M10.3 14.3l-3.1 3.1M13.5 14.6H17M13.5 17.1H17"/></svg>
+      <span>Matte</span>
     </button>
   </nav>
 
@@ -352,7 +362,10 @@
         <li><b>Byt riktning.</b> Tryck på samma ruta igen för att växla mellan vågrätt och lodrätt.</li>
         <li><b>Skriv.</b> Tryck på en ruta så kommer tangentbordet upp. Med Magic Keyboard eller annat tangentbord skriver du direkt.</li>
         <li><b>Kortkommandon.</b> Piltangenter flyttar, Tab eller Enter går till nästa ord, mellanslag byter riktning och ⌘Z ångrar.</li>
-        <li><b>Tre lägen.</b> <b>Korsord</b>, <b>Ord</b> och <b>Meningar</b>. Ord är som ORD-delen: ett ord och fem betydelser (A–E). Meningar är som MEK-delen: välj det som passar bäst i luckorna.</li>
+        <li><b>Fem lägen.</b> <b>Korsord</b>, <b>Ord</b>, <b>Meningar</b>, <b>Engelska</b> och <b>Matte</b>. Ord är som ORD-delen: ett ord och fem betydelser (A–E). Meningar är som MEK-delen: välj det som passar bäst i luckorna.</li>
+        <li><b>Engelska.</b> Som ELF-delen: välj ordet som betyder ungefär samma sak, eller det som passar bäst i meningen.</li>
+        <li><b>Matte.</b> Nya uppgifter varje dag i stil med XYZ och KVA, med lösning efter varje svar. Svarar du rätt inom 10 sekunder blir det ⚡ blixtsvar.</li>
+        <li><b>Snabbt med tangentbord.</b> I frågelägena väljer du med 1–5 eller A–E och går vidare med Enter.</li>
         <li><b>Rätt eller fel.</b> Som standard får du veta om ett ord är rätt först när hela ordet är ifyllt. Det kan ändras under Inställningar.</li>
         <li><b>Missat en dag?</b> Öppna arkivet uppe till vänster.</li>
       </ul>
@@ -383,6 +396,8 @@
 
   <script src="js/words.js"></script>
   <script src="js/mek.js"></script>
+  <script src="js/eng.js"></script>
+  <script src="js/mat.js"></script>
   <script src="js/generator.js"></script>
   <script src="js/app.js"></script>
 </body>
