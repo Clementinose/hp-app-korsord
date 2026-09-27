@@ -1,6 +1,6 @@
 # HP-Korsord
 
-Ett nytt korsord varje dag med över 2 000 ord från högskoleprovets ORD-del – upplagt som sudokuaday.com. Ledtrådarna är synonymer eller korta förklaringar, precis som på provet. Dagens korsord räknas fram ur datumet, så alla får samma korsord samma dag.
+Ett nytt korsord varje dag med över 2 300 egenskrivna ordförklaringar av den typ som förekommer i högskoleprovets ORD-del – med dagliga pussel på samma sätt som populära sajter för dagliga sudokun. Ledtrådarna är synonymer eller korta förklaringar, precis som på provet. Dagens korsord räknas fram ur datumet, så alla får samma korsord samma dag.
 
 ## Funktioner
 
@@ -47,3 +47,12 @@ Aktivera **GitHub Pages** (Settings → Pages → Deploy from a branch, välj br
 Orden finns i [`js/words.js`](js/words.js) som `["ORD", "ledtråd"]`. Skriv ordet i versaler (Å, Ä och Ö går bra) och utan mellanslag.
 
 Obs: om du ändrar ordlistan kan dagarnas korsord bli andra än förut. Sparade framsteg för ett korsord som ändrats nollställs då.
+
+## Rättigheter, integritet och ansvar
+
+- **Fristående.** HP-Korsord har ingen koppling till, och är inte godkänt av, Universitets- och högskolerådet (UHR), som anordnar högskoleprovet. Namnet högskoleprovet används bara för att beskriva vad appen övar inför.
+- **Eget innehåll.** Alla ledtrådar, MEK-meningar, engelska uppgifter och förklaringar är egenskrivna, och matteuppgifterna genereras av appen. Inga frågor är hämtade från publicerade högskoleprov; appen följer bara provdelarnas upplägg.
+- **Inga tredjepartsresurser.** Ikoner och grafik är egenritade. Appen laddar inga typsnitt, skript eller bilder från andra webbplatser och använder enhetens systemtypsnitt.
+- **Integritet.** Ingen inloggning, ingen analys, ingen spårning, inga annonser och inga cookies från tredje part. Framsteg och inställningar sparas bara lokalt i webbläsarens lagring (nödvändigt för att appen ska fungera) och skickas aldrig till någon server. GitHub Pages kan som webbhotell registrera tekniska uppgifter som IP-adress enligt GitHubs integritetspolicy. Allt kan raderas med *Nollställ alla framsteg* eller genom att rensa webbplatsdata.
+- **Varumärken.** Apple, iPhone, iPad och Magic Keyboard är varumärken som tillhör Apple Inc. och nämns bara för att beskriva vilka enheter appen fungerar på.
+- Samma information finns i appen under Inställningar → Integritet och Villkor och ansvar.
