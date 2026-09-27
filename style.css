@@ -372,6 +372,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 
 /* Arkens rubrikrad och grepp */
 .sheet-bar {
+  touch-action: none;
   position: relative;
   display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
   padding: 16px 16px 8px;
@@ -1322,3 +1323,105 @@ body.quiz-mat .mek-options.fixed .opt-word { font-weight: 500; }
 .empty-stats p { color: var(--label-2); margin: 6px 0 0; font-size: 14.5px; }
 .big-emoji { font-size: 40px; margin-bottom: 6px; }
 .all-good { margin: 0; text-align: center; font-weight: 600; }
+
+/* ---------- Inställningar (iOS-stil med undersidor) ---------- */
+dialog.settings { height: calc(100dvh - env(safe-area-inset-top) - 12px); }
+@media (min-width: 740px) and (min-height: 560px) { dialog.settings { height: min(760px, calc(100dvh - 80px)); } }
+.settings .sheet-bar { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; }
+.settings .sheet-bar::before { display: none; }
+.back-btn {
+  justify-self: start; display: inline-flex; align-items: center; gap: 1px; min-width: 0; max-width: 100%;
+  color: var(--tint); font-size: 17px; padding: 6px 4px 6px 0; margin-left: -6px;
+  opacity: 0; pointer-events: none; transform: translateX(8px); transition: opacity .25s ease, transform .3s ease;
+}
+.back-btn.show { opacity: 1; pointer-events: auto; transform: none; }
+.back-btn svg { width: 24px; height: 24px; stroke-width: 2.6; flex: none; }
+.back-btn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.back-btn:active { opacity: .4; }
+.set-stack { flex: 1 1 auto; min-height: 0; display: grid; grid-template: minmax(0, 1fr) / 100%; overflow: hidden; position: relative; }
+.set-page {
+  grid-area: 1 / 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 4px 16px calc(28px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 8px; background: var(--bg);
+  will-change: transform;
+}
+.set-page[hidden] { display: none; }
+.set-page > * { flex-shrink: 0; }
+.set-hero {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-top: 4px;
+  background: var(--bg-elev); border-radius: var(--radius);
+}
+.set-hero img { width: 60px; height: 60px; border-radius: 14px; box-shadow: 0 2px 8px rgba(0, 0, 0, .12); }
+.set-hero div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.set-hero b { font-size: 20px; letter-spacing: -.01em; }
+.set-hero span { font-size: 14px; color: var(--label-2); }
+.set-list .row { justify-content: flex-start; gap: 12px; min-height: 46px; padding: 8px 14px; text-align: left; }
+.set-list li + li::before { left: 56px; }
+.set-list.radio-list li + li::before { left: 16px; }
+.ico {
+  flex: none; width: 29px; height: 29px; border-radius: 7px; display: grid; place-items: center;
+  background: var(--c, var(--tint)); color: #fff;
+}
+.ico svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.lbl { flex: 1; min-width: 0; font-size: 16px; display: flex; flex-direction: column; gap: 2px; }
+.lbl small { font-size: 13px; color: var(--label-2); line-height: 1.35; }
+.val { color: var(--label-2); font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.set-list .chev-r { width: 14px; height: 14px; color: var(--label-3, var(--label-2)); stroke-width: 2.6; flex: none; opacity: .6; }
+.set-list .row.danger .lbl { color: var(--red); }
+.set-list .switch-row .switch { margin-left: auto; }
+.radio-list .row { padding: 11px 16px; }
+.radio-list .tick { width: 20px; height: 20px; color: var(--tint); stroke-width: 2.6; flex: none; opacity: 0; transform: scale(.4); transition: opacity .2s ease, transform .3s cubic-bezier(.3, 1.6, .5, 1); }
+.radio-list [aria-checked="true"] .tick { opacity: 1; transform: none; }
+.segmented[style*="--n:4"] { grid-template-columns: repeat(4, 1fr); }
+.segmented[style*="--n:4"] .seg-thumb { width: calc((100% - 4px) / 4); }
+.text-size { display: flex; align-items: center; gap: 10px; }
+.text-size .segmented { flex: 1; max-width: none; margin: 0; }
+.text-size .segmented button { font-size: 13px; }
+.ts-a { color: var(--label-2); font-weight: 600; }
+.ts-a.small { font-size: 13px; }
+.ts-a.big { font-size: 21px; }
+.preview-card {
+  background: var(--bg-elev); border-radius: 18px; padding: 16px; margin-top: 4px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+.preview-card .preview-board { width: min(100%, 300px); container-type: inline-size; }
+.preview-board .cell { cursor: default; }
+.preview-board .cell.locked:not(.in-word):not(.selected) { background: var(--locked-bg, var(--cell)); color: var(--ink); }
+.preview-clue {
+  width: 100%; display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: 12px;
+  background: color-mix(in srgb, var(--tint) 12%, transparent);
+}
+.preview-clue b { font-size: 12px; color: var(--tint); letter-spacing: .04em; }
+.preview-clue span { font-size: 16px; }
+.about-hero { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 0 8px; }
+.about-hero img { width: 84px; height: 84px; border-radius: 19px; box-shadow: 0 4px 16px rgba(0, 0, 0, .15); margin-bottom: 6px; }
+.about-hero b { font-size: 22px; }
+.about-hero span { color: var(--label-2); font-size: 14px; }
+.kv { display: flex; justify-content: space-between; gap: 12px; }
+.kv span:last-child { color: var(--label-2); font-variant-numeric: tabular-nums; }
+
+/* Dra ner ett ark för att stänga det (telefon). */
+dialog.sheet.dragging { transition: none !important; animation: none !important; }
+dialog.sheet.closing { transition: transform .25s ease-in; }
+
+/* ---------- Textstorlek ---------- */
+:root[data-text="s"] :is(.mek-card, .mek-options, .mek-feedback, .think, .cc-text, .clues .group, .preview-clue) { zoom: .92; }
+:root[data-text="l"] :is(.mek-card, .mek-options, .mek-feedback, .think, .cc-text, .clues .group, .preview-clue) { zoom: 1.1; }
+:root[data-text="xl"] :is(.mek-card, .mek-options, .mek-feedback, .think, .cc-text, .clues .group, .preview-clue) { zoom: 1.22; }
+
+/* ---------- Minska rörelse (inställning) ---------- */
+:root.reduce-motion *, :root.reduce-motion *::before, :root.reduce-motion *::after {
+  animation-duration: .001ms !important; animation-delay: 0s !important; transition-duration: .001ms !important;
+}
+.set-list .ico svg { color: #fff; stroke: #fff; width: 18px; height: 18px; }
+.back-btn { font-size: 16px; letter-spacing: -.01em; }
+
+/* ---------- Större skärmar: rubrik, nivåval och verktyg i samma kolumn som rutnätet ---------- */
+@media (min-width: 740px) and (min-height: 560px) {
+  .play > .dayhead, .play > .levelrow, .play > .progress, .play > .toolbar { width: 100%; max-width: 640px; margin-inline: auto; }
+  body.mode-mek .play > .dayhead, body.mode-mek .play > .levelrow { max-width: none; }
+}
+@media (min-width: 1500px) and (pointer: fine) {
+  .app { max-width: 1440px; }
+  .play > .dayhead, .play > .levelrow, .play > .progress, .play > .toolbar { max-width: 720px; }
+}
