@@ -1433,3 +1433,90 @@ dialog.sheet.closing { transition: transform .25s ease-in; }
 .ico.big svg { width: 32px; height: 32px; color: #fff; stroke: #fff; stroke-width: 1.8; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .list.legal li { font-size: 15px; line-height: 1.45; color: var(--label-2); padding: 12px 16px; }
 .list.legal li b { display: block; color: var(--label); font-size: 16px; margin-bottom: 2px; }
+
+/* =====================================================================
+   Små skärmar: iPhone SE, mini, små Android-telefoner, delad skärm och liggande telefon
+   ===================================================================== */
+/* Korta svar (siffror, enstaka ord) två och två – gäller alla storlekar. */
+.mek-options.short { grid-template-columns: 1fr 1fr; }
+.mek-options.short .mek-opt { min-width: 0; }
+
+/* Lågt eller smalt porträttläge: tätare rubrik och frågor. */
+@media (orientation: portrait) and (max-height: 760px), (orientation: portrait) and (max-width: 380px) {
+  .play { gap: 8px; padding-top: 6px; }
+  .dayhead { align-items: center; }
+  .kicker { font-size: 11px; letter-spacing: .03em; }
+  .date-title { font-size: 24px; }
+  .chev { width: 32px; height: 32px; }
+  .segmented button { height: 30px; font-size: 14px; }
+  .timer { font-size: 16px; }
+  .pause { width: 26px; height: 26px; }
+  /* Frågelägen */
+  .mek { gap: 10px; }
+  .mek-card { padding: 14px 16px 16px; border-radius: 18px; }
+  .mek-label { margin-bottom: 6px; font-size: 11px; }
+  .mek-text { font-size: clamp(17px, 5vw, 21px); line-height: 1.5; }
+  .ord-word { padding: 8px 0 4px; font-size: clamp(28px, 9vw, 42px); }
+  .mek-text .math { font-size: clamp(17px, 4.8vw, 20px); }
+  .mek-options { gap: 6px; }
+  .mek-opt { min-height: 46px; padding: 7px 12px 7px 8px; font-size: 16px; gap: 10px; border-radius: 13px; }
+  .mek-opt .opt { width: 26px; height: 26px; font-size: 13px; }
+  .kva { gap: 8px; }
+  .kva > span { padding: 9px 6px; }
+  .nog-s { padding: 6px 10px; }
+  .steps li { padding: 10px 12px; font-size: 15px; }
+  #mek-next { min-height: 46px; }
+}
+/* Riktigt låga skärmar (iPhone SE 1:a gen, 320×568): dölj datumraden ovanför rubriken. */
+@media (orientation: portrait) and (max-height: 600px) {
+  .kicker { display: none; }
+  .date-title { font-size: 22px; }
+  .mek-card.big .mek-label { display: none; }
+  .tabbar svg { width: 23px; height: 23px; }
+  .tabbar button { font-size: 10px; padding-bottom: 2px; }
+}
+/* Smala skärmar (320 px): mindre marginaler och rutnät som når ut mot kanterna. */
+@media (max-width: 360px) {
+  .play { padding-left: 10px; padding-right: 10px; }
+  .mek { margin: 0 -10px; padding-left: 10px; padding-right: 10px; }
+  .dock { padding-left: 10px; padding-right: 10px; }
+  .segmented button { font-size: 13px; }
+  .tabbar button { font-size: 10px; }
+}
+
+/* Liggande telefon: kompakt flikrad med ikon bredvid texten, som i iOS. */
+@media (max-width: 739px) and (max-height: 559px) and (orientation: landscape) {
+  .tabbar { padding-top: 4px; padding-bottom: calc(2px + env(safe-area-inset-bottom)); }
+  .tabbar button { flex-direction: row; justify-content: center; gap: 6px; padding: 4px 0; font-size: 12px; }
+  .tabbar svg { width: 20px; height: 20px; }
+  .tabbar button.is-new::after { top: 2px; left: auto; right: 8px; }
+}
+/* Liggande telefon i frågelägena: rubrik och nivåval på samma rad, frågan till vänster och svaren till höger. */
+@media (max-height: 559px) and (orientation: landscape) {
+  body.mode-mek .play {
+    display: grid !important; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+    column-gap: 16px; row-gap: 6px; max-width: none; padding: 6px max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+  }
+  body.mode-mek .dayhead { grid-area: 1 / 1; padding: 0; gap: 10px; }
+  body.mode-mek .levelrow { grid-area: 1 / 2; margin: 0; }
+  body.mode-mek .progress { display: none; }
+  body.mode-mek .mek { grid-area: 2 / 1 / 3 / 3; gap: 8px; }
+  body.mode-mek .date-title { font-size: 20px; }
+  body.mode-mek .segmented button { height: 28px; font-size: 13px; }
+  .mek-body {
+    display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); column-gap: 12px; row-gap: 8px; align-items: start;
+  }
+  .mek-body > .mek-card { grid-column: 1; grid-row: 1 / span 6; position: sticky; top: 0; }
+  .mek-body > :not(.mek-card) { grid-column: 2; }
+  .mek-options, .mek-options.short { grid-template-columns: 1fr !important; }
+  .mek-options.short { grid-template-columns: 1fr 1fr !important; }
+  .mek-card { padding: 12px 16px 14px; }
+  .mek-label { display: block; margin-bottom: 4px; }
+  .mek-text, .mek-text .math { font-size: 17px; line-height: 1.45; }
+  .ord-word { font-size: 34px; padding: 10px 0; }
+  .mek-opt { min-height: 42px; font-size: 15px; padding: 5px 10px 5px 6px; }
+  .mek-opt .opt { width: 24px; height: 24px; font-size: 12px; }
+  .mek-result { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+  .mek-result .list-title, .mek-result .mek-review { grid-column: 2; }
+  .mek-result .result-card { grid-row: 1 / span 2; }
+}
