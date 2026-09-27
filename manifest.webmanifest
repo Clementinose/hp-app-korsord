@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "HP-Korsord",
-  "short_name": "HP-Korsord",
+  "name": "Dagsprov",
+  "short_name": "Dagsprov",
   "description": "Öva inför högskoleprovet varje dag: korsord, ord, meningar, engelska och matte. Fristående och gratis.",
   "lang": "sv",
   "start_url": "./",

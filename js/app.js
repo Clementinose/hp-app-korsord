@@ -2028,13 +2028,13 @@
 
   // Säkerhetskopia: exportera och återställ framsteg och inställningar som en JSON-fil.
   $("export-data").addEventListener("click", async () => {
-    const data = { app: "hp-korsord", version: 2, exported: new Date().toISOString(), progress: progressAll(), prefs: prefs() };
-    const name = `hp-korsord-${todayKey()}.json`;
+    const data = { app: "dagsprov", version: 2, exported: new Date().toISOString(), progress: progressAll(), prefs: prefs() };
+    const name = `dagsprov-${todayKey()}.json`;
     const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
     try {
       const file = new File([blob], name, { type: "application/json" });
       if (matchMedia("(pointer: coarse)").matches && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: "HP-Korsord – säkerhetskopia" });
+        await navigator.share({ files: [file], title: "Dagsprov – säkerhetskopia" });
         return;
       }
     } catch (e) { if (e && e.name === "AbortError") return; }
@@ -2051,7 +2051,7 @@
     if (!f) return;
     let data;
     try { data = JSON.parse(await f.text()); } catch { data = null; }
-    if (!data || data.app !== "hp-korsord" || typeof data.progress !== "object") { toast("Filen är ingen säkerhetskopia från HP-Korsord"); return; }
+    if (!data || !["dagsprov", "hp-korsord"].includes(data.app) || typeof data.progress !== "object") { toast("Filen är ingen säkerhetskopia från Dagsprov"); return; }
     const n = Object.keys(data.progress).length;
     if (!(await confirmBox("Återställa framsteg?", `Säkerhetskopian innehåller ${n} omgångar. Dina nuvarande framsteg på den här enheten ersätts.`, "Återställ"))) return;
     store(PROGRESS_KEY, data.progress);

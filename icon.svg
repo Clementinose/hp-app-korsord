@@ -7,17 +7,16 @@
   </defs>
   <rect width="1024" height="1024" fill="url(#bg)"/>
   <g font-family="-apple-system, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="150" text-anchor="middle" fill="#0a5fd8">
-    <!-- Ett litet korsord: HP vågrätt och ORD lodrätt -->
+    <!-- Ett litet korsord: DAG vågrätt, markören (gul) längst ner -->
     <rect x="262" y="262" width="160" height="160" rx="28" fill="#ffffff"/>
     <rect x="432" y="262" width="160" height="160" rx="28" fill="#ffffff"/>
-    <rect x="602" y="262" width="160" height="160" rx="28" fill="#ffffff" fill-opacity=".28"/>
+    <rect x="602" y="262" width="160" height="160" rx="28" fill="#ffffff"/>
     <rect x="432" y="432" width="160" height="160" rx="28" fill="#ffffff"/>
     <rect x="432" y="602" width="160" height="160" rx="28" fill="#ffd60a"/>
     <rect x="262" y="602" width="160" height="160" rx="28" fill="#ffffff" fill-opacity=".28"/>
     <rect x="602" y="602" width="160" height="160" rx="28" fill="#ffffff" fill-opacity=".28"/>
-    <text x="342" y="395">H</text>
-    <text x="512" y="395">P</text>
-    <text x="512" y="565">O</text>
-    <text x="512" y="735" fill="#1c1c1e">R</text>
+    <text x="342" y="395">D</text>
+    <text x="512" y="395">A</text>
+    <text x="682" y="395">G</text>
   </g>
 </svg>
