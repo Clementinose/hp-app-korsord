@@ -277,62 +277,148 @@
     <div class="sheet-body" id="stats-body"></div>
   </dialog>
 
-  <dialog id="settings-dialog" class="sheet">
+  <dialog id="settings-dialog" class="sheet settings">
     <div class="sheet-bar">
-      <span class="grabber" aria-hidden="true"></span>
-      <h2>Inställningar</h2>
+      <button class="back-btn" id="set-back" aria-label="Tillbaka"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span id="set-back-label">Inställningar</span></button>
+      <h2 id="set-title">Inställningar</h2>
       <button class="text-btn" data-close>Klar</button>
     </div>
-    <div class="sheet-body">
-      <div class="list-title">Utseende</div>
-      <div class="segmented" id="theme-picker" role="radiogroup" aria-label="Utseende">
-        <span class="seg-thumb" aria-hidden="true"></span>
-        <button data-theme-value="auto" role="radio">Auto</button>
-        <button data-theme-value="light" role="radio">Ljust</button>
-        <button data-theme-value="dark" role="radio">Mörkt</button>
+    <div class="set-stack" id="set-stack">
+      <!-- Startsidan -->
+      <div class="set-page" data-page="root" data-title="Inställningar">
+        <div class="set-hero">
+          <img src="icon-180.png" alt="" width="60" height="60">
+          <div><b>HP-Korsord</b><span id="set-hero-sub">Öva inför högskoleprovet varje dag</span></div>
+        </div>
+
+        <ul class="list set-list">
+          <li><button class="row nav" data-push="appearance"><span class="ico" style="--c:#007aff"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><path d="M12 4.5v15" /><path d="M12 4.5a7.5 7.5 0 0 1 0 15z" fill="currentColor"/></svg></span><span class="lbl">Utseende</span><span class="val" id="val-appearance"></span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+        </ul>
+
+        <div class="list-title">Korsord</div>
+        <ul class="list set-list">
+          <li><label class="row switch-row"><span class="ico" style="--c:#ff9500"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 9.5V13l2.5 2M10 3h4"/></svg></span><span class="lbl">Visa tid</span><input type="checkbox" id="time-toggle" class="switch"></label></li>
+          <li><button class="row nav" data-push="check"><span class="ico" style="--c:#34c759"><svg viewBox="0 0 24 24"><path d="M5.5 12.5l4 4 9-9"/></svg></span><span class="lbl">Visa fel</span><span class="val" id="val-check"></span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+          <li><label class="row switch-row"><span class="ico" style="--c:#5856d6"><svg viewBox="0 0 24 24"><path d="M4 12h12M12 7l5 5-5 5M20 5v14"/></svg></span><span class="lbl">Hoppa över ifyllda rutor</span><input type="checkbox" id="skip-toggle" class="switch"></label></li>
+        </ul>
+        <p class="footnote tight">Med tiden dold räknas den ändå för din bästa tid.</p>
+
+        <div class="list-title">Frågelägen</div>
+        <ul class="list set-list">
+          <li><label class="row switch-row"><span class="ico" style="--c:#af52de"><svg viewBox="0 0 24 24"><path d="M5 6l7 6-7 6zM13 6l7 6-7 6z" fill="currentColor"/></svg></span><span class="lbl">Nästa fråga automatiskt</span><input type="checkbox" id="autonext-toggle" class="switch"></label></li>
+          <li><label class="row switch-row"><span class="ico" style="--c:#30b0c7"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3z"/></svg></span><span class="lbl">Förklaring efter svar</span><input type="checkbox" id="notes-toggle" class="switch"></label></li>
+          <li><button class="row nav" data-push="bolt"><span class="ico" style="--c:#ffcc00"><svg viewBox="0 0 24 24"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12z" fill="currentColor"/></svg></span><span class="lbl">Blixtsvar i Matte</span><span class="val" id="val-bolt"></span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+        </ul>
+        <p class="footnote tight">Med Nästa fråga automatiskt går appen vidare av sig själv efter ett rätt svar.</p>
+
+        <div class="list-title">Ljud och känsla</div>
+        <ul class="list set-list">
+          <li><label class="row switch-row"><span class="ico" style="--c:#ff2d55"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg></span><span class="lbl">Ljudeffekter</span><input type="checkbox" id="sound-toggle" class="switch"></label></li>
+          <li><label class="row switch-row"><span class="ico" style="--c:#ff3b30"><svg viewBox="0 0 24 24"><rect x="8" y="4" width="8" height="16" rx="2"/><path d="M4.5 9v6M19.5 9v6"/></svg></span><span class="lbl">Haptik</span><input type="checkbox" id="haptic-toggle" class="switch"></label></li>
+          <li><label class="row switch-row"><span class="ico" style="--c:#8e8e93"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></span><span class="lbl">Minska rörelse</span><input type="checkbox" id="motion-toggle" class="switch"></label></li>
+        </ul>
+        <p class="footnote tight">Minska rörelse stänger av konfetti och de flesta animationer.</p>
+
+        <div class="list-title">Dina framsteg</div>
+        <ul class="list set-list">
+          <li><button class="row" id="export-data"><span class="ico" style="--c:#007aff"><svg viewBox="0 0 24 24"><path d="M12 3v12M7.5 7.5L12 3l4.5 4.5M5 12v7h14v-7"/></svg></span><span class="lbl">Exportera säkerhetskopia</span></button></li>
+          <li><button class="row" id="import-data"><span class="ico" style="--c:#34c759"><svg viewBox="0 0 24 24"><path d="M12 15V3M7.5 10.5L12 15l4.5-4.5M5 12v7h14v-7"/></svg></span><span class="lbl">Återställ från säkerhetskopia</span></button></li>
+          <li><button class="row danger" id="reset-data"><span class="ico" style="--c:#ff3b30"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13"/></svg></span><span class="lbl">Nollställ alla framsteg</span></button></li>
+        </ul>
+        <input type="file" id="import-file" accept="application/json,.json" hidden>
+        <p class="footnote tight">Allt sparas bara på den här enheten. Exportera en säkerhetskopia om du vill flytta dina framsteg till en annan iPhone, iPad eller dator.</p>
+
+        <div class="list-title">Hjälp</div>
+        <ul class="list set-list">
+          <li><button class="row nav" id="open-help"><span class="ico" style="--c:#007aff"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M9.8 9.5a2.3 2.3 0 1 1 3.2 2.1c-.6.3-1 .9-1 1.6v.3M12 16.8v.2"/></svg></span><span class="lbl">Så spelar du</span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+          <li><button class="row nav" id="open-words"><span class="ico" style="--c:#ff9500"><svg viewBox="0 0 24 24"><path d="M5 4.5h10.5A3.5 3.5 0 0 1 19 8v11.5H8.5A3.5 3.5 0 0 1 5 16z"/><path d="M9 9h6M9 12.5h4"/></svg></span><span class="lbl">Ordlista</span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+          <li><button class="row nav" data-push="about"><span class="ico" style="--c:#8e8e93"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 11v5.5M12 7.5v.2"/></svg></span><span class="lbl">Om appen</span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+        </ul>
       </div>
-      <div class="list-title">Rutor</div>
-      <div class="preset-row" id="cell-picker" role="radiogroup" aria-label="Rutor">
-        <button data-cells="rounded" role="radio"><span class="mini" data-cells="rounded"></span><span>Rundad</span></button>
-        <button data-cells="bubble" role="radio"><span class="mini" data-cells="bubble"></span><span>Bubblor</span></button>
-        <button data-cells="soft" role="radio"><span class="mini" data-cells="soft"></span><span>Mjuk</span></button>
-        <button data-cells="classic" role="radio"><span class="mini" data-cells="classic"></span><span>Klassisk</span></button>
+
+      <!-- Utseende -->
+      <div class="set-page" data-page="appearance" data-title="Utseende" hidden>
+        <div class="preview-card" aria-hidden="true">
+          <div class="board preview-board" id="preview-board"></div>
+          <div class="preview-clue"><b>1 VÅGRÄTT</b><span>påhittig, uppfinningsrik</span></div>
+        </div>
+        <div class="list-title">Tema</div>
+        <div class="segmented" id="theme-picker" role="radiogroup" aria-label="Tema">
+          <span class="seg-thumb" aria-hidden="true"></span>
+          <button data-theme-value="auto" role="radio">Auto</button>
+          <button data-theme-value="light" role="radio">Ljust</button>
+          <button data-theme-value="dark" role="radio">Mörkt</button>
+        </div>
+        <div class="list-title">Färg</div>
+        <div class="swatch-row" id="accent-picker" role="radiogroup" aria-label="Färg">
+          <button data-accent="blue" role="radio"><i></i><span>Blå</span></button>
+          <button data-accent="indigo" role="radio"><i></i><span>Indigo</span></button>
+          <button data-accent="purple" role="radio"><i></i><span>Lila</span></button>
+          <button data-accent="pink" role="radio"><i></i><span>Rosa</span></button>
+          <button data-accent="orange" role="radio"><i></i><span>Orange</span></button>
+          <button data-accent="teal" role="radio"><i></i><span>Turkos</span></button>
+        </div>
+        <div class="list-title">Rutor</div>
+        <div class="preset-row" id="cell-picker" role="radiogroup" aria-label="Rutor">
+          <button data-cells="rounded" role="radio"><span class="mini" data-cells="rounded"></span><span>Rundad</span></button>
+          <button data-cells="bubble" role="radio"><span class="mini" data-cells="bubble"></span><span>Bubblor</span></button>
+          <button data-cells="soft" role="radio"><span class="mini" data-cells="soft"></span><span>Mjuk</span></button>
+          <button data-cells="classic" role="radio"><span class="mini" data-cells="classic"></span><span>Klassisk</span></button>
+        </div>
+        <div class="list-title">Bokstäver</div>
+        <div class="font-row" id="font-picker" role="radiogroup" aria-label="Bokstäver">
+          <button data-font="standard" role="radio"><b>Aa</b><span>Standard</span></button>
+          <button data-font="rounded" role="radio"><b>Aa</b><span>Rundad</span></button>
+          <button data-font="serif" role="radio"><b>Aa</b><span>Serif</span></button>
+          <button data-font="mono" role="radio"><b>Aa</b><span>Mono</span></button>
+        </div>
+        <div class="list-title">Textstorlek</div>
+        <div class="text-size" id="text-picker" role="radiogroup" aria-label="Textstorlek">
+          <span class="ts-a small" aria-hidden="true">A</span>
+          <div class="segmented" style="--n:4">
+            <span class="seg-thumb" aria-hidden="true"></span>
+            <button data-text="s" role="radio">Mindre</button>
+            <button data-text="m" role="radio">Normal</button>
+            <button data-text="l" role="radio">Stor</button>
+            <button data-text="xl" role="radio">Störst</button>
+          </div>
+          <span class="ts-a big" aria-hidden="true">A</span>
+        </div>
+        <p class="footnote tight">Gäller frågor, svarsalternativ, ledtrådar och förklaringar.</p>
       </div>
-      <div class="list-title">Färg</div>
-      <div class="swatch-row" id="accent-picker" role="radiogroup" aria-label="Färg">
-        <button data-accent="blue" role="radio"><i></i><span>Blå</span></button>
-        <button data-accent="indigo" role="radio"><i></i><span>Indigo</span></button>
-        <button data-accent="purple" role="radio"><i></i><span>Lila</span></button>
-        <button data-accent="pink" role="radio"><i></i><span>Rosa</span></button>
-        <button data-accent="orange" role="radio"><i></i><span>Orange</span></button>
-        <button data-accent="teal" role="radio"><i></i><span>Turkos</span></button>
+
+      <!-- Visa fel -->
+      <div class="set-page" data-page="check" data-title="Visa fel" hidden>
+        <ul class="list set-list radio-list" id="check-picker" role="radiogroup" aria-label="Visa fel">
+          <li><button class="row" data-check="off" role="radio"><span class="lbl">Av<small>Inget avslöjas förrän du trycker på Kontrollera.</small></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4 4 9-9"/></svg></button></li>
+          <li><button class="row" data-check="word" role="radio"><span class="lbl">Per ord<small>När ett ord är ifyllt visas om det är rätt eller fel.</small></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4 4 9-9"/></svg></button></li>
+          <li><button class="row" data-check="letter" role="radio"><span class="lbl">Direkt<small>Varje felaktig bokstav blir röd med en gång.</small></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4 4 9-9"/></svg></button></li>
+        </ul>
+        <p class="footnote">Ord som visats som rätt låses så att de inte kan ändras av misstag.</p>
       </div>
-      <div class="list-title">Bokstäver</div>
-      <div class="font-row" id="font-picker" role="radiogroup" aria-label="Bokstäver">
-        <button data-font="standard" role="radio"><b>Aa</b><span>Standard</span></button>
-        <button data-font="rounded" role="radio"><b>Aa</b><span>Rundad</span></button>
-        <button data-font="serif" role="radio"><b>Aa</b><span>Serif</span></button>
-        <button data-font="mono" role="radio"><b>Aa</b><span>Mono</span></button>
+
+      <!-- Blixtsvar -->
+      <div class="set-page" data-page="bolt" data-title="Blixtsvar" hidden>
+        <ul class="list set-list radio-list" id="bolt-picker" role="radiogroup" aria-label="Blixtsvar">
+          <li><button class="row" data-bolt="0" role="radio"><span class="lbl">Av</span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4 4 9-9"/></svg></button></li>
+          <li><button class="row" data-bolt="5" role="radio"><span class="lbl">5 sekunder<small>För den som vill ha en utmaning.</small></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4 4 9-9"/></svg></button></li>
+          <li><button class="row" data-bolt="10" role="radio"><span class="lbl">10 sekunder</span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4 4 9-9"/></svg></button></li>
+          <li><button class="row" data-bolt="20" role="radio"><span class="lbl">20 sekunder</span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4 4 9-9"/></svg></button></li>
+          <li><button class="row" data-bolt="30" role="radio"><span class="lbl">30 sekunder<small>Ungefär den tid man har per uppgift på provet.</small></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4 4 9-9"/></svg></button></li>
+        </ul>
+        <p class="footnote">Ett rätt svar inom tiden, utan att ha tittat på stegen först, ger ⚡ blixtsvar.</p>
       </div>
-      <div class="list-title">Spel</div>
-      <ul class="list">
-        <li><label class="row switch-row" for="time-toggle">Visa tid<input type="checkbox" id="time-toggle" class="switch"></label></li>
-      </ul>
-      <p class="footnote tight">Med tiden dold räknas den ändå för din bästa tid.</p>
-      <div class="list-title">Visa fel i korsordet</div>
-      <div class="segmented" id="check-picker" role="radiogroup" aria-label="Visa fel">
-        <span class="seg-thumb" aria-hidden="true"></span>
-        <button data-check="off" role="radio">Av</button>
-        <button data-check="word" role="radio">Per ord</button>
-        <button data-check="letter" role="radio">Direkt</button>
+
+      <!-- Om appen -->
+      <div class="set-page" data-page="about" data-title="Om appen" hidden>
+        <div class="about-hero">
+          <img src="icon-180.png" alt="" width="84" height="84">
+          <b>HP-Korsord</b>
+          <span id="about-version">Version 3.0</span>
+        </div>
+        <ul class="list set-list" id="about-list"></ul>
+        <p class="footnote">Alla frågor är egna övningsfrågor i högskoleprovets stil, inte frågor från riktiga prov. Nya korsord och omgångar kommer varje dag, och alla får samma uppgifter samma dag.</p>
       </div>
-      <p class="footnote tight"><b>Per ord:</b> när ett ord är ifyllt visas om det är rätt eller fel. <b>Direkt:</b> varje felaktig bokstav blir röd med en gång. Ord som visats som rätt låses så att de inte kan ändras.</p>
-      <div class="list-title">Hjälp</div>
-      <ul class="list">
-        <li><button class="row" id="open-words">Ordlista<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
-        <li><button class="row" id="open-help">Så spelar du<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
-      </ul>
-      <p class="footnote">HP-Korsord · Ett nytt korsord varje dag med ord från högskoleprovets ORD-del.</p>
     </div>
   </dialog>
 
@@ -369,6 +455,7 @@
         <li><b>Fem lägen.</b> <b>Korsord</b>, <b>Ord</b>, <b>Meningar</b>, <b>Engelska</b> och <b>Matte</b>. Ord är som ORD-delen: ett ord och fem betydelser (A–E). Meningar är som MEK-delen: välj det som passar bäst i luckorna.</li>
         <li><b>Engelska.</b> Som ELF-delen: välj ordet som betyder ungefär samma sak, eller det som passar bäst i meningen.</li>
         <li><b>Matte.</b> Nya uppgifter varje dag i stil med XYZ, KVA och NOG. Tryck på 💡 <b>Visa hur man tänker</b> för att se lösningen steg för steg (eller tryck H). Svarar du rätt inom 10 sekunder utan hjälp blir det ⚡ blixtsvar.</li>
+        <li><b>Inställningar.</b> Under kugghjulet ställer du in utseende, textstorlek, ljud, haptik, hur fel visas och mycket mer. Där kan du också spara en säkerhetskopia av dina framsteg.</li>
         <li><b>Statistik.</b> Under diagramikonen ser du allt du gjort: aktivitet, din profil per del, matteområden, ord att repetera och förslag på vad du bör öva på.</li>
         <li><b>Snabbt med tangentbord.</b> I frågelägena väljer du med 1–5 eller A–E och går vidare med Enter.</li>
         <li><b>Rätt eller fel.</b> Som standard får du veta om ett ord är rätt först när hela ordet är ifyllt. Det kan ändras under Inställningar.</li>

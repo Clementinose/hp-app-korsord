@@ -28,13 +28,13 @@
   let combo = 0; // rätta ord/svar i rad
   let cur = { date: null, level: "medium" }; // dag och nivå som visas, i båda lägena
   let mek = null; // pågående omgång meningskomplettering
-  const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduceMotion = () => !!prefs().reduceMotion || matchMedia("(prefers-reduced-motion: reduce)").matches;
   // Kort vibration där enheten stöder det (Android). iOS ignorerar anropet.
   let hapticLabel = null;
   function haptic(pattern) {
     try {
-      if (navigator.vibrate) { navigator.vibrate(pattern); return; }
       if (prefs().haptics === false) return;
+      if (navigator.vibrate) { navigator.vibrate(pattern); return; }
       // iPhone: Safari saknar vibrate(), men ett dolt iOS-reglage ger en lätt stöt när det slås om.
       // Hoppa över när tangentbordet används, så att fokus inte flyttas från textfältet.
       if (document.activeElement && document.activeElement.id === "kb-input") return;
@@ -321,25 +321,34 @@
   }
 
   // I fokusläget (tangentbordet uppe) skrollas rutnätet så att hela ordet syns.
+  // Räknar med rutornas plats i layouten (offsetTop/offsetLeft), inte på skärmen, så att
+  // pågående animationer och skrollningar inte ger fel mål.
   function keepInView() {
     const area = $("board-area"), w = currentWord();
     if (!w) return;
-    const cells = cellsOf(w).map(([r, c]) => cellEls[r][c].getBoundingClientRect());
-    const a = area.getBoundingClientRect();
-    const top = Math.min(...cells.map((x) => x.top)), bottom = Math.max(...cells.map((x) => x.bottom));
-    const sel = cellEls[state.sel.r][state.sel.c].getBoundingClientRect();
-    const pad = 10;
-    let t = top, b = bottom;
-    if (bottom - top > a.height - pad * 2) { t = sel.top; b = sel.bottom; }
-    if (t < a.top + pad) area.scrollTop -= a.top + pad - t;
-    else if (b > a.bottom - pad) area.scrollTop += b - (a.bottom - pad);
+    const box = (el) => {
+      let t = 0, l = 0, n = el;
+      while (n && n !== area) { t += n.offsetTop; l += n.offsetLeft; n = n.offsetParent; }
+      return { top: t, left: l, bottom: t + el.offsetHeight, right: l + el.offsetWidth };
+    };
+    const cells = cellsOf(w).map(([r, c]) => box(cellEls[r][c]));
+    const sel = box(cellEls[state.sel.r][state.sel.c]);
+    const pad = 10, vh = area.clientHeight, vw = area.clientWidth;
+    let t = Math.min(...cells.map((x) => x.top)), b = Math.max(...cells.map((x) => x.bottom));
+    if (b - t > vh - pad * 2) { t = sel.top; b = sel.bottom; }
+    let top = area.scrollTop, left = area.scrollLeft;
+    if (t < top + pad) top = t - pad;
+    else if (b > top + vh - pad) top = b - vh + pad;
     // I sidled (när rutorna är förstorade): hela ordet om det får plats, annars rutan man står i.
-    if (area.scrollWidth > area.clientWidth + 1) {
+    if (area.scrollWidth > vw + 1) {
       let l = Math.min(...cells.map((x) => x.left)), r = Math.max(...cells.map((x) => x.right));
-      if (r - l > a.width - pad * 2) { l = sel.left; r = sel.right; }
-      if (l < a.left + pad) area.scrollLeft -= a.left + pad - l;
-      else if (r > a.right - pad) area.scrollLeft += r - (a.right - pad);
+      if (r - l > vw - pad * 2) { l = sel.left; r = sel.right; }
+      if (l < left + pad) left = l - pad;
+      else if (r > left + vw - pad) left = r - vw + pad;
     }
+    // Alltid ett (och bara ett) anrop: det avbryter en tidigare skrollning som annars fortsätter förbi ordet,
+    // och två separata mjuka skrollningar skulle avbryta varandra.
+    area.scrollTo({ top, left, behavior: reduceMotion() ? "auto" : "smooth" });
   }
 
   // ---------- Svarsalternativ (A–E), som på högskoleprovet ----------
@@ -551,11 +560,19 @@
         combo = 0;
         animate(el, "shake", 400);
         haptic(25);
+        sound("bad");
       }
     }
+    sound("tap");
     moveWithinWord(1);
     // Hoppa förbi låsta rutor så att man kan skriva vidare direkt.
     while (fixed(state.sel.r, state.sel.c) && moveWithinWord(1)) { /* nästa */ }
+    // Inställningen "Hoppa över ifyllda rutor": gå till nästa tomma ruta i ordet, om det finns någon.
+    if (prefs().skipFilled && state.entries[state.sel.r][state.sel.c]) {
+      const from = { ...state.sel };
+      while ((state.entries[state.sel.r][state.sel.c] || fixed(state.sel.r, state.sel.c)) && moveWithinWord(1)) { /* nästa */ }
+      if (state.entries[state.sel.r][state.sel.c]) state.sel = from;
+    }
     update();
     evaluateWordsAt(r, c);
     afterChange();
@@ -568,6 +585,7 @@
   // Ett ord som visats som rätt: låses, blinkar grönt, gnistrar och räknas i "i rad".
   function celebrateWord(cells) {
     haptic(12);
+    sound("word");
     cells.forEach(([r, c], i) => {
       const el = cellEls[r][c];
       el.style.setProperty("--i", i);
@@ -606,6 +624,7 @@
         state.mcMistakes++;
         combo = 0;
         haptic(25);
+        sound("bad");
         update();
       }
     }
@@ -855,6 +874,7 @@
   }
 
   function showWinDialog() {
+    if (!state.gaveUp) sound("win");
     $("win-title").textContent = state.gaveUp ? "Här är lösningen" : "Snyggt löst!";
     $("win-icon").textContent = state.gaveUp ? "📖" : "🎉";
     const hints = state.hints ? ` med ${state.hints} ${state.hints === 1 ? "ledtråd" : "ledtrådar"}` : " helt utan hjälp";
@@ -926,7 +946,7 @@
         st.right += right; st.total += answered;
         if (answered) bump(date, qk, answered);
         if (p.helped) st.helped += p.helped.filter(Boolean).length;
-        if (qk === "mat" && p.times) st.bolts += p.answers.filter((a, i) => ok(a, i) && !(p.helped && p.helped[i]) && p.times[i] !== null && p.times[i] <= 10).length;
+        if (qk === "mat" && p.times) st.bolts += p.answers.filter((a, i) => ok(a, i) && !(p.helped && p.helped[i]) && p.times[i] !== null && p.times[i] <= boltSeconds()).length;
         if (qk === "mat" && p.cats) p.cats.forEach((c, i) => {
           if (!c || p.answers[i] === null) return;
           const s = (cats[c] = cats[c] || { right: 0, total: 0 });
@@ -1483,8 +1503,8 @@
   }
 
   // Blixtsvar i Matte: rätt svar inom 10 sekunder, utan att ha tittat på stegen först.
-  const BOLT_SECONDS = 10;
-  const isBolt = (i) => mek.kind === "mat" && mek.answers[i] === mek.correct[i] && !mek.helped[i] && mek.times[i] !== null && mek.times[i] <= BOLT_SECONDS;
+  const boltSeconds = () => (prefs().bolt === undefined ? 10 : prefs().bolt);
+  const isBolt = (i) => mek.kind === "mat" && boltSeconds() > 0 && mek.answers[i] === mek.correct[i] && !mek.helped[i] && mek.times[i] !== null && mek.times[i] <= boltSeconds();
 
   // "Visa hur man tänker": stegen visas ett i taget. Före svaret räknas det som hjälp (inget blixtsvar).
   function renderSteps(animLast) {
@@ -1520,12 +1540,13 @@
     if (a === null) { fb.innerHTML = ""; next.hidden = true; return; }
     const right = a === q.correct;
     const bolt = isBolt(i) ? ` <span class="bolt">⚡ Blixtsvar på ${mek.times[i]} s</span>` : "";
-    const note = q.explain ? `<span class="fb-note">${q.explain}</span>` : "";
+    const note = q.explain && prefs().notes !== false ? `<span class="fb-note">${q.explain}</span>` : "";
     fb.innerHTML = (right ? `<span class="fb ok">✓ Rätt!</span>${bolt}` : `<span class="fb bad">✕ Fel – rätt svar är ${MEK_LABELS[q.correct]}</span>`) + note;
     next.hidden = false;
     next.textContent = i === mek.qs.length - 1 ? "Se resultatet" : "Nästa fråga";
   }
 
+  let autoNextTimer = 0;
   function answerMek(k) {
     if (!mek || mek.done || paused || mek.answers[mek.idx] !== null) return;
     const i = mek.idx;
@@ -1539,12 +1560,18 @@
       combo++;
       haptic(12);
       if (btn) animate(btn, "pulse", 700);
-      if (isBolt(i)) boltFx(btn);
-      else if (combo >= 2) comboToast(combo);
+      if (isBolt(i)) { boltFx(btn); sound("bolt"); }
+      else { sound("ok"); if (combo >= 2) comboToast(combo); }
       sparkleAt($("mek-card"));
+      // Inställningen "Nästa fråga automatiskt": gå vidare efter en kort stund om man inte läser stegen.
+      if (prefs().autoNext) {
+        clearTimeout(autoNextTimer);
+        autoNextTimer = setTimeout(() => { if (mek && mek.idx === i && !mek.done && !paused && mek.shown === 0 && !document.querySelector("dialog[open]")) nextMek(); }, 1300);
+      }
     } else {
       combo = 0;
       haptic(25);
+      sound("bad");
       if (btn) animate(btn, "shake", 400);
     }
     animate($("mek-feedback"), "pop", 500);
@@ -1621,7 +1648,7 @@
         const tick = (t) => { const k = Math.min(1, (t - start) / 900); el.textContent = Math.round(right * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(tick); };
         requestAnimationFrame(tick);
       }
-      if (pct >= 0.8) { confetti(right === n ? 1 : 0.5); haptic([15, 60, 15, 60, 30]); }
+      if (pct >= 0.8) { confetti(right === n ? 1 : 0.5); haptic([15, 60, 15, 60, 30]); sound("win"); }
     }
   }
 
@@ -1847,22 +1874,271 @@
   $("next-clue").addEventListener("click", () => stepWord(1));
   $("btn-stats").addEventListener("click", showStats);
   $("btn-archive").addEventListener("click", showArchive);
-  $("btn-settings").addEventListener("click", () => { renderThemePicker(); renderCheckPicker(); renderStylePickers(); $("time-toggle").checked = showTime(); $("settings-dialog").showModal(); });
-  function renderCheckPicker() {
-    const keys = ["off", "word", "letter"];
-    document.querySelectorAll("#check-picker button").forEach((b) => b.setAttribute("aria-checked", b.dataset.check === checkMode()));
-    $("check-picker").style.setProperty("--i", keys.indexOf(checkMode()));
+  // ---------- Inställningar (som i iOS: en startsida med undersidor) ----------
+  const APP_VERSION = "3.0";
+  const CHECK_NAMES = { off: "Av", word: "Per ord", letter: "Direkt" };
+  const THEME_NAMES = { auto: "Auto", light: "Ljust", dark: "Mörkt" };
+  const ACCENT_NAMES = { blue: "Blå", indigo: "Indigo", purple: "Lila", pink: "Rosa", orange: "Orange", teal: "Turkos" };
+  const TEXT_KEYS = ["s", "m", "l", "xl"];
+  const setStack = [];
+
+  function renderSettings() {
+    const p = prefs();
+    renderThemePicker(); renderCheckPicker(); renderStylePickers(); renderTextPicker(); renderBoltPicker();
+    $("time-toggle").checked = showTime();
+    $("skip-toggle").checked = !!p.skipFilled;
+    $("autonext-toggle").checked = !!p.autoNext;
+    $("notes-toggle").checked = p.notes !== false;
+    $("sound-toggle").checked = soundOn();
+    $("haptic-toggle").checked = p.haptics !== false;
+    $("motion-toggle").checked = !!p.reduceMotion;
+    $("val-appearance").textContent = `${THEME_NAMES[p.theme || "auto"]} · ${ACCENT_NAMES[p.accent || "blue"]}`;
+    $("val-check").textContent = CHECK_NAMES[checkMode()];
+    $("val-bolt").textContent = boltSeconds() ? boltSeconds() + " s" : "Av";
+    const st = computeStats();
+    $("set-hero-sub").textContent = st.days
+      ? `🔥 ${st.streak} ${st.streak === 1 ? "dag" : "dagar"} i rad · ${st.answeredTotal + st.words} ord och frågor`
+      : "Öva inför högskoleprovet varje dag";
   }
-  document.querySelectorAll("#check-picker button").forEach((b) =>
-    b.addEventListener("click", () => { setPref("checkMode", b.dataset.check); renderCheckPicker(); applyCheckMode(); })
+  function renderCheckPicker() {
+    document.querySelectorAll("#check-picker [data-check]").forEach((b) => b.setAttribute("aria-checked", b.dataset.check === checkMode()));
+  }
+  function renderBoltPicker() {
+    document.querySelectorAll("#bolt-picker [data-bolt]").forEach((b) => b.setAttribute("aria-checked", +b.dataset.bolt === boltSeconds()));
+  }
+  function renderTextPicker() {
+    const t = prefs().textSize || "m";
+    document.querySelectorAll("#text-picker [data-text]").forEach((b) => b.setAttribute("aria-checked", b.dataset.text === t));
+    $("text-picker").querySelector(".segmented").style.setProperty("--i", TEXT_KEYS.indexOf(t));
+  }
+
+  // Liten förhandsvisning av rutnätet i Utseende, så att man ser valen direkt.
+  (function buildPreview() {
+    const rows = ["FYNDIG", "#Ö##N#", "#R##K#"];
+    const el = $("preview-board");
+    el.style.setProperty("--cols", 6); el.style.setProperty("--rows", 3);
+    el.innerHTML = rows.flatMap((row, r) => [...row].map((ch, c) => {
+      if (ch === "#") return `<div class="cell block"></div>`;
+      const cls = r === 0 ? (c === 2 ? "selected" : "in-word") : c === 4 && r === 2 ? "" : "locked";
+      const show = r === 0 ? (c < 2 ? ch : "") : ch;
+      return `<div class="cell letter ${cls}">${r === 0 && c === 0 ? '<span class="num">1</span>' : ""}<span class="ch">${show}</span></div>`;
+    })).join("");
+  })();
+
+  // Navigering mellan sidorna i inställningsarket.
+  function showSetPage(name, dir) {
+    const pages = [...document.querySelectorAll(".set-page")];
+    const next = pages.find((p) => p.dataset.page === name);
+    const prev = pages.find((p) => !p.hidden && p !== next);
+    next.hidden = false;
+    $("set-title").textContent = next.dataset.title;
+    const inSub = name !== "root";
+    $("set-back").classList.toggle("show", inSub);
+    $("set-back-label").textContent = inSub ? pages.find((p) => p.dataset.page === (setStack[setStack.length - 2] || "root")).dataset.title : "";
+    if (!prev) return;
+    if (!dir || reduceMotion() || !next.animate) { prev.hidden = true; if (dir !== "pop") next.scrollTop = 0; return; }
+    const ease = "cubic-bezier(.3, .7, .2, 1)", ms = 380;
+    if (dir === "push") {
+      next.scrollTop = 0;
+      next.animate([{ transform: "translateX(100%)" }, { transform: "none" }], { duration: ms, easing: ease });
+      prev.animate([{ transform: "none", opacity: 1 }, { transform: "translateX(-30%)", opacity: 0 }], { duration: ms, easing: ease }).onfinish = () => (prev.hidden = true);
+    } else {
+      next.animate([{ transform: "translateX(-30%)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: ms, easing: ease });
+      prev.style.zIndex = 2;
+      prev.animate([{ transform: "none" }, { transform: "translateX(100%)" }], { duration: ms, easing: ease }).onfinish = () => { prev.hidden = true; prev.style.zIndex = ""; };
+    }
+  }
+  function pushSet(name) { setStack.push(name); showSetPage(name, "push"); haptic(6); }
+  function popSet() { if (setStack.length < 2) return; setStack.pop(); renderSettings(); showSetPage(setStack[setStack.length - 1], "pop"); }
+  function openSettings(page) {
+    setStack.length = 0; setStack.push("root");
+    document.querySelectorAll(".set-page").forEach((p) => (p.hidden = p.dataset.page !== "root"));
+    renderSettings();
+    showSetPage("root");
+    $("set-stack").querySelector('[data-page="root"]').scrollTop = 0;
+    $("settings-dialog").showModal();
+    if (page) pushSet(page);
+  }
+  $("btn-settings").addEventListener("click", () => openSettings());
+  $("set-back").addEventListener("click", popSet);
+  document.querySelectorAll("[data-push]").forEach((b) => b.addEventListener("click", () => pushSet(b.dataset.push)));
+  // Svep från vänsterkanten för att gå tillbaka, som i iOS.
+  (function edgeSwipe() {
+    let x0 = null, y0 = 0, page = null;
+    $("set-stack").addEventListener("touchstart", (e) => {
+      const t = e.touches[0], box = $("set-stack").getBoundingClientRect();
+      if (setStack.length < 2 || t.clientX - box.left > 28) return;
+      x0 = t.clientX; y0 = t.clientY; page = document.querySelector(`.set-page[data-page="${setStack[setStack.length - 1]}"]`);
+    }, { passive: true });
+    $("set-stack").addEventListener("touchmove", (e) => {
+      if (x0 === null) return;
+      const dx = e.touches[0].clientX - x0;
+      if (Math.abs(e.touches[0].clientY - y0) > 40 && dx < 20) { x0 = null; page.style.transform = ""; return; }
+      page.style.transform = `translateX(${Math.max(0, dx)}px)`;
+    }, { passive: true });
+    $("set-stack").addEventListener("touchend", (e) => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0;
+      page.style.transform = "";
+      x0 = null;
+      if (dx > 80) popSet();
+    });
+  })();
+
+  document.querySelectorAll("#check-picker [data-check]").forEach((b) =>
+    b.addEventListener("click", () => { setPref("checkMode", b.dataset.check); renderSettings(); applyCheckMode(); haptic(8); })
   );
-  $("time-toggle").addEventListener("change", (e) => { setPref("showTime", e.target.checked); applyTimeSetting(); });
+  document.querySelectorAll("#bolt-picker [data-bolt]").forEach((b) =>
+    b.addEventListener("click", () => { setPref("bolt", +b.dataset.bolt); renderSettings(); haptic(8); })
+  );
+  document.querySelectorAll("#text-picker [data-text]").forEach((b) =>
+    b.addEventListener("click", () => { setPref("textSize", b.dataset.text); applyTextSize(); renderTextPicker(); haptic(8); })
+  );
+  const bindSwitch = (id, key, after) => $(id).addEventListener("change", (e) => { setPref(key, e.target.checked); if (after) after(); renderSettings(); haptic(8); });
+  bindSwitch("time-toggle", "showTime", () => applyTimeSetting());
+  bindSwitch("skip-toggle", "skipFilled");
+  bindSwitch("autonext-toggle", "autoNext");
+  bindSwitch("notes-toggle", "notes", () => { if (mek && isQuiz() && !mek.done) renderMekFeedback(); });
+  bindSwitch("sound-toggle", "sound", () => { if (soundOn()) sound("ok"); });
+  bindSwitch("haptic-toggle", "haptics");
+  bindSwitch("motion-toggle", "reduceMotion", () => applyMotion());
   function applyTimeSetting() { document.body.classList.toggle("hide-time", !showTime()); }
-  applyTimeSetting();
+  function applyTextSize() { document.documentElement.dataset.text = prefs().textSize || "m"; }
+  function applyMotion() { document.documentElement.classList.toggle("reduce-motion", !!prefs().reduceMotion); }
+  applyTimeSetting(); applyTextSize(); applyMotion();
   $("open-help").addEventListener("click", () => { $("settings-dialog").close(); $("help-dialog").showModal(); });
   document.querySelectorAll("#theme-picker button").forEach((b) =>
-    b.addEventListener("click", () => { setPref("theme", b.dataset.themeValue); applyTheme(); renderThemePicker(); })
+    b.addEventListener("click", () => { setPref("theme", b.dataset.themeValue); applyTheme(); renderThemePicker(); haptic(8); })
   );
+
+  // Om appen: version och hur mycket innehåll som finns.
+  function renderAbout() {
+    const rows = [
+      ["HP-ord", HP_WORDS.length.toLocaleString("sv-SE")],
+      ["Meningar (MEK)", HP_MEK.length],
+      ["Engelska meningar", HP_ENG_GAP.length],
+      ["Engelska ord", HP_ENG_VOCAB.length],
+      ["Mattetyper", HP_MATH.types.length],
+      ["Sparat på enheten", ((n) => `${n} ${n === 1 ? "omgång" : "omgångar"}`)(Object.keys(progressAll()).length)],
+    ];
+    $("about-list").innerHTML = rows.map(([k, v]) => `<li class="kv"><span>${k}</span><span>${v}</span></li>`).join("");
+    $("about-version").textContent = "Version " + APP_VERSION;
+  }
+  document.querySelector('[data-push="about"]').addEventListener("click", renderAbout);
+
+  // Säkerhetskopia: exportera och återställ framsteg och inställningar som en JSON-fil.
+  $("export-data").addEventListener("click", async () => {
+    const data = { app: "hp-korsord", version: 2, exported: new Date().toISOString(), progress: progressAll(), prefs: prefs() };
+    const name = `hp-korsord-${todayKey()}.json`;
+    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+    try {
+      const file = new File([blob], name, { type: "application/json" });
+      if (matchMedia("(pointer: coarse)").matches && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "HP-Korsord – säkerhetskopia" });
+        return;
+      }
+    } catch (e) { if (e && e.name === "AbortError") return; }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast("Säkerhetskopian är sparad");
+  });
+  $("import-data").addEventListener("click", () => $("import-file").click());
+  $("import-file").addEventListener("change", async (e) => {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    let data;
+    try { data = JSON.parse(await f.text()); } catch { data = null; }
+    if (!data || data.app !== "hp-korsord" || typeof data.progress !== "object") { toast("Filen är ingen säkerhetskopia från HP-Korsord"); return; }
+    const n = Object.keys(data.progress).length;
+    if (!(await confirmBox("Återställa framsteg?", `Säkerhetskopian innehåller ${n} omgångar. Dina nuvarande framsteg på den här enheten ersätts.`, "Återställ"))) return;
+    store(PROGRESS_KEY, data.progress);
+    if (data.prefs && typeof data.prefs === "object") store(PREFS_KEY, data.prefs);
+    reloadAfterData("Framstegen är återställda");
+  });
+  $("reset-data").addEventListener("click", async () => {
+    if (!(await confirmBox("Nollställa allt?", "Alla lösta korsord, omgångar och all statistik raderas från den här enheten. Det går inte att ångra.", "Nollställ"))) return;
+    store(PROGRESS_KEY, {});
+    reloadAfterData("Allt är nollställt");
+  });
+  function reloadAfterData(msg) {
+    state = null; mek = null; puzzleCache.clear();
+    applyTheme(); applyStyle(); applyTimeSetting(); applyTextSize(); applyMotion();
+    openCurrent(cur.date, cur.level);
+    applyMode(false);
+    renderSettings();
+    toast(msg);
+  }
+
+  // Dra ner ett ark i rubrikraden för att stänga det, som i iOS (bara när arket kommer underifrån).
+  document.querySelectorAll("dialog.sheet").forEach((dlg) => {
+    const bar = dlg.querySelector(".sheet-bar");
+    if (!bar) return;
+    let y0 = null, dy = 0, t0 = 0;
+    bar.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" || innerWidth >= 740 || e.target.closest("button")) return;
+      y0 = e.clientY; dy = 0; t0 = performance.now();
+      dlg.classList.add("dragging");
+      bar.setPointerCapture(e.pointerId);
+    });
+    bar.addEventListener("pointermove", (e) => {
+      if (y0 === null) return;
+      dy = Math.max(0, e.clientY - y0);
+      dlg.style.transform = `translateY(${dy}px)`;
+    });
+    const end = () => {
+      if (y0 === null) return;
+      y0 = null;
+      dlg.classList.remove("dragging");
+      const fast = dy / Math.max(1, performance.now() - t0) > 0.6;
+      if (dy > 120 || (fast && dy > 40)) {
+        dlg.classList.add("closing");
+        dlg.style.transform = "translateY(100%)";
+        setTimeout(() => { dlg.close(); dlg.classList.remove("closing"); dlg.style.transform = ""; }, 240);
+      } else {
+        dlg.classList.add("closing");
+        dlg.style.transform = "";
+        setTimeout(() => dlg.classList.remove("closing"), 260);
+      }
+    };
+    bar.addEventListener("pointerup", end);
+    bar.addEventListener("pointercancel", end);
+  });
+
+  // ---------- Ljudeffekter (Web Audio, inga ljudfiler) ----------
+  const soundOn = () => prefs().sound !== false;
+  let audioCtx = null;
+  function sound(kind) {
+    if (!soundOn()) return;
+    try {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        // På iPhone: följ ringlägesknappen i stället för att alltid spela.
+        if (navigator.audioSession) navigator.audioSession.type = "ambient";
+        audioCtx = new AC();
+      }
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      const t0 = audioCtx.currentTime + 0.01;
+      const tone = (freq, start, dur, vol, type = "sine") => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = type; o.frequency.setValueAtTime(freq, t0 + start);
+        g.gain.setValueAtTime(0.0001, t0 + start);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + start + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + start + dur);
+        o.connect(g).connect(audioCtx.destination);
+        o.start(t0 + start); o.stop(t0 + start + dur + 0.02);
+      };
+      if (kind === "tap") tone(1400, 0, 0.035, 0.025, "triangle");
+      else if (kind === "ok") { tone(880, 0, 0.14, 0.08); tone(1318.5, 0.08, 0.22, 0.07); }
+      else if (kind === "word") { tone(784, 0, 0.12, 0.07); tone(988, 0.07, 0.12, 0.07); tone(1318.5, 0.14, 0.28, 0.07); }
+      else if (kind === "bad") { tone(220, 0, 0.16, 0.07, "triangle"); tone(185, 0.09, 0.2, 0.06, "triangle"); }
+      else if (kind === "bolt") { tone(1568, 0, 0.08, 0.06, "square"); tone(2093, 0.06, 0.18, 0.05, "triangle"); }
+      else if (kind === "win") [523.3, 659.3, 784, 1046.5, 1318.5].forEach((f, i) => tone(f, i * 0.09, 0.35 + (i === 4 ? 0.3 : 0), 0.07));
+    } catch { /* inget ljud */ }
+  }
   $("btn-clues").addEventListener("click", () => { $("more-dialog").close(); setCluesOpen(true); });
   $("cc-open").addEventListener("click", () => { kbInput.blur(); setCluesOpen(true); });
   $("clues-close").addEventListener("click", () => setCluesOpen(false));
