@@ -1486,6 +1486,9 @@
     $("mek-card").classList.toggle("big", !!q.big);
     $("mek-text").innerHTML = q.prompt(answered !== null, answered === q.correct);
     $("mek-options").classList.toggle("fixed", !!q.fixed);
+    // Korta svar (siffror, enstaka ord) visas två och två så att alla får plats utan skroll på små skärmar.
+    const plain = q.options.map((o) => o.replace(/<[^>]+>/g, "").trim());
+    $("mek-options").classList.toggle("short", !q.fixed && q.options.length === 4 && plain.every((t) => t.length <= 14));
     $("mek-options").innerHTML = q.options.map((text, k) => {
       let cls = "";
       if (answered !== null) cls = k === q.correct ? "right" : k === answered ? "wrong" : "dim";
