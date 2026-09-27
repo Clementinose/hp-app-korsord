@@ -1,6 +1,6 @@
-# HP-Korsord
+# Dagsprov
 
-Ett nytt korsord varje dag med över 2 300 egenskrivna ordförklaringar av den typ som förekommer i högskoleprovets ORD-del – med dagliga pussel på samma sätt som populära sajter för dagliga sudokun. Ledtrådarna är synonymer eller korta förklaringar, precis som på provet. Dagens korsord räknas fram ur datumet, så alla får samma korsord samma dag.
+Öva inför högskoleprovet varje dag. Ett nytt korsord varje dag med över 2 300 egenskrivna ordförklaringar av den typ som förekommer i högskoleprovets ORD-del – med dagliga pussel på samma sätt som populära sajter för dagliga sudokun. Ledtrådarna är synonymer eller korta förklaringar, precis som på provet. Dagens korsord räknas fram ur datumet, så alla får samma korsord samma dag.
 
 ## Funktioner
 
@@ -50,9 +50,21 @@ Obs: om du ändrar ordlistan kan dagarnas korsord bli andra än förut. Sparade 
 
 ## Rättigheter, integritet och ansvar
 
-- **Fristående.** HP-Korsord har ingen koppling till, och är inte godkänt av, Universitets- och högskolerådet (UHR), som anordnar högskoleprovet. Namnet högskoleprovet används bara för att beskriva vad appen övar inför.
+- **Fristående.** Dagsprov har ingen koppling till, och är inte godkänt av, Universitets- och högskolerådet (UHR), som anordnar högskoleprovet. Namnet högskoleprovet används bara för att beskriva vad appen övar inför.
 - **Eget innehåll.** Alla ledtrådar, MEK-meningar, engelska uppgifter och förklaringar är egenskrivna, och matteuppgifterna genereras av appen. Inga frågor är hämtade från publicerade högskoleprov; appen följer bara provdelarnas upplägg.
 - **Inga tredjepartsresurser.** Ikoner och grafik är egenritade. Appen laddar inga typsnitt, skript eller bilder från andra webbplatser och använder enhetens systemtypsnitt.
 - **Integritet.** Ingen inloggning, ingen analys, ingen spårning, inga annonser och inga cookies från tredje part. Framsteg och inställningar sparas bara lokalt i webbläsarens lagring (nödvändigt för att appen ska fungera) och skickas aldrig till någon server. GitHub Pages kan som webbhotell registrera tekniska uppgifter som IP-adress enligt GitHubs integritetspolicy. Allt kan raderas med *Nollställ alla framsteg* eller genom att rensa webbplatsdata.
 - **Varumärken.** Apple, iPhone, iPad och Magic Keyboard är varumärken som tillhör Apple Inc. och nämns bara för att beskriva vilka enheter appen fungerar på.
+- **Licens.** Alla rättigheter förbehållna – se [LICENSE](LICENSE). Appen får användas gratis via webbplatsen för eget studiebruk, men koden och innehållet får inte kopieras eller återanvändas utan tillstånd.
 - Samma information finns i appen under Inställningar → Integritet och Villkor och ansvar.
+
+### Om appen byggs ut
+
+Appen behöver i dag ingen cookie-banner eller samtyckesruta eftersom den inte samlar in något. Det ändras om något av följande läggs till – då krävs samtycke **innan** datan samlas in och en utförligare integritetspolicy med kontaktuppgifter till den som ansvarar:
+
+- statistik- eller analysverktyg (till exempel Google Analytics),
+- reklam eller spårningspixlar,
+- inloggning, konton eller synk mellan enheter,
+- typsnitt, skript eller bilder som hämtas från andra webbplatser (till exempel Google Fonts), eftersom de skickar besökarens IP-adress vidare.
+
+Uppdatera i så fall också sidorna Integritet och Villkor och ansvar i appen.
