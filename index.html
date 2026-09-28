@@ -598,7 +598,11 @@
           document.getElementById("crash").hidden = false;
         }
       }
-      window.addEventListener("error", function (e) { if (e && e.target && e.target !== window) return; onError(); });
+      window.addEventListener("error", function (e) {
+        if (e && e.target && e.target !== window) return; // bilder/filer som inte laddas
+        if (e && /ResizeObserver loop/.test(e.message || "")) return; // ofarlig webbläsarvarning
+        onError();
+      });
       window.addEventListener("unhandledrejection", onError);
       function reload() { location.reload(); }
       document.getElementById("crash-reload").onclick = reload;

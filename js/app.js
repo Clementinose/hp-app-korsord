@@ -197,6 +197,7 @@
     puzzle.words.forEach((w, i) => forEachCell(w, (r, c) => (cellWords[r][c][w.dir] = i)));
     boardEl.classList.toggle("solved", state.done && !state.gaveUp);
     renderBoard();
+    if (document.body.classList.contains("compact")) requestAnimationFrame(fitCompactBoard);
     renderClues();
     renderHeader();
     renderPause();
@@ -1968,16 +1969,40 @@
       if (vv.width !== fullWidth) { fullWidth = vv.width; fullHeight = 0; } // ny orientering
       if (!typing || vv.height > fullHeight) fullHeight = Math.max(vv.height, typing ? fullHeight : 0);
       document.documentElement.style.setProperty("--app-h", Math.round(vv.height) + "px");
+      // iOS kan skjuta upp sidan när tangentbordet öppnas – appen följer den synliga ytan i stället.
+      document.documentElement.style.setProperty("--vv-top", Math.max(0, Math.round(vv.offsetTop)) + "px");
       const kbOpen = typing && (Math.max(document.documentElement.clientHeight, fullHeight) - vv.height > 120);
       document.body.classList.toggle("kb-open", kbOpen);
       const wasCompact = document.body.classList.contains("compact");
       document.body.classList.toggle("compact", kbOpen && vv.height < 720);
-      if (wasCompact && !document.body.classList.contains("compact")) { $("board-area").scrollTop = 0; $("board-area").scrollLeft = 0; }
-      if (!wasCompact && document.body.classList.contains("compact") && state) requestAnimationFrame(keepInView);
+      const isCompact = document.body.classList.contains("compact");
+      if (wasCompact && !isCompact) { $("board-area").scrollTop = 0; $("board-area").scrollLeft = 0; boardEl.style.width = ""; document.body.classList.remove("board-fits"); }
+      if (isCompact && state) requestAnimationFrame(() => { fitCompactBoard(); keepInView(); });
     }
     if (window.scrollY) window.scrollTo(0, 0);
   }
+  // När tangentbordet är uppe: visa hela rutnätet om rutorna då blir minst 24 px (man skriver ju
+  // med tangentbordet, så rutorna behöver inte vara stora att träffa). Annars fyll bredden och
+  // skrolla bara i höjdled, och bara för riktigt stora korsord i båda led.
+  function fitCompactBoard() {
+    if (!state || !document.body.classList.contains("compact")) return;
+    const area = $("board-area"), cs = getComputedStyle(boardEl), as = getComputedStyle(area);
+    const { rows, cols } = state.puzzle;
+    const pad = parseFloat(cs.paddingLeft) || 0, gap = parseFloat(cs.columnGap) || 0;
+    const w = area.clientWidth - 4 - 2 * pad - (cols - 1) * gap;
+    const h = area.clientHeight - parseFloat(as.paddingTop) - parseFloat(as.paddingBottom) - 2 * pad - (rows - 1) * gap;
+    const wFit = w / cols, hFit = h / rows;
+    let cell = Math.min(wFit, hFit);
+    const fits = cell >= 20;
+    if (!fits) cell = wFit >= 26 ? wFit : 30;
+    cell = Math.min(cell, 52);
+    boardEl.style.width = Math.floor(cell * cols + (cols - 1) * gap + 2 * pad) + "px";
+    // Syns hela rutnätet behövs inte bokstavsraden i ledtrådskortet – då får rutnätet mer plats.
+    document.body.classList.toggle("board-fits", fits);
+  }
   if (vv) { vv.addEventListener("resize", syncViewport); vv.addEventListener("scroll", syncViewport); }
+  // Ytan för rutnätet ändras också när ledtråden byter antal rader – anpassa då igen.
+  if (window.ResizeObserver) new ResizeObserver(() => requestAnimationFrame(fitCompactBoard)).observe($("board-area"));
   window.addEventListener("resize", syncViewport);
 
   // Knappar under rutnätet ska inte ta fokus från fältet, annars stängs tangentbordet.
