@@ -13,9 +13,12 @@
   },
   "dependencies": {
     "expo": "*",
+    "expo-crypto": "*",
     "expo-haptics": "*",
     "expo-notifications": "*",
+    "expo-secure-store": "*",
     "expo-status-bar": "*",
+    "expo-tracking-transparency": "*",
     "react": "*",
     "react-native": "*",
     "react-native-google-mobile-ads": "*",

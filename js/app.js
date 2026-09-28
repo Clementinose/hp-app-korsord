@@ -64,8 +64,66 @@
   function load(key) {
     try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
   }
+  // Integritetskontroll: det som ger belöningar (livlinor, djur, provperioder, uppdrag) signeras
+  // med en nyckel. I mobilappen är nyckeln slumpad per installation och ligger i telefonens
+  // säkra lagring (Keychain / Keystore), så en ändrad fil går inte att signera om.
+  // Det här är ett hinder mot fusk, inte ett vattentätt skydd – det kräver en server.
+  const SIG_KEY = "hpk-sig-v1";
+  const CRITICAL = ["bank", "bought", "pets", "petNew", "companion", "plusTrial", "plusTrialAt", "plusDemo", "plusDemoSeason", "demoPets",
+    "lifelines", "unlockedDays", "frozen", "adsToday", "clockMax", "noPetsUntil"];
+  const stateKey = () => (window.DagsprovNative && typeof window.DagsprovNative.stateKey === "string" && window.DagsprovNative.stateKey.length >= 16
+    ? window.DagsprovNative.stateKey : "dagsprov|webb|2026");
+  function cyrb53(str) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
+  const sigOf = (str) => cyrb53(stateKey() + "|" + str) + cyrb53(str + "|" + stateKey());
+  const criticalJson = (p) => JSON.stringify(CRITICAL.map((k) => (p && p[k] !== undefined ? p[k] : null)));
+  let trustedCritical = null;
+  const pickCritical = (p) => Object.fromEntries(CRITICAL.filter((k) => p && p[k] !== undefined).map((k) => [k, p[k]]));
   function store(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* privat läge etc. */ }
+    if (key === PREFS_KEY && trustedCritical) trustedCritical = pickCritical(value);
+    try {
+      const json = JSON.stringify(value);
+      localStorage.setItem(key, json);
+      if (key === PREFS_KEY || key === PROGRESS_KEY) {
+        const sig = load(SIG_KEY) || {};
+        if (key === PREFS_KEY) sig.p = sigOf(criticalJson(value)); else sig.g = sigOf(json);
+        localStorage.setItem(SIG_KEY, JSON.stringify(sig));
+      }
+    } catch { /* privat läge etc. */ }
+  }
+  // Körs vid start. Har någon ändrat i lagringen återställs belöningarna till säkra värden, och
+  // ändrade framsteg kan inte ge djur (själva övningarna behålls – de är ju ditt eget lärande).
+  const SAFE_CRITICAL = { bank: 0, bought: 0, pets: {}, petNew: null, companion: null, plusTrial: 0, plusDemo: false, demoPets: [], unlockedDays: [], frozen: [] };
+  function verifyState() {
+    let sig = null, rawPrefs = null, rawProgress = null;
+    try { sig = JSON.parse(localStorage.getItem(SIG_KEY)); rawPrefs = localStorage.getItem(PREFS_KEY); rawProgress = localStorage.getItem(PROGRESS_KEY); } catch { return; }
+    const p = load(PREFS_KEY);
+    let tampered = false;
+    const hasRewards = p && CRITICAL.some((k) => k !== "clockMax" && p[k] !== undefined && p[k] !== null);
+    if (rawPrefs && (!sig || sig.p !== sigOf(criticalJson(p)))) {
+      if (hasRewards) {
+        const fixed = { ...p, ...SAFE_CRITICAL, lifelines: { date: todayKey(), used: 99, extra: 0 } };
+        store(PREFS_KEY, fixed);
+        tampered = true;
+      } else store(PREFS_KEY, p || {});
+    }
+    if (rawProgress && (!sig || sig.g !== sigOf(rawProgress))) {
+      if (sig && sig.g) tampered = true;
+      const pr = load(PREFS_KEY) || {};
+      pr.noPetsUntil = todayKey().slice(0, 7); // ändrade framsteg ger inga djur, inte heller den här månaden
+      store(PREFS_KEY, pr);
+      try { store(PROGRESS_KEY, JSON.parse(rawProgress)); } catch { store(PROGRESS_KEY, {}); }
+    }
+    trustedCritical = pickCritical(load(PREFS_KEY) || {});
+    return tampered;
   }
   const progressAll = () => load(PROGRESS_KEY) || {};
   const puzzleId = (date, level) => date + "|" + level;
@@ -85,7 +143,15 @@
     setPref("level", state.level);
   }
 
-  const prefs = () => load(PREFS_KEY) || {};
+  // Belöningsvärdena läses från appens eget minne (verifierat vid start och uppdaterat bara av appen
+  // själv), så att ändringar i lagringen medan appen körs aldrig används eller signeras om.
+  const prefs = () => {
+    const raw = load(PREFS_KEY) || {};
+    if (!trustedCritical) return raw;
+    const out = { ...raw };
+    for (const k of CRITICAL) { if (k in trustedCritical) out[k] = trustedCritical[k]; else delete out[k]; }
+    return out;
+  };
   const MODES = ["cross", "ord", "mek", "eng", "mat"];
   const mode = () => (MODES.includes(prefs().mode) ? prefs().mode : "cross");
   const isQuiz = () => mode() !== "cross"; // Ord och Meningar är frågelägen
@@ -97,6 +163,28 @@
   const fromKey = (k) => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
   const todayKey = () => toKey(new Date());
   const addDays = (k, n) => { const d = fromKey(k); d.setDate(d.getDate() + n); return toKey(d); };
+  // ---------- Skydd mot fusk med klockan ----------
+  // Dagliga belöningar och månadens uppdrag bygger på datumet. Går klockan bakåt mer än 10 minuter
+  // (någon har vridit fram den och sedan tillbaka), eller skiljer den mer än en timme från köptjänstens
+  // server, pausas de dagliga belöningarna tills tiden stämmer igen.
+  let serverOffset = null, clockTampered = false, clockWarned = false;
+  function checkClock() {
+    const now = Date.now(), p = prefs();
+    const max = Number.isFinite(+p.clockMax) ? +p.clockMax : 0;
+    const serverOk = serverOffset !== null && Math.abs(serverOffset) < 60 * 60e3;
+    const skew = serverOffset !== null && !serverOk;
+    const back = !serverOk && max > 0 && now < max - 10 * 60e3;
+    clockTampered = skew || back;
+    if (clockTampered && !clockWarned) { clockWarned = true; setTimeout(() => toast("Telefonens klocka verkar ha ändrats – dagliga belöningar pausas tills tiden stämmer"), 1500); }
+    if (!clockTampered && now > max + 60e3) store(PREFS_KEY, { ...p, clockMax: now });
+    document.documentElement.classList.toggle("clock-off", clockTampered);
+    return clockTampered;
+  }
+  window.__dagsprovServerTime = (ms) => {
+    if (!Number.isFinite(+ms)) return;
+    serverOffset = +ms - Date.now();
+    checkClock();
+  };
   const validDate = (k) => /^\d{4}-\d{2}-\d{2}$/.test(k) && toKey(fromKey(k)) === k && k >= FIRST_DAY && k <= todayKey();
   function longDate(k) {
     const d = fromKey(k);
@@ -874,6 +962,7 @@
   }
   function maybeTrophy(date, kind) {
     setTimeout(checkPets, 3900); // månadens uppdrag kan ha blivit klara
+    setTimeout(maybeAskReminders, 5200);
     const key = `${date}|${kind}`;
     const got = prefs().trophies || {};
     if (got[key] || !allLevelsDone(date, kind)) return;
@@ -961,6 +1050,7 @@
     for (const [id, p] of Object.entries(progressAll())) {
       if (!id.startsWith(month) || !p) continue;
       const [date, rest] = id.split("|");
+      if (date > todayKey()) continue; // framtida datum räknas aldrig
       if (!rest) continue;
       const [kindOrLevel, lvlRaw] = rest.split("-");
       if (lvlRaw !== undefined && Array.isArray(p.answers)) {
@@ -996,16 +1086,30 @@
     return { list, done: list.filter((x) => x.done).length };
   }
   const ownedPets = () => { const o = prefs().pets; return o && typeof o === "object" && !Array.isArray(o) ? o : {}; };
-  const ownsPet = (idx) => Object.keys(ownedPets()).some((m) => +m.slice(5, 7) - 1 === idx);
+  // Köpta djur (25 kr st). I appen kommer listan från köptjänsten (verifierade kvitton), inte från lagringen.
+  const PET_PRICE = { price: DAGSPROV_CONFIG.price("pet") };
+  let boughtPets = new Set();
+  const validPets = (list) => new Set((Array.isArray(list) ? list : []).filter((i) => Number.isInteger(i) && i >= 0 && i < 12));
+  if (window.DagsprovNative && Array.isArray(window.DagsprovNative.petsOwned)) boughtPets = validPets(window.DagsprovNative.petsOwned);
+  window.__dagsprovPets = (list) => {
+    boughtPets = validPets(list);
+    renderPetButton();
+    if ($("pets-dialog").open) renderPets();
+  };
+  const petShop = () => (window.DagsprovNative && window.DagsprovNative.pets) || null;
+  const petShopAvailable = () => !!petShop() || (!petShop() && demoAds());
+  const earnedPet = (idx) => Object.keys(ownedPets()).some((m) => +m.slice(5, 7) - 1 === idx);
+  const ownsPet = (idx) => earnedPet(idx) || boughtPets.has(idx) || (!petShop() && demoAds() && (prefs().demoPets || []).includes(idx));
   function companion() {
     const c = prefs().companion;
     return Number.isInteger(c) && c >= 0 && c < 12 && ownsPet(c) ? PETS[c] : null;
   }
   // Delar ut djur för alla månader där minst 4 uppdrag är klara (även tidigare månader).
   function checkPets() {
-    const owned = ownedPets(), fresh = [];
+    if (checkClock()) return; // inga djur medan klockan är fel
+    const owned = ownedPets(), fresh = [], blockUntil = prefs().noPetsUntil || "";
     for (let m = monthKey(FIRST_DAY); m <= monthKey(todayKey()); m = monthKey(addDays(m + "-28", 7))) {
-      if (owned[m]) continue;
+      if (owned[m] || m <= blockUntil) continue;
       if (monthProgress(m).done >= PET_NEED) { owned[m] = Date.now(); fresh.push(m); }
     }
     if (!fresh.length) return;
@@ -1075,7 +1179,7 @@
         return;
       }
       const i = +b.dataset.pet;
-      if (!ownsPet(i)) { animate(b, "shake", 500); toast(`${PETS[i].name} kan vinnas i ${MONTH_LONG[i]}`); return; }
+      if (!ownsPet(i)) { if (petShopAvailable()) openPetBuy(i); else { animate(b, "shake", 500); toast(`${PETS[i].name} kan vinnas i ${MONTH_LONG[i]}`); } return; }
       if (companion() === PETS[i]) { setPref("companion", null); renderPetButton(); renderPets(); toast("Olle tar över som följeslagare"); scheduleReminders(); return; }
       setCompanion(i);
     }));
@@ -1085,6 +1189,41 @@
   }
   const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"];
   const MONTH_LONG = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"];
+  // Köp ett djur direkt i stället för att vänta på dess månad.
+  function openPetBuy(i) {
+    const pet = PETS[i];
+    $("petbuy-emoji").textContent = pet.e;
+    $("petbuy-emoji").style.setProperty("--c", pet.c);
+    $("petbuy-name").textContent = pet.name;
+    $("petbuy-text").textContent = `Vinn ${petName(pet)} gratis genom månadens uppdrag i ${MONTH_LONG[i]} – eller ta med ${petName(pet)} direkt. Alla djur följer med dig, hejar på dig och ger 1 extra gratis livlina varje dag.`;
+    $("petbuy-buy").textContent = `Köp ${petName(pet)} för ${PET_PRICE.price}`;
+    $("petbuy-buy").disabled = false;
+    $("petbuy-buy").onclick = () => buyPet(i);
+    $("petbuy-dialog").showModal();
+    animate($("petbuy-emoji"), "bounce", 900);
+    if (petShop() && petShop().price) Promise.resolve(petShop().price()).then((pr) => {
+      if (typeof pr === "string" && pr) { PET_PRICE.price = escapeHtml(pr.slice(0, 30)); $("petbuy-buy").textContent = `Köp ${petName(pet)} för ${PET_PRICE.price}`; }
+    }).catch(() => {});
+  }
+  async function buyPet(i) {
+    const btn = $("petbuy-buy");
+    if (btn.disabled) return;
+    btn.disabled = true;
+    let ok = false;
+    try {
+      if (petShop()) ok = !!(await petShop().buy(i));
+      else if (demoAds()) ok = await confirmBox("Förhandsvisning", `I appen öppnas App Stores eller Google Plays köpruta här (${PET_PRICE.price}). Vill du låtsasköpa ${PETS[i].name}?`, "Köp");
+    } catch { ok = false; }
+    btn.disabled = false;
+    if (!ok) return;
+    if (petShop()) boughtPets.add(i); // köptjänsten skickar också den verifierade listan
+    else setPref("demoPets", [...new Set([...(prefs().demoPets || []), i])]);
+    if ($("petbuy-dialog").open) $("petbuy-dialog").close();
+    setCompanion(i);
+    renderPetButton();
+    if ($("pets-dialog").open) renderPets();
+    confetti(1); sound("win"); haptic([20, 80, 20]);
+  }
   function openPets() {
     renderPets();
     $("pets-dialog").showModal();
@@ -1109,6 +1248,7 @@
     "Jag har sparat en klurig matteuppgift åt dig. ➗",
     "Tio snabba frågor – perfekt på bussen eller tåget. 🚆",
     "Varje dag du övar gör provdagen lite lättare. 💪",
+    "Ingen stress – en liten runda när det passar dig. 🌱",
     "{nudge} Ska vi slå förra veckans resultat?",
   ];
   function notifTitle() {
@@ -1123,23 +1263,40 @@
     const line = REMIND_LINES[hashString(`${date}|påminn`) % REMIND_LINES.length];
     return line.replace("{nudge}", m.nudge || "").replace("{wotd}", wotdFor(date).word.toLowerCase()).trim();
   }
+  // Högst en påminnelse per dag, alltid i vänlig ton. Håller sviten på att brytas blir dagens enda
+  // påminnelse en peppande svit-påminnelse (på vald tid, eller 21.30 om den tiden redan har passerat).
   function buildReminders() {
     if (!remindOn()) return [];
     const st = computeStats(), today = todayKey(), now = Date.now(), out = [];
     const practiced = st.playedDays.has(today);
     const [hh, mm] = remindTime().split(":").map(Number);
+    const streakText = `Din svit på ${st.streak} dagar väntar på dig. Ett par minuter räcker för att hålla den vid liv 🔥`;
     for (let d = 0; d < 7; d++) {
       const date = addDays(today, d);
       if (d === 0 && practiced) continue;
       const at = fromKey(date); at.setHours(hh, mm, 0, 0);
-      if (at.getTime() < now + 60000) continue;
-      out.push({ id: `dagsprov-${date}`, title: notifTitle(), body: notifBody(date, d), at: at.getTime() });
-    }
-    if (prefs().remindStreak !== false && !practiced && st.streak >= 2) {
-      const at = fromKey(today); at.setHours(21, 30, 0, 0);
-      if (at.getTime() > now + 60000) out.push({ id: `dagsprov-svit-${today}`, title: notifTitle(), body: `Din svit på ${st.streak} dagar försvinner vid midnatt! Ett par minuter räddar den. 🔥`, at: at.getTime() });
+      const streakToday = d === 0 && prefs().remindStreak !== false && st.streak >= 2;
+      if (at.getTime() < now + 60000) {
+        if (!streakToday) continue;
+        at.setHours(21, 30, 0, 0); // vald tid har passerat – en enda kvällspåminnelse för sviten
+        if (at.getTime() < now + 60000) continue;
+      }
+      out.push({ id: `dagsprov-${date}`, title: notifTitle(), body: streakToday ? streakText : notifBody(date, d), at: at.getTime() });
     }
     return out;
+  }
+  // Frågar om påminnelser vid ett naturligt tillfälle: efter första klara omgången, aldrig vid start.
+  async function maybeAskReminders() {
+    const p = prefs();
+    if (!notifyBridge() || p.remind !== undefined || p.remindAsked || document.querySelector("dialog[open]")) return;
+    setPref("remindAsked", true);
+    const m = mascot();
+    const yes = await confirmBox(`Ska ${petName(m)} påminna dig?`, `En kort påminnelse kl. ${remindTime().replace(":", ".")} de dagar du inte har övat – så håller du sviten vid liv. Du kan ändra eller stänga av det när som helst i Inställningar.`, "Ja, påminn mig");
+    if (!yes) { setPref("remind", false); return; }
+    let ok = false;
+    try { ok = !!(await notifyBridge().permission()); } catch { ok = false; }
+    setPref("remind", ok);
+    if (ok) { scheduleReminders(); toast(`🔔 ${petName(m)} påminner dig kl. ${remindTime().replace(":", ".")}`); }
   }
   function scheduleReminders() {
     const nb = notifyBridge();
@@ -1203,6 +1360,128 @@
     if (nb && nb.test) { try { nb.test({ title, body }); toast("Testnotisen kommer om 5 sekunder – lås gärna skärmen"); } catch { /* */ } }
     else showNotifMock(title, body);
   });
+
+  // ---------- Plus: HP-prognos, smart träning och studieplan ----------
+  // Prognosen är en grov uppskattning utifrån dina svar de senaste 90 dagarna, viktad efter nivå.
+  // Den är inte officiell och kan aldrig bli exakt – det står tydligt i appen.
+  const LEVEL_WEIGHT = { easy: 0.72, medium: 0.88, hard: 1.0, expert: 1.1 };
+  const NORM = [[0, 0], [0.25, 0.1], [0.35, 0.3], [0.45, 0.6], [0.55, 0.9], [0.65, 1.15], [0.75, 1.4], [0.85, 1.65], [0.93, 1.85], [1, 2]];
+  const toNormed = (x) => {
+    for (let i = 1; i < NORM.length; i++) if (x <= NORM[i][0]) {
+      const [a, sa] = NORM[i - 1], [b, sb] = NORM[i];
+      return sa + ((x - a) / (b - a)) * (sb - sa);
+    }
+    return 2;
+  };
+  const PROGNOSIS_MIN = 30; // minst så många svar per del
+  function hpPrognosis() {
+    const since = addDays(todayKey(), -90), part = { verb: { w: 0, n: 0 }, kvant: { w: 0, n: 0 } };
+    const kinds = { ord: "verb", mek: "verb", eng: "verb", mat: "kvant" };
+    const acc = { ord: [0, 0], mek: [0, 0], eng: [0, 0], mat: [0, 0] };
+    for (const [id, p] of Object.entries(progressAll())) {
+      const [date, rest] = id.split("|");
+      if (!rest || date < since || date > todayKey() || !p || !Array.isArray(p.answers)) continue;
+      const [kind, lv] = rest.split("-");
+      const sec = kinds[kind];
+      if (!sec) continue;
+      const f = LEVEL_WEIGHT[(lv || "").split("+")[0]] || 0.88;
+      p.answers.forEach((a, i) => {
+        if (a === null) return;
+        const ok = p.correct && a === p.correct[i];
+        part[sec].n++; part[sec].w += ok ? f : 0;
+        acc[kind][1]++; if (ok) acc[kind][0]++;
+      });
+    }
+    const score = (x) => (x.n >= PROGNOSIS_MIN ? Math.round(toNormed(Math.min(1, x.w / x.n)) * 20) / 20 : null);
+    const verb = score(part.verb), kvant = score(part.kvant);
+    const total = verb !== null && kvant !== null ? Math.round(((verb + kvant) / 2) * 20) / 20 : null;
+    return { verb, kvant, total, need: { verb: Math.max(0, PROGNOSIS_MIN - part.verb.n), kvant: Math.max(0, PROGNOSIS_MIN - part.kvant.n) }, acc };
+  }
+  // Svaga områden: matteområden och delar med lägst andel rätt (minst 3 svar).
+  function weakAreas() {
+    const st = computeStats();
+    const cats = Object.entries(st.cats || {}).filter(([, c]) => c.total >= 3).map(([k, c]) => [k, c.right / c.total]).sort((a, b) => a[1] - b[1]);
+    const parts = ["ord", "mek", "eng", "mat"].map((k) => [k, st.quiz[k].total ? st.quiz[k].right / st.quiz[k].total : null])
+      .sort((a, b) => (a[1] === null ? 1 : b[1] === null ? -1 : a[1] - b[1])); // utan svar sist
+    return { cats: cats.filter(([, a]) => a < 0.75).slice(0, 3).map(([k]) => k), parts, missed: st.missed };
+  }
+  // Anpassad nivå: upp ett steg om det går lätt, ned ett om det går tungt (senaste 30 svaren).
+  function adaptiveLevel(kind) {
+    const rows = Object.entries(progressAll()).filter(([id, p]) => id.includes(`|${kind}-`) && p && Array.isArray(p.answers)).sort(([a], [b]) => (a < b ? 1 : -1));
+    let right = 0, n = 0, lvSum = 0;
+    for (const [id, p] of rows) {
+      const lv = id.split("|")[1].split("-")[1].split("+")[0];
+      p.answers.forEach((a, i) => { if (a !== null && n < 30) { n++; lvSum += LEVEL_KEYS.indexOf(lv); if (p.correct && a === p.correct[i]) right++; } });
+      if (n >= 30) break;
+    }
+    if (n < 8) return prefs().level && LEVELS[prefs().level] ? prefs().level : "medium";
+    const base = Math.round(lvSum / n), accNow = right / n;
+    const idx = Math.max(0, Math.min(3, base + (accNow >= 0.85 ? 1 : accNow <= 0.55 ? -1 : 0)));
+    return LEVEL_KEYS[idx];
+  }
+  // Startar en smart omgång (Plus) i den del man är svagast i – eller i valt läge.
+  async function startSmart(kind) {
+    if (!isPlus() && !(await openPlus("smart"))) return;
+    const weak = weakAreas();
+    const k = kind || (weak.parts.find(([p]) => p !== "mek") || ["mat"])[0];
+    const level = adaptiveLevel(k);
+    const focus = { level, cats: k === "mat" ? weak.cats.filter((c) => c) : [], words: k === "ord" || k === "eng" ? [...weak.missed[k].keys()].slice(0, 6) : [] };
+    const all = progressAll(), date = todayKey();
+    let n = 1;
+    while (all[`${mekId(date, level, k)}+s${n}`] && all[`${mekId(date, level, k)}+s${n}`].done) n++;
+    setPref("focus", { ...(prefs().focus || {}), [`${date}|${k}|${n}`]: focus });
+    for (const d of document.querySelectorAll("dialog[open]")) d.close();
+    if (mode() !== k) { setPref("mode", k); applyMode(true); }
+    openMek(date, level, "next", `s${n}`);
+    toast(`🎯 Smart träning · ${LEVELS[level].label}${focus.cats.length ? " · " + focus.cats.map((c) => HP_MATH.CATS[c]).join(", ") : focus.words.length ? " · dina missade ord" : ""}`);
+  }
+  // Nedräkning till nästa provdag och en enkel plan för dagen.
+  function studyPlan() {
+    const today = todayKey(), next = DAGSPROV_CONFIG.nextHpDate(addDays(today, 1)) || DAGSPROV_CONFIG.nextHpDate(today);
+    const days = next ? Math.round((fromKey(next) - fromKey(today)) / 864e5) : null;
+    const weak = weakAreas();
+    const order = weak.parts.map(([k]) => k);
+    const smartKind = (weak.parts.find(([k, a]) => k !== "mek" && a !== null) || ["mat"])[0];
+    order.splice(order.indexOf(smartKind), 1); order.unshift(smartKind);
+    const names = { ord: "Ord", mek: "Meningar", eng: "Engelska", mat: "Matte" };
+    const intense = days !== null && days <= 21;
+    const plan = [
+      { k: order[0], t: `Smart träning i ${names[order[0]]}`, smart: true },
+      { k: order[1], t: `En omgång ${names[order[1]]}` },
+      { k: "cross", t: "Dagens korsord" },
+    ];
+    if (intense) plan.push({ k: order[2], t: `Extra: ${names[order[2]]} (provet närmar sig!)` });
+    return { next, days, plan, weakCats: weak.cats };
+  }
+  function planCardHtml() {
+    const plus = isPlus(), pr = hpPrognosis(), sp = studyPlan();
+    const fmt = (x) => (x === null ? "–" : x.toFixed(2).replace(".", ","));
+    const lock = plus ? "" : " locked";
+    const need = [pr.need.verb ? `${pr.need.verb} verbala svar` : "", pr.need.kvant ? `${pr.need.kvant} matteuppgifter` : ""].filter(Boolean).join(" och ");
+    return `<div class="chart-card plan-card${lock}">
+      <div class="chart-head"><b>🎯 Din HP-plan</b><span>${plus ? "Plus" : "★ Plus"}</span></div>
+      <div class="plan-count">${sp.days !== null ? `<b>${sp.days}</b><span>dagar kvar till högskoleprovet<br><small>${longDate(sp.next)} · preliminärt datum</small></span>` : "<span>Nästa provdag är inte inlagd än</span>"}</div>
+      <div class="plan-score">
+        <div><small>Verbal</small><b>${plus ? fmt(pr.verb) : "?,??"}</b></div>
+        <div class="tot"><small>Uppskattat resultat</small><b>${plus ? fmt(pr.total) : "?,??"}</b></div>
+        <div><small>Kvantitativ</small><b>${plus ? fmt(pr.kvant) : "?,??"}</b></div>
+      </div>
+      <p class="plan-note">${plus ? (need ? `Prognosen blir säkrare efter ${need} till.` : "En grov uppskattning utifrån dina svar de senaste 90 dagarna – inte ett officiellt resultat.") : "Se ditt uppskattade resultat, en plan för dagen och smart träning i dina svaga områden."}</p>
+      ${plus ? `<ol class="plan-list">${sp.plan.map((x) => `<li><button data-plan-go="${x.k}" data-smart="${x.smart ? 1 : ""}">${escapeHtml(x.t)}<span aria-hidden="true">›</span></button></li>`).join("")}</ol>`
+        : `<button class="pill plus-cta" data-plan-plus>Lås upp med Plus</button>`}
+    </div>`;
+  }
+  function bindPlanCard(root) {
+    root.querySelectorAll("[data-plan-go]").forEach((b) => b.addEventListener("click", () => {
+      const k = b.dataset.planGo;
+      if (b.dataset.smart) return startSmart(k === "cross" ? null : k);
+      $("stats-dialog").close();
+      if (mode() !== k) { setPref("mode", k); applyMode(true); }
+      openCurrent(todayKey(), cur.level);
+    }));
+    const pl = root.querySelector("[data-plan-plus]");
+    if (pl) pl.addEventListener("click", async () => { if (await openPlus("prognos")) showStats(); });
+  }
 
   const PARTY = ["#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#007aff", "#af52de", "#ff2d55", "#5ac8fa"];
   function fxLayer(ms) {
@@ -1465,6 +1744,7 @@
       <div class="stat"><div class="v">${st.days}</div><div class="l">Dagar spelade</div></div>
       <div class="stat"><div class="v">${st.answeredTotal + st.words}</div><div class="l">Ord och frågor</div></div>
       <div class="stat"><div class="v">${st.answeredTotal ? Math.round((st.rightTotal / st.answeredTotal) * 100) : 0}%</div><div class="l">Rätt totalt</div></div></div>`;
+    html += planCardHtml();
     if (empty) {
       html += `<div class="chart-card empty-stats"><div class="big-emoji">📊</div><b>Här samlas allt du gör</b><p>Spela ett korsord eller en omgång Ord, Meningar, Engelska eller Matte så visas diagram och förslag på vad du bör öva på.</p></div>`;
     } else {
@@ -1507,6 +1787,7 @@
     }).join("") + `</div>`;
     $("stats-body").innerHTML = html;
     if ($("stats-rescue")) $("stats-rescue").addEventListener("click", async () => { $("stats-dialog").close(); await rescueStreak(); });
+    bindPlanCard($("stats-body"));
     $("stats-body").classList.remove("anim"); void $("stats-body").offsetWidth; $("stats-body").classList.add("anim");
     $("stats-body").querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => {
       $("stats-dialog").close();
@@ -1793,11 +2074,13 @@
   // och hur lika felsvaren är: på Svår och Expert kommer felsvaren från ord som liknar rätt ord.
   const ORD_TIERS = { easy: [1], medium: [2], hard: [3], expert: [4] };
   const ORD_DISTRACT = { easy: [1, 2], medium: [1, 2, 3], hard: [2, 3, 4], expert: [3, 4] };
-  function ordRound(rng, level) {
+  function ordRound(rng, level, focus) {
     const all = HP_WORDS.map((_, i) => i);
     const ask = all.filter((i) => (ORD_TIERS[level] || ORD_TIERS.medium).includes(TIERS[i]));
     const pool = all.filter((i) => (ORD_DISTRACT[level] || ORD_DISTRACT.medium).includes(TIERS[i]));
-    return shuffled(ask, rng).slice(0, 10).map((id) => {
+    const missed = focus && Array.isArray(focus.words) ? all.filter((i) => focus.words.includes(HP_WORDS[i][0])) : [];
+    const picked = [...new Set([...shuffled(missed, rng), ...shuffled(ask, rng)])].slice(0, 10);
+    return shuffled(picked, rng).map((id) => {
       const [w, clue] = HP_WORDS[id];
       let cand = pool.filter((j) => j !== id && HP_WORDS[j][1] !== clue);
       const other = (j) => HP_WORDS[j][0];
@@ -1829,9 +2112,11 @@
   }
 
   // Engelska (ELF): ordförråd och meningar med luckor, fyra alternativ som på provet.
-  function engRound(rng, level) {
+  function engRound(rng, level, focus) {
     const set = ENG_SETS[level];
-    const vocab = shuffled(HP_ENG_VOCAB.map((_, i) => i), rng).slice(0, set.vocab).map((id) => {
+    const missed = focus && Array.isArray(focus.words) ? HP_ENG_VOCAB.map((_, i) => i).filter((i) => focus.words.includes(HP_ENG_VOCAB[i][0])) : [];
+    const vocabCount = missed.length ? Math.max(set.vocab, Math.min(6, missed.length)) : set.vocab;
+    const vocab = [...new Set([...shuffled(missed, rng), ...shuffled(HP_ENG_VOCAB.map((_, i) => i), rng)])].slice(0, vocabCount).map((id) => {
       const [w, meaning] = HP_ENG_VOCAB[id];
       const others = shuffled(HP_ENG_VOCAB.map((_, j) => j).filter((j) => j !== id), rng).slice(0, 3);
       const opts = shuffled([id, ...others], rng);
@@ -1854,8 +2139,8 @@
   }
 
   // Matte: nya uppgifter varje dag från generatorn i mat.js.
-  function matRound(rng, level) {
-    return HP_MATH.round(rng, level, shuffled).map((t, i) => ({
+  function matRound(rng, level, focus) {
+    return HP_MATH.round(rng, level, shuffled, focus && focus.cats).map((t, i) => ({
       id: t.type + i, label: { kva: "KVA · Jämför kvantiteterna", nog: "NOG · Räcker informationen?" }[t.type] || "XYZ · Beräkna",
       prompt: () => `<span class="math">${t.prompt}</span>`,
       options: t.options, correct: t.correct, fixed: t.fixed, cat: t.cat, steps: t.steps,
@@ -1865,9 +2150,12 @@
 
   const ROUNDS = { ord: ordRound, mek: mekRound, eng: engRound, mat: matRound };
   // Bonusomgångar (livlina) får egna frön: samma nivå, nya frågor.
+  const bonusSuffix = (b) => (!b ? "" : typeof b === "string" ? `+${b}` : `+b${b}`);
   function quizRound(kind, date, level, bonus = 0) {
     const rng = mulberry32(hashString(`${SEED_VERSION}|${kind}|${date}|${level}${bonus ? "|bonus" + bonus : ""}`));
-    const qs = ROUNDS[kind](rng, level);
+    // Smart träning (Plus): fokus på svaga områden, sparat så att omgången blir densamma vid omstart.
+    const focus = typeof bonus === "string" && bonus[0] === "s" ? (prefs().focus || {})[`${date}|${kind}|${bonus.slice(1)}`] : null;
+    const qs = ROUNDS[kind](rng, level, focus);
     return { qs, sig: qs.map((q) => q.id).join(","), correct: qs.map((q) => q.correct) };
   }
 
@@ -1878,7 +2166,7 @@
     cur = { date, level };
     const kind = mode();
     const round = quizRound(kind, date, level, bonus);
-    const saved = progressAll()[mekId(date, level, kind) + (bonus ? `+b${bonus}` : "")];
+    const saved = progressAll()[mekId(date, level, kind) + bonusSuffix(bonus)];
     const blank = () => round.qs.map(() => null);
     mek = { kind, date, level, bonus, ...round, answers: blank(), times: blank(), helped: round.qs.map(() => false), retried: blank(), removed: blank(), halved: blank(), shown: 0, seconds: 0, done: false };
     if (saved && saved.sig === round.sig) {
@@ -1899,7 +2187,7 @@
   function saveMek() {
     if (!mek) return;
     const all = progressAll();
-    all[mekId(mek.date, mek.level, mek.kind) + (mek.bonus ? `+b${mek.bonus}` : "")] = {
+    all[mekId(mek.date, mek.level, mek.kind) + bonusSuffix(mek.bonus)] = {
       sig: mek.sig, answers: mek.answers, correct: mek.correct, times: mek.times, helped: mek.helped, seconds: mek.seconds, done: mek.done,
       retried: mek.retried, removed: mek.removed, halved: mek.halved,
       cats: mek.qs.map((q) => q.cat || null),
@@ -2110,11 +2398,12 @@
         </div>
         <h2>${msg}</h2>
         ${petCheer(mek.date + mek.kind + mek.level + right)}
-        <p>${MODE_NAMES[mek.kind]} · ${LEVELS[mek.level].label}${mek.bonus ? ` · bonusomgång ${mek.bonus}` : ""}${showTime() ? " · " + formatTime(mek.seconds) : ""}</p>
+        <p>${MODE_NAMES[mek.kind]} · ${LEVELS[mek.level].label}${typeof mek.bonus === "string" ? " · 🎯 smart träning" : mek.bonus ? ` · bonusomgång ${mek.bonus}` : ""}${showTime() ? " · " + formatTime(mek.seconds) : ""}</p>
         ${mek.kind === "mat" ? `<p class="bolts">${"⚡".repeat(Math.min(bolts, 10)) || "–"} <span>${bolts} blixtsvar</span></p>` : ""}
         <div class="result-actions">
           ${nextLevel && !mek.bonus ? `<button class="pill" id="mek-next-level">Spela ${LEVELS[nextLevel].label.toLowerCase()}</button>` : ""}
           <button class="pill ghost bonus-btn" id="mek-bonus"><span aria-hidden="true">🎁</span> Bonusomgång</button>
+          ${mek.kind !== "mek" ? `<button class="pill ghost bonus-btn" id="mek-smart"><span aria-hidden="true">🎯</span> Smart träning${isPlus() ? "" : " ★"}</button>` : ""}
         </div>
       </div>
       <div class="list-title">${mek.kind === "mat" ? "Uppgifter och svar" : "Rätt svar"}</div>
@@ -2123,6 +2412,7 @@
     $("mek-result").hidden = false;
     const nl = $("mek-next-level");
     if (nl) nl.addEventListener("click", () => openCurrent(mek.date, nextLevel, "next"));
+    if ($("mek-smart")) $("mek-smart").addEventListener("click", () => startSmart(mek.kind));
     $("mek-bonus").addEventListener("click", async () => {
       if (!(await offerLifeline("bonus"))) return;
       // Nästa lediga bonusomgång för samma dag, läge och nivå.
@@ -2190,6 +2480,7 @@
   // Dagens livlinor (gratis + från filmer) går ut vid midnatt. Köpta livlinor ligger i en egen
   // "bank" som aldrig går ut och kan staplas hur högt som helst.
   function dailyLeft() {
+    if (clockTampered) return 0; // inga dagliga livlinor medan klockan är fel
     const s = lifelineState();
     return Math.max(0, freeToday() + s.extra - s.used);
   }
@@ -2213,6 +2504,11 @@
   const demoAds = () => !nativeAds() && (window.top !== window || /[?&]reklamdemo=1/.test(location.search));
   const adsAvailable = () => (nativeAds() || demoAds()) && adsToday() < MAX_ADS_PER_DAY;
   async function showRewardedAd() {
+    if (adBusy) return false; // en film åt gången
+    adBusy = true;
+    try { return await showRewardedAdInner(); } finally { adBusy = false; }
+  }
+  async function showRewardedAdInner() {
     let ok = false;
     if (nativeAds()) {
       try { ok = !!(await window.DagsprovNative.showRewarded()); } catch { ok = false; }
@@ -2253,6 +2549,7 @@
   // Frågar om en livlina ska användas. Svarar true om användaren fick den (gratis, via film eller Plus).
   let rewardResolve = null;
   function offerLifeline(kind) {
+    if (rewardResolve) return Promise.resolve(false); // ett ark åt gången – dubbeltryck ger inget extra
     // Med Plus är livlinorna obegränsade – inget ark behövs.
     if (isPlus()) { plusBurst(LIFELINES[kind].title); return Promise.resolve(true); }
     const ll = LIFELINES[kind], daily = dailyLeft(), bank = bankLeft(), left = daily + bank, ads = adsAvailable();
@@ -2293,8 +2590,10 @@
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 1600);
   }
-  $("reward-free").addEventListener("click", () => finishReward(spendFreeLifeline()));
+  $("reward-free").addEventListener("click", () => { if (rewardResolve) finishReward(spendFreeLifeline()); });
+  let adBusy = false;
   $("reward-ad").addEventListener("click", async () => {
+    if (!rewardResolve || adBusy) return;
     $("reward-dialog").close();
     const ok = await showRewardedAd();
     if (ok) { addLifelines(AD_LIFELINES); spendFreeLifeline(); }
@@ -2323,9 +2622,9 @@
   // Förbrukningsbara köp (App Store / Google Play). Köpta livlinor går aldrig ut och staplas.
   // Bryggan: DagsprovNative.shop = { products(), buy(id) } där buy svarar med antalet livlinor.
   const SHOP_PACKS = [
-    { id: "lifelines_1", n: 1, price: "5 kr" },
-    { id: "lifelines_5", n: 5, price: "19 kr", badge: "Spara 24 %" },
-    { id: "lifelines_15", n: 15, price: "45 kr", badge: "Bäst värde · spara 40 %" },
+    { id: "lifelines_1", n: 1, price: DAGSPROV_CONFIG.price("lifeline1") },
+    { id: "lifelines_5", n: 5, price: DAGSPROV_CONFIG.price("lifeline5"), badge: `Spara ${Math.round((1 - DAGSPROV_CONFIG.prices.lifeline5 / (5 * DAGSPROV_CONFIG.prices.lifeline1)) * 100)} %` },
+    { id: "lifelines_15", n: 15, price: DAGSPROV_CONFIG.price("lifeline15"), badge: `Bäst värde · spara ${Math.round((1 - DAGSPROV_CONFIG.prices.lifeline15 / (15 * DAGSPROV_CONFIG.prices.lifeline1)) * 100)} %` },
   ];
   const shopBridge = () => (window.DagsprovNative && window.DagsprovNative.shop) || null;
   const shopAvailable = () => !!shopBridge() || (!shopBridge() && demoAds());
@@ -2382,6 +2681,8 @@
     if ($("settings-dialog").open) renderSettings();
     if (mek && !$("mek").hidden) renderLifelineBar();
   }
+  document.querySelector("#open-shop .val").textContent = `från ${DAGSPROV_CONFIG.price("lifeline1")}`;
+  $("reward-buy").querySelector("small").textContent = `Från ${DAGSPROV_CONFIG.price("lifeline1")} · sparas för alltid`;
   $("shop-cancel").addEventListener("click", () => finishShop(0));
   $("shop-dialog").addEventListener("cancel", () => finishShop(0));
   $("shop-plus").addEventListener("click", async () => {
@@ -2400,10 +2701,15 @@
   // Bryggan i appskalet: DagsprovNative.plus = { offerings(), purchase(id), restore(), manage() } och
   // window.__dagsprovPlus(active) när köpstatusen ändras. I förhandsvisningen går köpen att prova på
   // låtsas. På den vanliga webben finns inga köp – där visas att Plus finns i appen.
+  // Priser, provdagar och produkt-id:n ligger i js/config.js (ett ställe).
+  const CFG = window.DAGSPROV_CONFIG;
+  const perMonth = (kr) => `${(kr / 12).toFixed(2).replace(".", ",")} ${CFG.currency}/mån`;
+  const seasonUntil = () => CFG.seasonEnd(Date.now());
+  const shortDate = (ms) => new Date(ms).toLocaleDateString("sv-SE", { day: "numeric", month: "long" });
   const PLUS_PLANS = [
-    { id: "annual", title: "12 månader", price: "199 kr", sub: "16,58 kr/mån", badge: "Spara 53 %", trial: "7 dagar gratis, sedan 199 kr/år" },
-    { id: "monthly", title: "1 månad", price: "35 kr", sub: "per månad" },
-    { id: "lifetime", title: "För alltid", price: "399 kr", sub: "engångsköp" },
+    { id: "annual", title: "12 månader", price: CFG.price("annual"), sub: perMonth(CFG.prices.annual), badge: "Mest värde",
+      trial: `${CFG.annualTrialDays} dagar gratis, sedan ${CFG.price("annual")}/år` },
+    { id: "season", title: "Säsongspass", price: CFG.price("season"), sub: "engångsköp" },
   ];
   const FREE_ARCHIVE_DAYS = 7;
   const TRIAL_HOURS = 24;
@@ -2411,14 +2717,17 @@
   const demoPlus = () => !plusBridge() && demoAds();
   const plusAvailable = () => !!plusBridge() || demoPlus();
   function plusTrialLeft() {
-    const until = prefs().plusTrial || 0;
-    return Math.max(0, until - Date.now());
+    const until = +prefs().plusTrial || 0, left = until - Date.now();
+    // Ogiltig om klockan är fel eller om perioden är längre än en provperiod kan vara.
+    return clockTampered || left > TRIAL_HOURS * 36e5 + 60e3 ? 0 : Math.max(0, left);
   }
+  // Plus i mobilappen kommer bara från köptjänsten (RevenueCat verifierar kvittot mot App Store /
+  // Google Play) och hålls i minnet – aldrig från en sparad flagga som går att ändra.
+  let verifiedPlus = !!(window.DagsprovNative && window.DagsprovNative.plusActive === true);
   function isPlus() {
-    const p = prefs();
     if (plusTrialLeft() > 0) return true;
-    if (plusBridge()) return p.plusNative === true;
-    return demoPlus() && p.plusDemo === true;
+    if (plusBridge()) return verifiedPlus;
+    return demoPlus() && (prefs().plusDemo === true || (+prefs().plusDemoSeason || 0) > Date.now());
   }
   let plusPlan = "annual", plusResolve = null, plusFocus = null;
   let storePlans = null; // planerna som butiken faktiskt erbjuder (null = inte hämtade än)
@@ -2443,7 +2752,7 @@
     $("plus-plans").hidden = owned;
     $("plus-plans").innerHTML = PLUS_PLANS.filter((pl) => !storePlans || storePlans.has(pl.id)).map((pl) => `<button class="plan" role="radio" data-plan="${pl.id}" aria-checked="${pl.id === plusPlan}">
       ${pl.badge ? `<span class="plan-badge">${pl.badge}</span>` : ""}<span class="radio"></span>
-      <span class="plan-t"><b>${pl.title}</b><small>${pl.trial || (pl.id === "lifetime" ? "Betala en gång, behåll för alltid" : "Förnyas varje månad")}</small></span>
+      <span class="plan-t"><b>${pl.title}</b><small>${pl.trial || (pl.id === "season" ? `Till och med provdagen ${shortDate(seasonUntil())} · förnyas inte` : "")}</small></span>
       <span class="plan-p"><b>${pl.price}</b><small>${pl.sub}</small></span></button>`).join("");
     $("plus-plans").querySelectorAll(".plan").forEach((b) => b.addEventListener("click", () => { plusPlan = b.dataset.plan; haptic(6); renderPlus(); }));
     const plan = PLUS_PLANS.find((x) => x.id === plusPlan);
@@ -2451,7 +2760,7 @@
     buy.hidden = owned;
     buy.disabled = !plusAvailable();
     buy.textContent = !plusAvailable() ? "Plus finns i appen för iPhone och Android"
-      : plan.trial ? `Starta ${plan.trial.split(" gratis")[0]} gratis` : plan.id === "lifetime" ? `Köp för ${plan.price}` : `Fortsätt – ${plan.price}/mån`;
+      : plan.trial ? `Starta ${plan.trial.split(" gratis")[0]} gratis` : `Köp säsongspass – ${plan.price}`;
     $("plus-status").hidden = !owned;
     $("plus-status").textContent = owned ? "✓ Du har Dagsprov Plus" + (demoPlus() ? " (förhandsvisning)" : "") : "";
     const canTrial = !plus && adsAvailable() && Date.now() - (prefs().plusTrialAt || 0) > 7 * 864e5;
@@ -2461,9 +2770,10 @@
     $("plus-manage").textContent = demoPlus() ? "Avsluta Plus (förhandsvisning)" : "Hantera abonnemang";
     const store = window.DagsprovNative && window.DagsprovNative.platform === "android" ? "Google Play" : "App Store";
     $("plus-legal").textContent = owned || !plusAvailable() ? ""
-      : plan.id === "lifetime" ? `Engångsköp via ${store}. Inget abonnemang.`
-      : `${plan.trial ? "Efter provperioden förnyas" : "Förnyas"} abonnemanget automatiskt för ${plan.price} per ${plan.id === "annual" ? "år" : "månad"} tills du säger upp det. ` +
-        `Betalningen dras från ditt ${store}-konto. Säg upp när som helst, senast 24 timmar före nästa period, i kontoinställningarna i ${store}.` +
+      : (plan.id === "season"
+        ? `Engångsköp via ${store}. Gäller till och med högskoleprovet ${shortDate(seasonUntil())} och förnyas inte – inget att säga upp.`
+        : `Efter provperioden förnyas abonnemanget automatiskt för ${plan.price} per år tills du säger upp det. ` +
+          `Betalningen dras från ditt ${store}-konto. Säg upp när som helst, senast 24 timmar före nästa period, i kontoinställningarna i ${store}.`) +
         (demoPlus() ? " Förhandsvisning: inga riktiga köp görs här." : "");
   }
   // Öppnar Plus-arket. Svarar true om användaren har Plus när arket stängs.
@@ -2504,10 +2814,9 @@
   // Appskalet anropar denna när köpstatusen hämtats eller ändrats.
   window.__dagsprovPlus = (active) => {
     const was = isPlus();
-    setPref("plusNative", !!active);
+    verifiedPlus = active === true;
     plusChanged(!was && isPlus() && $("plus-dialog").open);
   };
-  if (window.DagsprovNative && typeof window.DagsprovNative.plusActive === "boolean") setPref("plusNative", window.DagsprovNative.plusActive);
   $("plus-buy").addEventListener("click", async () => {
     const btn = $("plus-buy");
     if (btn.disabled) return;
@@ -2525,22 +2834,23 @@
     btn.disabled = false;
     btn.textContent = label;
     if (!ok) return;
-    if (demoPlus()) setPref("plusDemo", true);
-    else setPref("plusNative", true);
+    if (demoPlus()) { if (plusPlan === "season") setPref("plusDemoSeason", seasonUntil()); else setPref("plusDemo", true); }
+    else verifiedPlus = true; // svaret kommer från köptjänsten efter ett verifierat köp
     plusChanged(true);
   });
   $("plus-restore").addEventListener("click", async () => {
     let ok = false;
     try { if (plusBridge()) ok = !!(await plusBridge().restore()); } catch { ok = false; }
-    if (ok) { setPref("plusNative", true); plusChanged(true); }
+    if (ok) { verifiedPlus = true; plusChanged(true); }
     else toast(plusBridge() ? "Hittade inget tidigare köp på det här kontot" : "Inga köp att återställa i förhandsvisningen");
   });
   $("plus-manage").addEventListener("click", () => {
-    if (demoPlus()) { setPref("plusDemo", false); setPref("plusTrial", 0); plusChanged(false); toast("Plus är avslutat i förhandsvisningen"); return; }
+    if (demoPlus()) { setPref("plusDemo", false); setPref("plusDemoSeason", 0); setPref("plusTrial", 0); plusChanged(false); toast("Plus är avslutat i förhandsvisningen"); return; }
     try { plusBridge().manage(); } catch { /* inget att göra */ }
   });
   // Provdag: en film ger 24 timmar Plus, en gång i veckan. Så ser man vad Plus är värt.
   $("plus-trial").addEventListener("click", async () => {
+    if (checkClock()) { toast("Telefonens klocka verkar vara fel – ställ in rätt tid först"); return; }
     const dlg = $("plus-dialog");
     dlg.close();
     const ok = await showRewardedAd();
@@ -2605,10 +2915,14 @@
   }
 
   // --- Andra chans och 50/50 i frågelägena ---
+  let retryBusy = false;
   async function useRetry() {
-    const i = mek.idx;
-    if (!retryPending(i)) return;
-    if (!(await offerLifeline("retry"))) return;
+    const i = mek.idx, m = mek;
+    if (retryBusy || !retryPending(i)) return;
+    retryBusy = true;
+    let ok;
+    try { ok = await offerLifeline("retry"); } finally { retryBusy = false; }
+    if (!ok || mek !== m || mek.idx !== i || !retryPending(i)) return;
     const wrong = mek.answers[i];
     mek.retried[i] = retries(i) + 1;
     mek.removed[i] = [...new Set([...(mek.removed[i] || []), wrong])];
@@ -2620,9 +2934,10 @@
     renderMekDots();
   }
   async function useHalf() {
-    const i = mek.idx, q = mek.qs[i];
+    const i = mek.idx, q = mek.qs[i], m = mek;
     if (mek.done || mek.answers[i] !== null || mek.halved[i]) return;
     if (!(await offerLifeline("half"))) return;
+    if (mek !== m || mek.idx !== i || mek.halved[i] || mek.answers[i] !== null) return;
     const removed = new Set(mek.removed[i] || []);
     const wrong = q.options.map((_, k) => k).filter((k) => k !== q.correct && !removed.has(k));
     const drop = shuffled(wrong, mulberry32(hashString(`${mek.date}|${mek.kind}|${i}|half`))).slice(0, Math.max(0, wrong.length - 1)); // kvar: rätt svar + ett fel
@@ -3179,6 +3494,10 @@
       const PROTECTED = ["plusNative", "plusDemo", "plusTrial", "plusTrialAt", "bank", "bought", "adsToday", "adsWatched", "lifelines", "unlockedDays", "pets", "petNew", "companion", "frozen"];
       const current = prefs();
       for (const k of PROTECTED) { delete data.prefs[k]; if (current[k] !== undefined) data.prefs[k] = current[k]; }
+      for (const k of ["clockMax", "noPetsUntil", "demoPets", "bought"]) { delete data.prefs[k]; if (current[k] !== undefined) data.prefs[k] = current[k]; }
+      // Framsteg från en fil kan inte ge djur för tidigare månader.
+      const prev = monthKey(addDays(todayKey().slice(0, 7) + "-01", -1));
+      if (!data.prefs.noPetsUntil || data.prefs.noPetsUntil < prev) data.prefs.noPetsUntil = prev;
     }
     const n = Object.keys(data.progress).length;
     if (!(await confirmBox("Återställa framsteg?", `Säkerhetskopian innehåller ${n} omgångar. Dina nuvarande framsteg på den här enheten ersätts.`, "Återställ"))) return;
@@ -3286,7 +3605,7 @@
   window.addEventListener("pagehide", () => { save(); saveMek(); });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) { save(); saveMek(); scheduleReminders(); }
-    else { if (cur.date) renderHeader(); renderWotdBadge(); } // "Idag"/"Igår" och dagens ord stämmer även efter midnatt
+    else { checkClock(); if (cur.date) renderHeader(); renderWotdBadge(); } // "Idag"/"Igår" och dagens ord stämmer även efter midnatt
   });
 
   // ---------- Tips om hemskärmen (bara i Safari på iPhone/iPad, en gång) ----------
@@ -3317,6 +3636,10 @@
   }
 
   // ---------- Start ----------
+  if (verifyState()) setTimeout(() => toast("Sparade belöningar hade ändrats och har återställts"), 1200);
+  checkClock();
+  // Djur från en månad som inte har börjat än (klockan har varit framvriden) tas bort.
+  { const o = ownedPets(), now = todayKey().slice(0, 7), keep = Object.fromEntries(Object.entries(o).filter(([m]) => m <= now)); if (Object.keys(keep).length !== Object.keys(o).length) setPref("pets", keep); }
   applyTheme();
   plusChanged(false);
   applyStyle();

@@ -18,10 +18,32 @@
     "android": {
       "package": "com.clementinose.dagsprov",
       "versionCode": 1,
-      "adaptiveIcon": { "foregroundImage": "../icon-1024.png", "backgroundColor": "#1a73e8" }
+      "adaptiveIcon": {
+        "foregroundImage": "../icon-1024.png",
+        "backgroundColor": "#1a73e8"
+      },
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
+      "allowBackup": false
     },
     "plugins": [
-      ["expo-notifications", { "color": "#d9772b" }],
+      [
+        "expo-notifications",
+        {
+          "color": "#d9772b"
+        }
+      ],
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "Om du tillåter det kan reklamfilmerna du själv väljer att titta på anpassas efter dina intressen. Dagsprov säljer aldrig dina uppgifter."
+        }
+      ],
+      "expo-secure-store",
       [
         "react-native-google-mobile-ads",
         {

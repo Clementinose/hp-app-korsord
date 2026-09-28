@@ -459,7 +459,7 @@
         <ul class="list set-list">
           <li><label class="row switch-row"><span class="lbl">Daglig påminnelse</span><input type="checkbox" id="remind-toggle" class="switch"></label></li>
           <li class="row"><span class="lbl">Tid</span><select id="remind-time" class="time-select" aria-label="Tid för påminnelsen"></select></li>
-          <li><label class="row switch-row"><span class="lbl">Rädda sviten på kvällen<small>En extra påminnelse kl. 21.30 om sviten håller på att brytas.</small></span><input type="checkbox" id="remind-streak" class="switch"></label></li>
+          <li><label class="row switch-row"><span class="lbl">Påminn om sviten<small>Håller sviten på att brytas blir dagens påminnelse om den i stället (kl. 21.30 om din tid redan har passerat). Aldrig mer än en påminnelse per dag.</small></span><input type="checkbox" id="remind-streak" class="switch"></label></li>
         </ul>
         <ul class="list set-list">
           <li><button class="row" id="remind-test"><span class="lbl tint">Visa en testnotis</span></button></li>
@@ -636,6 +636,17 @@
     </div>
   </dialog>
 
+  <dialog id="petbuy-dialog" class="reward">
+    <div class="reward-body">
+      <div class="reward-icon petbuy-emoji" id="petbuy-emoji" aria-hidden="true"></div>
+      <h2 id="petbuy-name"></h2>
+      <p id="petbuy-text"></p>
+      <button class="pill plus-cta" id="petbuy-buy"></button>
+      <p class="plus-legal">Engångsköp via App Store eller Google Play. Djuret är ditt för alltid och följer med ditt konto (Återställ köp).</p>
+      <button class="text-btn" data-close>Inte nu</button>
+    </div>
+  </dialog>
+
   <dialog id="petwon-dialog" class="reward petwon">
     <div class="reward-body">
       <div class="petwon-rays" aria-hidden="true"></div>
@@ -686,6 +697,9 @@
         <p id="plus-sub">Öva utan gränser – och stöd en app utan spårning.</p>
       </div>
       <ul class="plus-feats" id="plus-feats">
+        <li data-f="prognos"><i style="--c:#ff9500">🎯</i><span><b>Uppskattat HP-resultat</b>En prognos för verbal och kvantitativ del utifrån dina svar.</span></li>
+        <li data-f="smart"><i style="--c:#5856d6">🧠</i><span><b>Smart träning</b>Svårigheten anpassas efter dig och frågorna fokuserar på dina svaga områden.</span></li>
+        <li data-f="plan"><i style="--c:#30b0c7">⏳</i><span><b>Nedräkning och studieplan</b>Dagar kvar till provet och en enkel plan för varje dag.</span></li>
         <li data-f="lifelines"><i style="--c:#ff3b30">♥</i><span><b>Obegränsade livlinor</b>Andra chans, 50/50, tips och bonusomgångar – utan filmer.</span></li>
         <li data-f="archive"><i style="--c:#007aff">🗓</i><span><b>Hela arkivet</b>Spela alla tidigare dagar i alla lägen och nivåer.</span></li>
         <li data-f="steps"><i style="--c:#34c759">✎</i><span><b>Ledtrådar före svaret</b>Se hur man tänker steg för steg innan du svarar.</span></li>
@@ -775,6 +789,7 @@
       };
     })();
   </script>
+  <script src="js/config.js"></script>
   <script src="js/words.js"></script>
   <script src="js/mek.js"></script>
   <script src="js/wotd.js"></script>

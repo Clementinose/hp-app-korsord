@@ -1966,3 +1966,25 @@ svg.rub { animation: rub .5s ease; transform-origin: 50% 80%; }
 .time-select { margin-left: auto; font: inherit; color: var(--tint); background: var(--fill-2); border: 0; border-radius: 8px; padding: 5px 10px; }
 .time-select:disabled, .switch:disabled { opacity: .45; }
 .lbl.tint { color: var(--tint); }
+.petbuy-emoji { font-size: 46px; }
+html.clock-off .ll-left { opacity: .6; }
+
+/* HP-plan (Plus) */
+.plan-card { display: flex; flex-direction: column; gap: 12px; }
+.plan-count { display: flex; align-items: center; gap: 12px; }
+.plan-count b { font-size: 44px; line-height: 1; font-variant-numeric: tabular-nums; background: linear-gradient(135deg, #ff9500, #ff2d55); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.plan-count span { font-size: 14px; font-weight: 600; }
+.plan-count small { font-weight: 500; color: var(--label-2); }
+.plan-score { display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 8px; text-align: center; }
+.plan-score > div { padding: 10px 4px; border-radius: 14px; background: var(--fill-2); display: flex; flex-direction: column; gap: 2px; }
+.plan-score small { font-size: 11.5px; color: var(--label-2); }
+.plan-score b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.plan-score .tot { background: linear-gradient(135deg, color-mix(in srgb, #ff9500 22%, transparent), color-mix(in srgb, #af52de 22%, transparent)); }
+.plan-score .tot b { font-size: 28px; }
+.plan-card.locked .plan-score b { filter: blur(5px); opacity: .7; }
+.plan-note { margin: 0; font-size: 13px; color: var(--label-2); line-height: 1.4; }
+.plan-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; counter-reset: pl; }
+.plan-list button { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; border-radius: 12px; background: var(--fill-2); font-weight: 600; counter-increment: pl; }
+.plan-list button::before { content: counter(pl); width: 22px; height: 22px; flex: none; border-radius: 11px; display: grid; place-items: center; font-size: 12px; color: #fff; background: var(--tint); }
+.plan-list button span { margin-left: auto; color: var(--label-2); }
+.plan-card .pill { width: 100%; margin: 0; }

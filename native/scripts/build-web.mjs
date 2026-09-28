@@ -15,10 +15,14 @@ html = html.replace(/<script src="(js\/[a-z]+\.js)"><\/script>/g, (_, f) => `<sc
 const png = "data:image/png;base64," + readFileSync(join(root, "icon-180.png")).toString("base64");
 html = html.replace(/src="icon-180.png"/g, `src="${png}"`);
 html = html.replace(/\s*<link rel="(manifest|icon|apple-touch-icon)"[^>]*>/g, "");
-// Säkerhetspolicyn i webbversionen gäller filer från samma webbplats; i appen är allt inbäddat.
-html = html.replace(/\s*<meta http-equiv="Content-Security-Policy"[^>]*>/, "");
+// Säkerhetspolicy för appen: allt är inbäddat, så inget får hämtas utifrån alls.
+html = html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data: blob:; connect-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'">');
 
 const out = join(dirname(fileURLToPath(import.meta.url)), "..", "web", "app-html.js");
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, `// Genereras av scripts/build-web.mjs – ändra inte för hand.\nexport default ${JSON.stringify(html)};\n`);
+// Samma priser och provdagar i appskalet (för säsongspassets giltighet).
+const require_ = (await import("node:module")).createRequire(import.meta.url);
+const config = require_(join(root, "js", "config.js"));
+writeFileSync(join(dirname(out), "config.js"), `// Genereras från js/config.js – ändra där.\nexport const hpDates = ${JSON.stringify(config.hpDates)};\nexport const seasonFallbackDays = ${config.seasonFallbackDays};\nexport const products = ${JSON.stringify(config.products)};\n`);
 console.log(`Klart: web/app-html.js (${Math.round(html.length / 1024)} kB)`);
