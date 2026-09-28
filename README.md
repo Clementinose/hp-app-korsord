@@ -18,7 +18,9 @@
 - Pokal när alla nivåer i ett läge är klara samma dag
 - Produktionsklar: uppdateringsbanner när en ny version finns, felåterställning, kontroll av gamla webbläsare, säkerhetspolicy (CSP), tillgänglighetsetiketter
 - Innehåll: 2 987 HP-ord (varav 622 expertord), 224 dagens ord med exempelmeningar, 188 MEK-frågor, 118 engelska meningar och 481 engelska ord
-- Kan paketeras för App Store med Capacitor – se [APP_STORE.md](APP_STORE.md)
+- **Livlinor**: andra chans efter fel svar (rätt svar hålls hemligt tills du valt), 50/50, extra tips i korsordet, bonusomgångar och rädda en bruten svit. 3 gratis per dag
+- **Frivillig belöningsreklam** i mobilappen: titta på en kort film för en extra livlina – aldrig automatiskt, aldrig banners
+- Mobilapp för iOS och Android med Expo (EAS Build i molnet, AdMob, UMP-samtycke, riktig haptik) – se [native/README.md](native/README.md). Alternativ med Capacitor i [APP_STORE.md](APP_STORE.md)
 - Visa fel: per ord (standard – rätt eller fel visas först när ordet är ifyllt), direkt eller av. Ord som visats som rätt låses
 - Stilval: fyra rutformer (Rundad, Bubblor, Mjuk, Klassisk), sex färgteman och fyra typsnitt
 - Flikrad i botten på iPhone som i iOS-appar

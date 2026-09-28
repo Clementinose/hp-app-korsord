@@ -1,0 +1,23 @@
+{
+  "name": "dagsprov-app",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "build:web": "node scripts/build-web.mjs",
+    "start": "npm run build:web && expo start",
+    "ios": "npm run build:web && eas build --platform ios",
+    "android": "npm run build:web && eas build --platform android",
+    "submit:ios": "eas submit --platform ios",
+    "submit:android": "eas submit --platform android"
+  },
+  "dependencies": {
+    "expo": "*",
+    "expo-haptics": "*",
+    "expo-status-bar": "*",
+    "react": "*",
+    "react-native": "*",
+    "react-native-google-mobile-ads": "*",
+    "react-native-webview": "*"
+  }
+}

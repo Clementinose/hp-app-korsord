@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Dagsprov",
+    "slug": "dagsprov",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "../icon-1024.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#f2f2f7",
+    "ios": {
+      "bundleIdentifier": "com.clementinose.dagsprov",
+      "supportsTablet": true,
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.clementinose.dagsprov",
+      "versionCode": 1,
+      "adaptiveIcon": { "foregroundImage": "../icon-1024.png", "backgroundColor": "#1a73e8" }
+    },
+    "plugins": [
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
+          "delayAppMeasurementInit": true
+        }
+      ]
+    ]
+  }
+}

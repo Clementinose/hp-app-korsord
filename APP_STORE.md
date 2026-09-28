@@ -1,5 +1,11 @@
 # Lägga ut Dagsprov på App Store
 
+> **Rekommenderat sätt: Expo-appen i mappen [`native/`](native/README.md).** Den ger iOS och Android från
+> samma kod, byggs i molnet med EAS Build (ingen Mac behövs) och har frivillig belöningsreklam via AdMob.
+> Följ `native/README.md`. Avsnitten om metadata och juridik nedan gäller fortfarande.
+>
+> Alternativet nedan (Capacitor) kräver en Mac med Xcode och har ingen reklam.
+
 Dagsprov är en webbapp. För att komma in på App Store paketeras den som en riktig iOS-app med
 [Capacitor](https://capacitorjs.com). Alla filer byggs in i appen, så den fungerar helt utan internet.
 Konfigurationen finns redan i repot (`package.json`, `capacitor.config.json` och `scripts/build-www.mjs`).
@@ -63,13 +69,17 @@ Kontrollera att adresserna öppnas innan du skickar in appen (GitHub Pages måst
 > • Statistik som visar vad du bör öva på
 > • Fungerar utan internet, med ljust och mörkt läge
 >
-> Inga konton, ingen reklam och ingen datainsamling – allt sparas bara på din enhet.
+> Inga konton och ingen datainsamling – allt sparas bara på din enhet. Reklam visas bara om du själv
+> väljer att titta på en kort film för en extra livlina.
 >
 > Dagsprov är ett fristående övningsverktyg och har ingen koppling till Universitets- och högskolerådet (UHR).
 > Alla uppgifter är egenskrivna och inte hämtade från riktiga prov.
 
-**App Privacy (integritetsetiketten):** välj **Data Not Collected**. Appen samlar inte in något, har
-ingen analys eller reklam och skickar inget till någon server.
+**App Privacy (integritetsetiketten):**
+- *Utan reklam (Capacitor-versionen):* välj **Data Not Collected**.
+- *Med reklam (Expo-versionen i `native/`):* AdMob samlar in uppgifter. Fyll i enligt Googles vägledning:
+  <https://developers.google.com/admob/ios/privacy/data-disclosure>. Appen begär bara ej anpassade
+  annonser och spårar inte – svara därför **nej** på "tracking" och visa ingen ATT-dialog.
 
 **Skärmdumpar:** minst iPhone 6,9" (1320 × 2868) och iPad 13" (2064 × 2752). Ta dem i simulatorn
 (⌘S) i ljust läge, till exempel av korsordet, Ord, Matte med steg-för-steg, Dagens ord och statistiken.
@@ -87,8 +97,11 @@ ingen analys eller reklam och skickar inget till någon server.
 - [x] Appen säger tydligt att den inte har någon koppling till UHR (hjälp, inställningar, support, beskrivning).
 - [x] Inga tredjepartsresurser: inga externa typsnitt, skript, bilder, SDK:er eller spårning.
 - [x] Integritetspolicy och supportsida finns (`privacy.html`, `support.html`) och i appen.
-- [x] Ingen datainsamling → "Data Not Collected", ingen samtyckesruta behövs.
-- [x] Inga köp, prenumerationer eller annonser.
+- [x] Webbversionen: ingen datainsamling. Mobilappen: bara frivillig belöningsreklam (AdMob), ej anpassad,
+      med Googles samtyckesdialog i EU och en knapp för att ändra samtycket (Inställningar → Samtycke till reklam).
+- [x] Integritetspolicyn beskriver AdMob (`privacy.html`).
+- [x] Inga köp eller prenumerationer.
+- [ ] Fyll i AdMob-appens inställningar: "Designed for families" = nej, men max innehållsklass T (tonåringar).
 - [x] Licens: alla rättigheter förbehållna (`LICENSE`).
 - [ ] Undvik ordet "högskoleprovet" och förkortningen "HP" i **appnamnet** och i skärmdumparnas rubriker –
       använd det bara beskrivande i texten, som ovan. Det minskar risken för varumärkesfrågor och
