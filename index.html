@@ -305,6 +305,8 @@
           <div><b>Dagsprov</b><span id="set-hero-sub">Öva inför högskoleprovet varje dag</span></div>
         </div>
 
+        <button class="plus-row" id="set-plus"><span class="plus-crown" aria-hidden="true">★</span><span class="plus-row-t"><b>Dagsprov Plus</b><span id="val-plus">Obegränsade livlinor, hela arkivet och mer</span></span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+
         <ul class="list set-list">
           <li><button class="row nav" data-push="appearance"><span class="ico" style="--c:#007aff"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><path d="M12 4.5v15" /><path d="M12 4.5a7.5 7.5 0 0 1 0 15z" fill="currentColor"/></svg></span><span class="lbl">Utseende</span><span class="val" id="val-appearance"></span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
         </ul>
@@ -387,6 +389,9 @@
           <button data-accent="pink" role="radio"><i></i><span>Rosa</span></button>
           <button data-accent="orange" role="radio"><i></i><span>Orange</span></button>
           <button data-accent="teal" role="radio"><i></i><span>Turkos</span></button>
+          <button data-accent="gold" role="radio" class="plus-only"><i></i><span>Guld</span></button>
+          <button data-accent="mint" role="radio" class="plus-only"><i></i><span>Mint</span></button>
+          <button data-accent="graphite" role="radio" class="plus-only"><i></i><span>Grafit</span></button>
         </div>
         <div class="list-title">Rutor</div>
         <div class="preset-row" id="cell-picker" role="radiogroup" aria-label="Rutor">
@@ -460,7 +465,7 @@
         <ul class="list legal">
           <li><b>Inga konton.</b> Du behöver inte logga in eller lämna några uppgifter om dig själv.</li>
           <li><b>Ingen insamling.</b> Appen samlar inte in personuppgifter. Det finns ingen analys, ingen spårning och inga cookies från tredje part.</li>
-          <li><b>Reklam bara om du själv vill.</b> Webbversionen har ingen reklam. I mobilappen kan du välja att titta på en kort reklamfilm för att få en extra livlina – aldrig annars. Filmerna kommer från Google AdMob, som då behandlar tekniska uppgifter om enheten (till exempel annons-id, IP-adress och ungefärlig plats) för att kunna visa och mäta annonsen. Annonserna är inte anpassade efter dig, och i EU får du frågan om samtycke först. Läs mer på policies.google.com/technologies/ads.</li>
+          <li><b>Reklam bara om du själv vill.</b> Webbversionen har ingen reklam. I mobilappen kan du välja att titta på en kort reklamfilm för att få extra livlinor, låsa upp en arkivdag eller prova Plus – aldrig annars. Filmerna kommer från Google AdMob, som då behandlar tekniska uppgifter om enheten (till exempel annons-id, IP-adress och ungefärlig plats) för att kunna visa och mäta annonsen. Annonserna är inte anpassade efter dig, och i EU får du frågan om samtycke först. Läs mer på policies.google.com/technologies/ads.</li>
           <li><b>Sparas bara på enheten.</b> Dina framsteg och inställningar sparas i webbläsarens lagring på den här enheten och skickas aldrig till någon server. Lagringen behövs för att appen ska kunna komma ihåg dina svar.</li>
           <li><b>Inga externa tjänster.</b> Appen hämtar inga typsnitt, skript eller bilder från andra webbplatser, och fungerar även utan internet när den väl har laddats.</li>
           <li><b>Webbhotellet.</b> Sidan ligger på GitHub Pages. Som för alla webbplatser kan webbhotellet tillfälligt registrera tekniska uppgifter, till exempel IP-adress, när sidan hämtas. Det styrs av GitHubs integritetspolicy.</li>
@@ -476,7 +481,7 @@
           <li><b>Fristående övningsverktyg.</b> Dagsprov har ingen koppling till, och är inte godkänt eller granskat av, Universitets- och högskolerådet (UHR), som ansvarar för högskoleprovet. Namnet högskoleprovet används bara för att beskriva vad appen hjälper dig att öva inför.</li>
           <li><b>Eget innehåll.</b> Alla ledtrådar, meningar, engelska uppgifter och förklaringar är egenskrivna, och matteuppgifterna skapas av appen själv. Inga frågor är hämtade från publicerade högskoleprov. Uppgifterna följer bara provdelarnas upplägg (ORD, MEK, ELF, XYZ, KVA och NOG).</li>
           <li><b>För övning.</b> Innehållet är till för att öva och kan innehålla fel. Appen ger inga garantier om resultat på det riktiga provet. Officiell information om högskoleprovet finns hos UHR.</li>
-          <li><b>Kostnadsfritt.</b> Appen är gratis. Webbversionen har ingen reklam. I mobilappen finns frivillig belöningsreklam: du kan titta på en kort film för en extra livlina, men reklam visas aldrig av sig själv och allt innehåll går att använda utan att titta.</li>
+          <li><b>Gratis, med frivilliga köp.</b> Dagens övningar, förklaringar och lösningar är gratis. Webbversionen har ingen reklam. I mobilappen finns frivillig belöningsreklam (reklam visas aldrig av sig själv) och <b>Dagsprov Plus</b>, som köps via App Store eller Google Play. Abonnemang förnyas automatiskt tills du säger upp dem i kontoinställningarna i App Store eller Google Play, senast 24 timmar före nästa period. Köp hanteras av Apple eller Google; Dagsprov får aldrig dina betaluppgifter. Användarvillkor: Apples standardvillkor (EULA).</li>
           <li><b>Upphovsrätt.</b> © 2026 Clementinose. Appens kod, texter, frågor, ordförklaringar och grafik får inte kopieras eller återanvändas utan tillstånd. Du får använda appen fritt för eget studiebruk.</li>
           <li><b>Varumärken.</b> Apple, iPhone, iPad och Magic Keyboard är varumärken som tillhör Apple Inc. De nämns bara för att beskriva vilka enheter appen fungerar på.</li>
         </ul>
@@ -551,7 +556,7 @@
         <li><b>Fyra nivåer.</b> Lätt, Medel, Svår och Expert. På Expert kommer ovanliga ord, de svåraste meningarna och de klurigaste matteuppgifterna.</li>
         <li><b>Livlinor.</b> Svarar du fel kan du ta en <b>andra chans</b> – rätt svar visas inte förrän du valt. Du kan också använda <b>50/50</b>, få <b>extra tips</b> i korsordet, spela en <b>bonusomgång</b> eller <b>rädda en bruten svit</b>. Du får 3 gratis livlinor varje dag.</li>
         <li><b>Dagens ord.</b> Tryck på stjärnan uppe till vänster för dagens ord med betydelse och exempelmening. En röd prick betyder att du inte har sett dagens ord än.</li>
-        <li><b>Matte.</b> Nya uppgifter varje dag i stil med XYZ, KVA och NOG. Tryck på 💡 <b>Visa hur man tänker</b> för att se lösningen steg för steg (eller tryck H). Svarar du rätt inom 10 sekunder utan hjälp blir det ⚡ blixtsvar.</li>
+        <li><b>Matte.</b> Nya uppgifter varje dag i stil med XYZ, KVA och NOG. Tryck på 💡 <b>Visa hur man tänker</b> för att se lösningen steg för steg (eller tryck H). Efter svaret är hela lösningen alltid gratis; före svaret räknas den som en ledtråd. Svarar du rätt inom 10 sekunder utan hjälp blir det ⚡ blixtsvar.</li>
         <li><b>Inställningar.</b> Under kugghjulet ställer du in utseende, textstorlek, ljud, haptik, hur fel visas och mycket mer. Där kan du också spara en säkerhetskopia av dina framsteg.</li>
         <li><b>Statistik.</b> Under diagramikonen ser du allt du gjort: aktivitet, din profil per del, matteområden, ord att repetera och förslag på vad du bör öva på.</li>
         <li><b>Snabbt med tangentbord.</b> I frågelägena väljer du med 1–5 eller A–E och går vidare med Enter.</li>
@@ -581,9 +586,55 @@
       <p id="reward-text"></p>
       <div class="reward-lives" id="reward-lives" aria-hidden="true"></div>
       <button class="pill" id="reward-free">Använd gratis livlina</button>
-      <button class="pill ad" id="reward-ad"><span class="play" aria-hidden="true">▶</span><span>Titta på en kort film<small>Frivilligt · ca 15–30 sekunder</small></span></button>
+      <button class="pill ad" id="reward-ad"><span class="play" aria-hidden="true">▶</span><span id="reward-ad-t">Titta på en kort film<small>Frivilligt · ca 15–30 sekunder</small></span></button>
       <p class="reward-note" id="reward-note"></p>
+      <button class="plus-link" id="reward-plus"><span aria-hidden="true">★</span> Obegränsade livlinor med Plus</button>
       <button class="text-btn" id="reward-cancel">Inte nu</button>
+    </div>
+  </dialog>
+
+  <dialog id="day-dialog" class="reward">
+    <div class="reward-body">
+      <div class="reward-icon" style="--c:#007aff" aria-hidden="true">🗓</div>
+      <h2 id="day-title"></h2>
+      <p>De senaste 7 dagarna är gratis. Äldre dagar i arkivet ingår i Plus – eller lås upp just den här dagen med en kort film.</p>
+      <button class="pill plus-cta" id="day-plus"><span aria-hidden="true">★</span> Hela arkivet med Plus</button>
+      <button class="pill ad" id="day-ad"><span class="play" aria-hidden="true">▶</span><span>Lås upp dagen<small>Titta på en kort film · frivilligt</small></span></button>
+      <p class="reward-note" id="day-note"></p>
+      <button class="text-btn" id="day-cancel">Inte nu</button>
+    </div>
+  </dialog>
+
+  <dialog id="plus-dialog" class="sheet tall plus-sheet" aria-labelledby="plus-h">
+    <div class="sheet-bar">
+      <span class="grabber" aria-hidden="true"></span>
+      <h2></h2>
+      <button class="text-btn" data-close>Stäng</button>
+    </div>
+    <div class="sheet-body">
+      <div class="plus-hero">
+        <div class="plus-badge" aria-hidden="true"><span>★</span></div>
+        <h2 id="plus-h">Dagsprov Plus</h2>
+        <p id="plus-sub">Öva utan gränser – och stöd en app utan spårning.</p>
+      </div>
+      <ul class="plus-feats" id="plus-feats">
+        <li data-f="lifelines"><i style="--c:#ff3b30">♥</i><span><b>Obegränsade livlinor</b>Andra chans, 50/50, tips och bonusomgångar – utan filmer.</span></li>
+        <li data-f="archive"><i style="--c:#007aff">🗓</i><span><b>Hela arkivet</b>Spela alla tidigare dagar i alla lägen och nivåer.</span></li>
+        <li data-f="steps"><i style="--c:#34c759">✎</i><span><b>Ledtrådar före svaret</b>Se hur man tänker steg för steg innan du svarar.</span></li>
+        <li data-f="noads"><i style="--c:#af52de">✦</i><span><b>Ingen reklam</b>Inga filmer någonsin – allt ingår.</span></li>
+        <li data-f="accent"><i style="--c:#d4a017">◐</i><span><b>Exklusiva färgteman</b>Guld, Mint och Grafit.</span></li>
+      </ul>
+      <p class="plus-free-note">Gratis för alla, alltid: dagens övningar i alla lägen, förklaringen efter varje svar och hela lösningen steg för steg.</p>
+      <div class="plus-plans" id="plus-plans" role="radiogroup" aria-label="Välj abonnemang"></div>
+      <button class="pill plus-cta" id="plus-buy">Fortsätt</button>
+      <p class="plus-status" id="plus-status" hidden></p>
+      <button class="pill ad plus-trial" id="plus-trial" hidden><span class="play" aria-hidden="true">▶</span><span>Prova Plus gratis i 24 timmar<small>Titta på en kort film · en gång i veckan</small></span></button>
+      <div class="plus-links">
+        <button class="text-btn" id="plus-restore">Återställ köp</button>
+        <button class="text-btn" id="plus-manage" hidden>Hantera abonnemang</button>
+      </div>
+      <p class="plus-legal" id="plus-legal"></p>
+      <p class="plus-legal"><a href="privacy.html" target="_blank" rel="noopener">Integritetspolicy</a> · <a href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/" target="_blank" rel="noopener">Användarvillkor (EULA)</a></p>
     </div>
   </dialog>
 

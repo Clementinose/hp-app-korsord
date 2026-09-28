@@ -1,7 +1,8 @@
 # Lägga ut Dagsprov på App Store
 
 > **Rekommenderat sätt: Expo-appen i mappen [`native/`](native/README.md).** Den ger iOS och Android från
-> samma kod, byggs i molnet med EAS Build (ingen Mac behövs) och har frivillig belöningsreklam via AdMob.
+> samma kod, byggs i molnet med EAS Build (ingen Mac behövs) och har frivillig belöningsreklam via AdMob
+> och köpet Dagsprov Plus via RevenueCat.
 > Följ `native/README.md`. Avsnitten om metadata och juridik nedan gäller fortfarande.
 >
 > Alternativet nedan (Capacitor) kräver en Mac med Xcode och har ingen reklam.
@@ -44,7 +45,7 @@ Efter ändringar i webbappen: kör `npm run sync` och bygg igen i Xcode.
 | Namn | Dagsprov |
 | Underrubrik | Korsord, ord, engelska och matte |
 | Kategori | Utbildning (andra: Ord) |
-| Pris | Gratis |
+| Pris | Gratis (med köp inuti appen: Dagsprov Plus) |
 | Åldersgräns | 4+ (inga känsliga inslag) |
 | Upphovsrätt | © 2026 Clementinose |
 | Supportadress | `https://clementinose.github.io/hp-app-korsord/support.html` |
@@ -69,8 +70,17 @@ Kontrollera att adresserna öppnas innan du skickar in appen (GitHub Pages måst
 > • Statistik som visar vad du bör öva på
 > • Fungerar utan internet, med ljust och mörkt läge
 >
-> Inga konton och ingen datainsamling – allt sparas bara på din enhet. Reklam visas bara om du själv
-> väljer att titta på en kort film för en extra livlina.
+> Inga konton – allt sparas bara på din enhet. Reklam visas bara om du själv väljer att titta på en
+> kort film.
+>
+> DAGSPROV PLUS
+> Obegränsade livlinor, hela arkivet, ledtrådar steg för steg innan du svarar, ingen reklam och
+> exklusiva färgteman. Välj 12 månader (med 7 dagar gratis), 1 månad eller ett engångsköp.
+> Abonnemanget förnyas automatiskt tills du säger upp det i App Store-inställningarna, senast 24 timmar
+> före nästa period.
+>
+> Integritetspolicy: https://clementinose.github.io/hp-app-korsord/privacy.html
+> Användarvillkor: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 >
 > Dagsprov är ett fristående övningsverktyg och har ingen koppling till Universitets- och högskolerådet (UHR).
 > Alla uppgifter är egenskrivna och inte hämtade från riktiga prov.
@@ -80,6 +90,8 @@ Kontrollera att adresserna öppnas innan du skickar in appen (GitHub Pages måst
 - *Med reklam (Expo-versionen i `native/`):* AdMob samlar in uppgifter. Fyll i enligt Googles vägledning:
   <https://developers.google.com/admob/ios/privacy/data-disclosure>. Appen begär bara ej anpassade
   annonser och spårar inte – svara därför **nej** på "tracking" och visa ingen ATT-dialog.
+- *RevenueCat (Plus):* **Purchases → Purchase History** och **Identifiers → User ID**, båda för
+  "App Functionality", inte länkade till spårning.
 
 **Skärmdumpar:** minst iPhone 6,9" (1320 × 2868) och iPad 13" (2064 × 2752). Ta dem i simulatorn
 (⌘S) i ljust läge, till exempel av korsordet, Ord, Matte med steg-för-steg, Dagens ord och statistiken.
@@ -89,7 +101,10 @@ Kontrollera att adresserna öppnas innan du skickar in appen (GitHub Pages måst
 > Dagsprov is a free, offline study app for the Swedish university entrance exam (högskoleprovet).
 > It contains daily crosswords, vocabulary, sentence completion, English and math practice with
 > step-by-step solutions, four difficulty levels, a word of the day and statistics. No account,
-> no ads, no data collection. All content is original and bundled in the app.
+> no account. All content is original and bundled in the app. Optional rewarded ads are only shown when
+> the user taps "watch a short video". Dagsprov Plus (auto-renewable subscription or one-time purchase)
+> unlocks unlimited lifelines, the full archive, hints before answering, no ads and extra color themes;
+> all core learning content stays free. To test: Settings → Dagsprov Plus.
 
 ## Juridisk checklista
 
@@ -100,7 +115,12 @@ Kontrollera att adresserna öppnas innan du skickar in appen (GitHub Pages måst
 - [x] Webbversionen: ingen datainsamling. Mobilappen: bara frivillig belöningsreklam (AdMob), ej anpassad,
       med Googles samtyckesdialog i EU och en knapp för att ändra samtycket (Inställningar → Samtycke till reklam).
 - [x] Integritetspolicyn beskriver AdMob (`privacy.html`).
-- [x] Inga köp eller prenumerationer.
+- [x] Köp (Plus) går via Apples egna köp (StoreKit via RevenueCat) – inga externa betallänkar (3.1.1).
+- [x] Köpsidan visar pris, period, provperiod, att abonnemanget förnyas automatiskt och hur man säger upp,
+      plus länkar till integritetspolicy och användarvillkor (3.1.2). "Återställ köp" finns.
+- [x] Allt grundinnehåll fungerar utan köp; Plus är bekvämlighet och extra (inga låsta lektioner).
+- [ ] Lägg till länken till användarvillkoren (Apples standard-EULA) i appbeskrivningen – finns i förslaget ovan.
+- [ ] Skapa produkterna i App Store Connect och skicka in dem **tillsammans med** första versionen.
 - [ ] Fyll i AdMob-appens inställningar: "Designed for families" = nej, men max innehållsklass T (tonåringar).
 - [x] Licens: alla rättigheter förbehållna (`LICENSE`).
 - [ ] Undvik ordet "högskoleprovet" och förkortningen "HP" i **appnamnet** och i skärmdumparnas rubriker –
