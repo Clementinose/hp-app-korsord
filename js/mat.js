@@ -685,13 +685,34 @@
   };
 
   // En omgång med tio uppgifter. rng styr både urval och siffror.
-  function round(rng, level, shuffle) {
+  // Vilket område varje uppgiftstyp tränar (räknas fram en gång).
+  let typeCats = null;
+  function catOf(type) {
+    if (!typeCats) {
+      typeCats = {};
+      let s = 7;
+      const r = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+      for (const k of Object.keys(T)) { try { typeCats[k] = T[k](r, 0).cat; } catch (e) { typeCats[k] = null; } }
+    }
+    return typeCats[type];
+  }
+  // focus (valfritt): matteområden att träna extra på (smart träning).
+  function round(rng, level, shuffle, focus) {
     // hard: 0 = lätt/medel, 1 = svår, 2 = expert
     const hard = level === "expert" ? 2 : level === "hard" ? 1 : 0;
     const pool = POOL[level] || POOL.medium;
-    const types = level === "expert"
+    let types = level === "expert"
       ? shuffle(pool, rng).slice(0, 5).concat(["kva", "kva", "kva", "nog", "nog"])
       : shuffle(pool, rng).slice(0, 6).concat(["kva", "kva", "kva", "nog"]);
+    if (focus && focus.length) {
+      // Fler uppgifter ur de svaga områdena, fortfarande tio totalt och i provets ordning.
+      const all = Object.keys(POOL).reduce((a, k) => a.concat(POOL[k]), []);
+      const want = [...new Set(all)].filter((t) => focus.includes(catOf(t)));
+      const xyz = shuffle(want, rng).concat(shuffle(pool, rng)).filter((t, i, a) => a.indexOf(t) === i).slice(0, focus.includes("kva") || focus.includes("nog") ? 4 : 6);
+      const kva = focus.includes("kva") ? 4 : 3;
+      const nog = 10 - xyz.length - kva;
+      types = xyz.concat(Array(kva).fill("kva"), Array(nog).fill("nog"));
+    }
     const seen = new Set();
     return types.map((type) => {
       let t, guard = 0;

@@ -64,8 +64,66 @@
   function load(key) {
     try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
   }
+  // Integritetskontroll: det som ger belöningar (livlinor, djur, provperioder, uppdrag) signeras
+  // med en nyckel. I mobilappen är nyckeln slumpad per installation och ligger i telefonens
+  // säkra lagring (Keychain / Keystore), så en ändrad fil går inte att signera om.
+  // Det här är ett hinder mot fusk, inte ett vattentätt skydd – det kräver en server.
+  const SIG_KEY = "hpk-sig-v1";
+  const CRITICAL = ["bank", "bought", "pets", "petNew", "companion", "plusTrial", "plusTrialAt", "plusDemo", "plusDemoSeason", "demoPets",
+    "lifelines", "unlockedDays", "frozen", "adsToday", "clockMax", "noPetsUntil", "petsExtra", "eggs", "petXp", "petGear"];
+  const stateKey = () => (window.DagsprovNative && typeof window.DagsprovNative.stateKey === "string" && window.DagsprovNative.stateKey.length >= 16
+    ? window.DagsprovNative.stateKey : "dagsprov|webb|2026");
+  function cyrb53(str) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
+  const sigOf = (str) => cyrb53(stateKey() + "|" + str) + cyrb53(str + "|" + stateKey());
+  const criticalJson = (p) => JSON.stringify(CRITICAL.map((k) => (p && p[k] !== undefined ? p[k] : null)));
+  let trustedCritical = null;
+  const pickCritical = (p) => Object.fromEntries(CRITICAL.filter((k) => p && p[k] !== undefined).map((k) => [k, p[k]]));
   function store(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* privat läge etc. */ }
+    if (key === PREFS_KEY && trustedCritical) trustedCritical = pickCritical(value);
+    try {
+      const json = JSON.stringify(value);
+      localStorage.setItem(key, json);
+      if (key === PREFS_KEY || key === PROGRESS_KEY) {
+        const sig = load(SIG_KEY) || {};
+        if (key === PREFS_KEY) sig.p = sigOf(criticalJson(value)); else sig.g = sigOf(json);
+        localStorage.setItem(SIG_KEY, JSON.stringify(sig));
+      }
+    } catch { /* privat läge etc. */ }
+  }
+  // Körs vid start. Har någon ändrat i lagringen återställs belöningarna till säkra värden, och
+  // ändrade framsteg kan inte ge djur (själva övningarna behålls – de är ju ditt eget lärande).
+  const SAFE_CRITICAL = { bank: 0, bought: 0, pets: {}, petsExtra: {}, eggs: {}, petXp: {}, petGear: {}, petNew: null, companion: null, plusTrial: 0, plusDemo: false, demoPets: [], unlockedDays: [], frozen: [] };
+  function verifyState() {
+    let sig = null, rawPrefs = null, rawProgress = null;
+    try { sig = JSON.parse(localStorage.getItem(SIG_KEY)); rawPrefs = localStorage.getItem(PREFS_KEY); rawProgress = localStorage.getItem(PROGRESS_KEY); } catch { return; }
+    const p = load(PREFS_KEY);
+    let tampered = false;
+    const hasRewards = p && CRITICAL.some((k) => k !== "clockMax" && p[k] !== undefined && p[k] !== null);
+    if (rawPrefs && (!sig || sig.p !== sigOf(criticalJson(p)))) {
+      if (hasRewards) {
+        const fixed = { ...p, ...SAFE_CRITICAL, lifelines: { date: todayKey(), used: 99, extra: 0 } };
+        store(PREFS_KEY, fixed);
+        tampered = true;
+      } else store(PREFS_KEY, p || {});
+    }
+    if (rawProgress && (!sig || sig.g !== sigOf(rawProgress))) {
+      if (sig && sig.g) tampered = true;
+      const pr = load(PREFS_KEY) || {};
+      pr.noPetsUntil = todayKey().slice(0, 7); // ändrade framsteg ger inga djur, inte heller den här månaden
+      store(PREFS_KEY, pr);
+      try { store(PROGRESS_KEY, JSON.parse(rawProgress)); } catch { store(PROGRESS_KEY, {}); }
+    }
+    trustedCritical = pickCritical(load(PREFS_KEY) || {});
+    return tampered;
   }
   const progressAll = () => load(PROGRESS_KEY) || {};
   const puzzleId = (date, level) => date + "|" + level;
@@ -85,7 +143,15 @@
     setPref("level", state.level);
   }
 
-  const prefs = () => load(PREFS_KEY) || {};
+  // Belöningsvärdena läses från appens eget minne (verifierat vid start och uppdaterat bara av appen
+  // själv), så att ändringar i lagringen medan appen körs aldrig används eller signeras om.
+  const prefs = () => {
+    const raw = load(PREFS_KEY) || {};
+    if (!trustedCritical) return raw;
+    const out = { ...raw };
+    for (const k of CRITICAL) { if (k in trustedCritical) out[k] = trustedCritical[k]; else delete out[k]; }
+    return out;
+  };
   const MODES = ["cross", "ord", "mek", "eng", "mat"];
   const mode = () => (MODES.includes(prefs().mode) ? prefs().mode : "cross");
   const isQuiz = () => mode() !== "cross"; // Ord och Meningar är frågelägen
@@ -97,6 +163,28 @@
   const fromKey = (k) => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
   const todayKey = () => toKey(new Date());
   const addDays = (k, n) => { const d = fromKey(k); d.setDate(d.getDate() + n); return toKey(d); };
+  // ---------- Skydd mot fusk med klockan ----------
+  // Dagliga belöningar och månadens uppdrag bygger på datumet. Går klockan bakåt mer än 10 minuter
+  // (någon har vridit fram den och sedan tillbaka), eller skiljer den mer än en timme från köptjänstens
+  // server, pausas de dagliga belöningarna tills tiden stämmer igen.
+  let serverOffset = null, clockTampered = false, clockWarned = false;
+  function checkClock() {
+    const now = Date.now(), p = prefs();
+    const max = Number.isFinite(+p.clockMax) ? +p.clockMax : 0;
+    const serverOk = serverOffset !== null && Math.abs(serverOffset) < 60 * 60e3;
+    const skew = serverOffset !== null && !serverOk;
+    const back = !serverOk && max > 0 && now < max - 10 * 60e3;
+    clockTampered = skew || back;
+    if (clockTampered && !clockWarned) { clockWarned = true; setTimeout(() => toast("Telefonens klocka verkar ha ändrats – dagliga belöningar pausas tills tiden stämmer"), 1500); }
+    if (!clockTampered && now > max + 60e3) store(PREFS_KEY, { ...p, clockMax: now });
+    document.documentElement.classList.toggle("clock-off", clockTampered);
+    return clockTampered;
+  }
+  window.__dagsprovServerTime = (ms) => {
+    if (!Number.isFinite(+ms)) return;
+    serverOffset = +ms - Date.now();
+    checkClock();
+  };
   const validDate = (k) => /^\d{4}-\d{2}-\d{2}$/.test(k) && toKey(fromKey(k)) === k && k >= FIRST_DAY && k <= todayKey();
   function longDate(k) {
     const d = fromKey(k);
@@ -631,7 +719,9 @@
     });
     sparkle(cells);
     combo++;
+    addPetXp(1);
     if (combo >= 2) comboToast(combo);
+    if (combo > 0 && combo % 4 === 0) setTimeout(() => petParty("happy"), 500);
   }
 
   // När ett ord blir helt ifyllt avgör inställningen vad som visas:
@@ -695,9 +785,35 @@
       .filter(([rr, cc]) => state.entries[rr][cc] && !fixed(rr, cc));
     if (!cells.length) return;
     remember(cells);
+    eraseFx(cells);
     for (const [rr, cc] of cells) { state.entries[rr][cc] = ""; state.wrong[rr][cc] = false; }
     update();
     save();
+  }
+  // Suddgummit sveper över rutorna: bokstäverna smular sönder och blåser bort, en i taget.
+  function eraseFx(cells) {
+    const tool = $("btn-erase").querySelector("svg");
+    animate(tool, "rub", 500);
+    haptic(cells.length > 1 ? [6, 30, 6, 30, 6] : 8);
+    sound("erase");
+    if (reduceMotion()) return;
+    cells.forEach(([r, c], i) => {
+      const el = cellEls[r] && cellEls[r][c];
+      if (!el) return;
+      const ch = state.entries[r][c], b = el.getBoundingClientRect();
+      const ghost = document.createElement("div");
+      ghost.className = "erase-ghost";
+      ghost.textContent = ch;
+      ghost.style.cssText = `left:${b.left}px;top:${b.top}px;width:${b.width}px;height:${b.height}px;font-size:${b.height * 0.55}px;--d:${i * 45}ms;--x:${(i % 2 ? 1 : -1) * (6 + (i * 7) % 10)}px`;
+      for (let k = 0; k < 5; k++) {
+        const dust = document.createElement("i");
+        dust.style.cssText = `--dx:${Math.round(Math.cos(k * 1.3 + i) * 22)}px;--dy:${Math.round(-8 - Math.abs(Math.sin(k * 2.1 + i)) * 22)}px;--k:${k}`;
+        ghost.appendChild(dust);
+      }
+      document.body.appendChild(ghost);
+      animate(el, "erased", 500 + i * 45);
+      setTimeout(() => ghost.remove(), 800 + i * 45);
+    });
   }
 
   function afterChange() {
@@ -834,7 +950,8 @@
     }
     save();
     renderHeader();
-    setTimeout(showWinDialog, gaveUp ? 0 : 1300);
+    if (!gaveUp) setTimeout(() => petParty("win", `${petName(mascot())} ${PD.VOICE_NAMES[voiceOf(mascot())] || "jublar"} – hela korsordet klart!`), 350);
+    setTimeout(showWinDialog, gaveUp ? 0 : petPartyOn() && !reduceMotion() ? 2900 : 1300);
     if (!gaveUp) { const d = state.date; setTimeout(() => maybeTrophy(d, "cross"), 1600); }
   }
 
@@ -847,6 +964,10 @@
     });
   }
   function maybeTrophy(date, kind) {
+    addPetXp(5);
+    eggTick();
+    setTimeout(checkPets, 3900); // månadens uppdrag och milstolpar kan ha blivit klara
+    setTimeout(maybeAskReminders, 5200);
     const key = `${date}|${kind}`;
     const got = prefs().trophies || {};
     if (got[key] || !allLevelsDone(date, kind)) return;
@@ -862,6 +983,813 @@
     el.addEventListener("click", () => el.remove());
     setTimeout(() => el.classList.add("out"), 3200);
     setTimeout(() => el.remove(), 3700);
+  }
+
+  // ---------- Maskotar ----------
+  // Över hundra djur att samla, alla ritade i samma gulliga stil (js/pets.js). Man får dem:
+  // - Månadens djur: klara minst 4 av månadens 6 uppdrag (kommer tillbaka samma månad nästa år).
+  // - Ägg: var tredje avklarade omgång ger ett ägg som kläcks till ett nytt djur (ibland glittrigt!).
+  // - Milstolpar: särskilda djur för första korsordet, långa sviter, många rätt svar …
+  // - Köp: månadens djur och äggdjuren kan också köpas för 25 kr st.
+  // Djuret som följer med dig hejar, firar med sin egen röst och animation när du klarar något, skickar
+  // dina påminnelser, ger 1 extra gratis livlina om dagen och blir din vän: med tiden låser det upp
+  // accessoarer som halsduk, glasögon och krona.
+  const PD = window.DAGSPROV_PETS;
+  const PETS = PD.pets;
+  const MONTH_PETS = PETS.filter((p) => p.source === "month");
+  const CHEERS = {
+    penguin: ["Isande bra!", "Pim glider vidare – du med!"], fox: ["Listigt löst!", "Frida är imponerad!"],
+    hare: ["Hopp hopp – snabbt jobbat!", "Hilda skuttar av glädje!"], hedgehog: ["Vasst!", "Taggad inför nästa?"],
+    koala: ["Kiki kramar dig!", "Mysigt jobbat!"], turtle: ["Sakta men säkert – det lönar sig!", "Uthållighet vinner!"],
+    dolphin: ["Plask! Superbra!", "Doris gör en volt!"], otter: ["Utterst bra!", "Lekande lätt!"],
+    owl: ["Klokt tänkt!", "Visdom på riktigt."], squirrel: ["Nötigt bra!", "Kvickt!"], bear: ["Björnstarkt!", "Stark insats!"],
+    reindeer: ["Ren glädje!", "Stjärnklart!"], elephant: ["En elefant glömmer aldrig – och nu inte du heller!", "Trumpetande bra!"],
+    lion: ["Lejonstarkt!", "Kungligt jobbat!"], unicorn: ["Magiskt!", "Rena glittret!"], dragon: ["Eldigt bra!", "Drakstarkt!"],
+    cat: ["Mjau-bra!", "Kattsnabbt!"], dog: ["Voff – superbra!", "Bästa vännen är stolt!"], frog: ["Kvack-bra!", "Hopp till nästa!"],
+  };
+  const petName = (p) => p.name.split(" ").slice(1).join(" ");
+  const species = (p) => (p && PD.S[p.species]) || null;
+  const voiceOf = (p) => (p.starter ? "monkey" : species(p).voice);
+  function cheersFor(p) {
+    const own = CHEERS[p.species] || [];
+    const n = petName(p);
+    return own.concat([`${n} ${PD.VOICE_NAMES[voiceOf(p)] || "jublar"} av glädje!`, `Snyggt! ${n} är stolt.`, `${n} gör en liten glädjedans!`]);
+  }
+  const nudgeFor = (p) => (p.starter ? OLLE.nudge : `${petName(p)} väntar på dig.`);
+  const OLLE_SVG = `<svg class="olle" viewBox="0 0 64 64" aria-hidden="true">
+    <circle cx="10" cy="35" r="7.5" fill="#c05f1c"/><circle cx="54" cy="35" r="7.5" fill="#c05f1c"/>
+    <circle cx="10" cy="35" r="3.8" fill="#f2b98a"/><circle cx="54" cy="35" r="3.8" fill="#f2b98a"/>
+    <ellipse cx="32" cy="35" rx="22.5" ry="21.5" fill="#d9772b"/>
+    <path d="M23 17c1-6 5-10 8-10-1 3 0 5 2 6 1-3 4-5 7-5-2 2-2 5-1 9z" fill="#d9772b"/>
+    <path d="M32 22.5c-9.5 0-15.5 5.2-15.5 12.3 0 9 7 15.2 15.5 15.2s15.5-6.2 15.5-15.2c0-7.1-6-12.3-15.5-12.3z" fill="#f4c49a"/>
+    <circle cx="19" cy="42" r="2.6" fill="#ff7a6e" fill-opacity=".45"/><circle cx="45" cy="42" r="2.6" fill="#ff7a6e" fill-opacity=".45"/>
+    <g class="olle-eyes"><circle cx="24.8" cy="33" r="2.5" fill="#26262e"/><circle cx="39.2" cy="33" r="2.5" fill="#26262e"/>
+    <circle cx="25.7" cy="32.1" r=".85" fill="#fff"/><circle cx="40.1" cy="32.1" r=".85" fill="#fff"/></g>
+    <circle cx="24.5" cy="32.5" r="6.6" fill="#bfe3ff" fill-opacity=".28" stroke="#26262e" stroke-width="2.4"/>
+    <circle cx="39.5" cy="32.5" r="6.6" fill="#bfe3ff" fill-opacity=".28" stroke="#26262e" stroke-width="2.4"/>
+    <path d="M31.1 32h1.8M17.9 31l-3.6-1.6M46.1 31l3.6-1.6" stroke="#26262e" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M21 29.3a3.4 3.4 0 0 1 3-2" stroke="#fff" stroke-width="1.2" stroke-linecap="round" fill="none" opacity=".8"/>
+    <ellipse cx="32" cy="41" rx="2.3" ry="1.5" fill="#8a4a1c"/>
+    <path d="M27 45c3 2.8 7 2.8 10 0" fill="none" stroke="#8a4a1c" stroke-width="1.9" stroke-linecap="round"/>
+  </svg>`;
+  const OLLE = { id: "olle", e: "🦧", svg: OLLE_SVG, name: "Orangutangen Olle", starter: true, source: "starter",
+    nudge: "Olle har putsat glasögonen och är redo att plugga." };
+  CHEERS.olle = ["Olle putsar glasögonen – imponerande!", "Smart! Olle är stolt.", "Hjärngympa deluxe!"];
+  OLLE.species = "olle";
+  const petById = (id) => (id === "olle" ? OLLE : PD.byId[id] || null);
+  const petColor = (p) => (p.starter ? "#d9772b" : species(p).body === "#ffffff" || species(p).body === "#f4f7fb" || species(p).body === "#fafafa" ? "#8e9bb0" : species(p).body);
+  const petFace = (p, opts) => (p.starter ? (gearOf(p) ? OLLE_SVG.replace("</svg>", `<g transform="translate(-2 -6) scale(.64)">${PD.GEAR[gearOf(p)]()}</g></svg>`) : OLLE_SVG) : PD.svg(p, { gear: gearOf(p), ...(opts || {}) }));
+  const mascot = () => companion() || OLLE; // Olle tar över när inget djur är valt
+  const PET_GIFT = 3, PET_NEED = 4, EGG_EVERY = 3;
+  const MISSIONS = {
+    days: { t: 12, label: "Öva 12 dagar", icon: "📅" },
+    streak: { t: 5, label: "Öva 5 dagar i rad", icon: "🔥" },
+    cross: { t: 6, label: "Lös 6 korsord", icon: "▦" },
+    right: { t: 80, label: "Svara rätt 80 gånger", icon: "✓" },
+    expert: { t: 2, label: "Klara 2 omgångar på Expert", icon: "🎓" },
+    perfect: { t: 3, label: "3 omgångar med alla rätt", icon: "💯" },
+    bolt: { t: 8, label: "8 blixtsvar i Matte", icon: "⚡" },
+    modes: { t: 5, label: "Öva i alla fem lägen", icon: "🧭" },
+    mat: { t: 4, label: "Klara 4 matteomgångar", icon: "➗" },
+    ord: { t: 4, label: "Klara 4 omgångar Ord", icon: "Ab" },
+    eng: { t: 4, label: "Klara 4 omgångar Engelska", icon: "EN" },
+  };
+  const monthKey = (d) => d.slice(0, 7);
+  function missionsFor(month) {
+    return shuffled(Object.keys(MISSIONS), mulberry32(hashString(`${SEED_VERSION}|uppdrag|${month}`))).slice(0, 6);
+  }
+  // Räknar ihop allt man gjort under en månad.
+  function monthStats(month) {
+    const out = { days: 0, streak: 0, cross: 0, right: 0, expert: 0, perfect: 0, bolt: 0, modes: 0, mat: 0, ord: 0, eng: 0 };
+    const played = new Set(), modes = new Set();
+    for (const [id, p] of Object.entries(progressAll())) {
+      if (!id.startsWith(month) || !p) continue;
+      const [date, rest] = id.split("|");
+      if (date > todayKey()) continue; // framtida datum räknas aldrig
+      if (!rest) continue;
+      const [kindOrLevel, lvlRaw] = rest.split("-");
+      if (lvlRaw !== undefined && Array.isArray(p.answers)) {
+        const kind = kindOrLevel, level = lvlRaw.split("+")[0];
+        const ok = (a, i) => a !== null && p.correct && a === p.correct[i];
+        const right = p.answers.filter(ok).length;
+        if (p.answers.some((a) => a !== null)) { played.add(date); modes.add(kind); }
+        out.right += right;
+        if (kind === "mat" && p.times) out.bolt += p.answers.filter((a, i) => ok(a, i) && !(p.helped && p.helped[i]) && p.times[i] !== null && p.times[i] <= boltSeconds()).length;
+        if (!p.done) continue;
+        if (out[kind] !== undefined && kind !== "cross") out[kind]++;
+        if (level === "expert") out.expert++;
+        if (right === p.answers.length) out.perfect++;
+      } else {
+        const started = p.done || (Array.isArray(p.entries) && p.entries.some((row) => Array.isArray(row) && row.some(Boolean)));
+        if (started) { played.add(date); modes.add("cross"); }
+        if (p.done && !p.gaveUp) { out.cross++; if (kindOrLevel === "expert") out.expert++; }
+      }
+    }
+    out.days = played.size;
+    out.modes = modes.size;
+    let run = 0;
+    const [y, m] = month.split("-").map(Number);
+    for (let d = 1; d <= new Date(y, m, 0).getDate(); d++) {
+      run = played.has(`${month}-${String(d).padStart(2, "0")}`) ? run + 1 : 0;
+      out.streak = Math.max(out.streak, run);
+    }
+    return out;
+  }
+  function monthProgress(month) {
+    const st = monthStats(month);
+    const list = missionsFor(month).map((k) => ({ k, ...MISSIONS[k], v: Math.min(st[k], MISSIONS[k].t), done: st[k] >= MISSIONS[k].t }));
+    return { list, done: list.filter((x) => x.done).length };
+  }
+  const petFor = (month) => MONTH_PETS[+month.slice(5, 7) - 1];
+  const ownedPets = () => { const o = prefs().pets; return o && typeof o === "object" && !Array.isArray(o) ? o : {}; };
+  const extraPets = () => { const o = prefs().petsExtra; return o && typeof o === "object" && !Array.isArray(o) ? o : {}; };
+  // Köpta djur (25 kr st). I appen kommer listan från köptjänsten (verifierade kvitton), inte från lagringen.
+  const PET_PRICE = { price: DAGSPROV_CONFIG.price("pet") };
+  const SKU_COUNT = Math.max(...PETS.filter((p) => p.sku).map((p) => p.sku));
+  let boughtPets = new Set();
+  const validPets = (list) => new Set((Array.isArray(list) ? list : []).filter((i) => Number.isInteger(i) && i >= 0 && i < SKU_COUNT));
+  if (window.DagsprovNative && Array.isArray(window.DagsprovNative.petsOwned)) boughtPets = validPets(window.DagsprovNative.petsOwned);
+  window.__dagsprovPets = (list) => {
+    boughtPets = validPets(list);
+    renderPetButton();
+    if ($("pets-dialog").open) renderPets();
+  };
+  const petShop = () => (window.DagsprovNative && window.DagsprovNative.pets) || null;
+  const petShopAvailable = () => !!petShop() || (!petShop() && demoAds());
+  const bought = (p) => !!p.sku && (boughtPets.has(p.sku - 1) || (!petShop() && demoAds() && (prefs().demoPets || []).includes(p.sku - 1)));
+  function ownsPet(p) {
+    if (!p) return false;
+    if (p.starter) return true;
+    if (p.source === "month" && Object.keys(ownedPets()).some((m) => +m.slice(5, 7) - 1 === p.month)) return true;
+    return !!extraPets()[p.id] || bought(p);
+  }
+  const ownedCount = () => PETS.filter(ownsPet).length;
+  function companion() {
+    let c = prefs().companion;
+    if (Number.isInteger(c)) c = MONTH_PETS[c] && MONTH_PETS[c].id; // äldre sparat format
+    const p = typeof c === "string" ? PD.byId[c] : null;
+    return p && ownsPet(p) ? p : null;
+  }
+
+  // --- Vänskap och accessoarer ---
+  const XP_LEVELS = [0, 15, 40, 80, 140, 220, 320, 450, 600, 800];
+  const petXp = (p) => Math.max(0, Math.floor(+((prefs().petXp || {})[p.id]) || 0));
+  const petLevel = (p) => XP_LEVELS.filter((x) => petXp(p) >= x).length;
+  function gearOf(p) {
+    const g = (prefs().petGear || {})[p.id];
+    const def = PD.GEAR_LIST.find((x) => x.id === g);
+    return def && petLevel(p) >= def.level ? g : "";
+  }
+  function addPetXp(n) {
+    if (clockTampered || !n) return;
+    const p = mascot(), before = petLevel(p);
+    setPref("petXp", { ...(prefs().petXp || {}), [p.id]: petXp(p) + n });
+    const after = petLevel(p);
+    if (after > before) {
+      const gear = PD.GEAR_LIST.find((g) => g.level === after);
+      setTimeout(() => petParty("level", `${petName(p)} är nu vän nivå ${after}!${gear ? ` Ny accessoar: ${gear.name.toLowerCase()}.` : ""}`), 900);
+    }
+  }
+
+  // --- Ägg ---
+  const eggState = () => { const e = prefs().eggs || {}; return { prog: +e.prog || 0, ready: +e.ready || 0, hatched: +e.hatched || 0 }; };
+  function eggTick() {
+    if (clockTampered) return;
+    const e = eggState();
+    e.prog++;
+    if (e.prog >= EGG_EVERY) { e.prog = 0; e.ready++; setTimeout(() => rewardBurst("🥚 Du fick ett ägg! Kläck det under Maskotar"), 2400); }
+    setPref("eggs", e);
+    renderPetButton();
+  }
+  // Vad som kläcks bestäms av ett frö som bara appen känner till, så att det inte går att "slå om".
+  function hatchEgg() {
+    const e = eggState();
+    if (!e.ready) return null;
+    const rng = mulberry32(hashString(`${stateKey()}|ägg|${e.hatched}`));
+    const eggs = PETS.filter((p) => p.source === "egg");
+    const glitters = PETS.filter((p) => p.glitter && !ownsPet(p) && (PD.byId[p.base].source === "egg" || PD.byId[p.base].source === "month"));
+    const fresh = eggs.filter((p) => !ownsPet(p));
+    const rare = fresh.filter((p) => p.rarity === "rare");
+    const roll = rng();
+    let got = null;
+    if ((roll < 0.08 || !fresh.length) && glitters.length) got = glitters[Math.floor(rng() * glitters.length)];
+    else if (fresh.length) got = roll < 0.25 && rare.length ? rare[Math.floor(rng() * rare.length)] : fresh[Math.floor(rng() * fresh.length)];
+    e.ready--; e.hatched++;
+    setPref("eggs", e);
+    if (got) setPref("petsExtra", { ...extraPets(), [got.id]: Date.now() });
+    else setPref("bank", bankLeft() + 3); // alla djur redan kläckta: livlinor i stället
+    return got;
+  }
+
+  // --- Milstolpar ---
+  function milestoneValue(kind) {
+    const st = computeStats();
+    if (kind === "cross") return st.crossDone;
+    if (kind === "streak") return Math.max(st.streak, st.bestStreak);
+    if (kind === "right") return st.rightTotal;
+    if (kind === "days") return st.days;
+    if (kind === "perfect") return Object.values(st.quiz).reduce((a, q) => a + q.perfect, 0);
+    if (kind === "trophy") return Object.keys(prefs().trophies || {}).length;
+    if (kind === "expert") return Object.entries(progressAll()).filter(([id, p]) => p && p.done && !p.gaveUp && /(^|\|)([a-z]+-)?expert(\+|$)/.test(id.split("|")[1] || "")).length;
+    return 0;
+  }
+
+  // Delar ut månadens djur och milstolpedjur (även för tidigare månader).
+  function checkPets() {
+    if (checkClock()) return; // inga djur medan klockan är fel
+    const owned = ownedPets(), extra = extraPets(), fresh = [], blockUntil = prefs().noPetsUntil || "";
+    for (let m = monthKey(FIRST_DAY); m <= monthKey(todayKey()); m = monthKey(addDays(m + "-28", 7))) {
+      if (owned[m] || m <= blockUntil) continue;
+      if (monthProgress(m).done >= PET_NEED) { owned[m] = Date.now(); fresh.push(petFor(m)); }
+    }
+    if (!prefs().noPetsUntil || prefs().noPetsUntil < monthKey(todayKey())) {
+      for (const p of PETS.filter((x) => x.source === "milestone")) {
+        if (extra[p.id]) continue;
+        if (milestoneValue(p.goal.kind) >= p.goal.n) { extra[p.id] = Date.now(); fresh.push(p); }
+      }
+    }
+    if (!fresh.length) return;
+    setPref("pets", owned);
+    setPref("petsExtra", extra);
+    setPref("bank", bankLeft() + PET_GIFT * fresh.length);
+    renderPetButton();
+    const last = fresh[fresh.length - 1];
+    if (!document.querySelector("dialog[open]")) showPetWon(last);
+    else setPref("petNew", last.id);
+  }
+  function showPetWon(p, how) {
+    if (typeof p === "string") p = /^\d{4}-\d{2}$/.test(p) ? petFor(p) : petById(p);
+    if (!p) return;
+    $("petwon-emoji").innerHTML = petFace(p, { cls: "big" });
+    $("petwon-emoji").style.setProperty("--c", petColor(p));
+    $("petwon-kicker").textContent = p.glitter ? "✨ Glittrigt djur! ✨" : p.rarity === "legendary" ? "Legendariskt djur!" : "Nytt djur!";
+    $("petwon-name").textContent = p.name;
+    $("petwon-text").textContent = how || (p.source === "month" ? `Du klarade månadens uppdrag och fick ${p.name}! Som present får du ${PET_GIFT} livlinor.`
+      : p.source === "milestone" ? `${p.goal.text} – klart! ${p.name} är din, och du får ${PET_GIFT} livlinor i present.`
+      : `${p.name} är din!`);
+    $("petwon-use").hidden = companion() === p;
+    $("petwon-use").onclick = () => { setCompanion(p.id); $("petwon-dialog").close(); };
+    setPref("petNew", null);
+    $("petwon-dialog").classList.toggle("glitter", !!p.glitter);
+    $("petwon-dialog").showModal();
+    confetti(1.4); haptic([20, 80, 20, 80, 40]);
+    petVoice(voiceOf(p), "win");
+  }
+  function setCompanion(id) {
+    setPref("companion", id);
+    scheduleReminders();
+    renderPetButton();
+    const p = petById(id) || OLLE;
+    rewardBurst(`${p.e} ${petName(p)} följer med dig!`);
+    haptic([10, 30, 10]);
+    petVoice(voiceOf(p), "happy");
+    if ($("pets-dialog").open) renderPets();
+    if ($("pet-dialog").open) renderPetDetail(p);
+  }
+  function petCheer(seed) {
+    const pet = mascot(), lines = cheersFor(pet);
+    const line = lines[hashString(String(seed)) % lines.length];
+    return `<div class="pet-cheer" style="--c:${petColor(pet)}"><span class="pet-mini" aria-hidden="true">${petFace(pet)}</span><span class="bubble">${escapeHtml(line)}</span></div>`;
+  }
+  function renderPetButton() {
+    const pet = mascot(), btn = $("btn-pets");
+    btn.querySelector(".pet-face").innerHTML = petFace(pet);
+    btn.classList.add("has-pet");
+    btn.classList.toggle("has-egg", eggState().ready > 0);
+    btn.setAttribute("aria-label", `Maskotar – ${pet.name}${eggState().ready ? ", ägg att kläcka" : ""}`);
+  }
+
+  // --- Ljud: varje djur har sin egen röst (syntetiserad, inga ljudfiler) ---
+  const petSoundsOn = () => soundOn() && prefs().petSounds !== false;
+  let petNoise = null;
+  function petVoice(voice, kind) {
+    if (!petSoundsOn()) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!audioCtx) { if (navigator.audioSession) navigator.audioSession.type = "ambient"; audioCtx = new AC(); }
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      const ctx = audioCtx, t0 = ctx.currentTime + 0.02, big = kind !== "happy";
+      const out = ctx.createGain(); out.gain.value = 0.9; out.connect(ctx.destination);
+      // Glidande ton med valfri vibrato och filter.
+      const glide = (start, dur, f0, f1, { type = "sine", vol = 0.08, vib = 0, vibRate = 7, f2, lp } = {}) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(f0, t0 + start);
+        if (f2) { o.frequency.exponentialRampToValueAtTime(f1, t0 + start + dur * 0.5); o.frequency.exponentialRampToValueAtTime(f2, t0 + start + dur); }
+        else o.frequency.exponentialRampToValueAtTime(f1, t0 + start + dur);
+        if (vib) { const l = ctx.createOscillator(), lg = ctx.createGain(); l.frequency.value = vibRate; lg.gain.value = vib; l.connect(lg).connect(o.frequency); l.start(t0 + start); l.stop(t0 + start + dur + 0.05); }
+        g.gain.setValueAtTime(0.0001, t0 + start);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + start + Math.min(0.04, dur / 4));
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + start + dur);
+        let node = o;
+        if (lp) { const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = lp; o.connect(f); node = f; }
+        node.connect(g).connect(out);
+        o.start(t0 + start); o.stop(t0 + start + dur + 0.05);
+      };
+      const noise = (start, dur, freq, vol = 0.05) => {
+        if (!petNoise) { petNoise = ctx.createBuffer(1, ctx.sampleRate * 0.6, ctx.sampleRate); const d = petNoise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+        const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+        src.buffer = petNoise; f.type = "bandpass"; f.frequency.value = freq; f.Q.value = 1.2;
+        g.gain.setValueAtTime(0.0001, t0 + start); g.gain.exponentialRampToValueAtTime(vol, t0 + start + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t0 + start + dur);
+        src.connect(f).connect(g).connect(out); src.start(t0 + start); src.stop(t0 + start + dur + 0.05);
+      };
+      const rep = big ? 2 : 1;
+      switch (voice) {
+        case "trumpet": glide(0, 0.18, 330, 520, { type: "sawtooth", vol: 0.06, lp: 1800 }); glide(0.16, big ? 0.7 : 0.4, 520, 700, { type: "sawtooth", vol: 0.07, vib: 18, vibRate: 9, f2: 600, lp: 2200 }); glide(0.16, big ? 0.7 : 0.4, 1040, 1400, { vol: 0.02, f2: 1200 }); break;
+        case "meow": for (let i = 0; i < rep; i++) glide(i * 0.5, 0.42, 620, 980, { type: "triangle", vol: 0.07, f2: 560, vib: 6 }); break;
+        case "woof": for (let i = 0; i < rep + 1; i++) { glide(i * 0.2, 0.13, 260, 150, { type: "square", vol: 0.05, lp: 900 }); noise(i * 0.2, 0.1, 500, 0.03); } break;
+        case "hoot": for (let i = 0; i < rep + 1; i++) glide(i * 0.32, 0.26, 420, 380, { vol: 0.09, vib: 4 }); break;
+        case "chirp": case "squawk": for (let i = 0; i < 2 + rep; i++) glide(i * 0.12, 0.09, voice === "squawk" ? 1400 : 2400, voice === "squawk" ? 2200 : 3400, { type: voice === "squawk" ? "sawtooth" : "sine", vol: voice === "squawk" ? 0.04 : 0.06, lp: 4000 }); break;
+        case "squeak": for (let i = 0; i < 1 + rep; i++) glide(i * 0.16, 0.1, 1300, 2000, { type: "triangle", vol: 0.06 }); break;
+        case "croak": for (let i = 0; i < 1 + rep; i++) glide(i * 0.3, 0.22, 140, 110, { type: "sawtooth", vol: 0.06, vib: 30, vibRate: 32, lp: 700 }); break;
+        case "growl": glide(0, big ? 0.6 : 0.35, 110, 90, { type: "sawtooth", vol: 0.06, vib: 8, vibRate: 22, lp: 500 }); glide(big ? 0.5 : 0.3, 0.2, 180, 260, { type: "triangle", vol: 0.05 }); break;
+        case "boing": for (let i = 0; i < rep + 1; i++) glide(i * 0.22, 0.2, 260, 900, { vol: 0.08 }); break;
+        case "purr": glide(0, big ? 0.9 : 0.5, 70, 75, { type: "sawtooth", vol: 0.05, vib: 20, vibRate: 25, lp: 400 }); glide(big ? 0.7 : 0.4, 0.3, 600, 900, { type: "triangle", vol: 0.05, f2: 650 }); break;
+        case "bubble": for (let i = 0; i < 3 + rep; i++) glide(i * 0.09, 0.08, 400 + i * 180, 900 + i * 220, { vol: 0.06 }); break;
+        case "honk": for (let i = 0; i < 1 + rep; i++) glide(i * 0.24, 0.18, 330, 300, { type: "square", vol: 0.04, lp: 1400 }); break;
+        case "moo": glide(0, big ? 0.9 : 0.55, 180, 150, { type: "sawtooth", vol: 0.06, f2: 140, lp: 800, vib: 3 }); break;
+        case "baa": glide(0, big ? 0.6 : 0.4, 380, 360, { type: "sawtooth", vol: 0.05, vib: 26, vibRate: 12, lp: 1600 }); break;
+        case "oink": for (let i = 0; i < 1 + rep; i++) { glide(i * 0.22, 0.14, 300, 200, { type: "square", vol: 0.04, lp: 900 }); noise(i * 0.22, 0.1, 700, 0.03); } break;
+        case "buzz": glide(0, big ? 0.7 : 0.4, 220, 260, { type: "sawtooth", vol: 0.04, vib: 30, vibRate: 40, lp: 1200, f2: 230 }); break;
+        case "roar": glide(0, big ? 0.8 : 0.45, 160, 90, { type: "sawtooth", vol: 0.07, vib: 12, vibRate: 18, lp: 900 }); noise(0, big ? 0.7 : 0.4, 400, 0.05); break;
+        case "sparkle": [0, 4, 7, 12, 16, 19].slice(0, big ? 6 : 4).forEach((n, i) => glide(i * 0.08, 0.3, 880 * 2 ** (n / 12), 880 * 2 ** (n / 12) * 1.01, { vol: 0.05 })); break;
+        case "click": for (let i = 0; i < 4 + rep * 2; i++) glide(i * 0.06, 0.03, 3000, 2600, { type: "square", vol: 0.03 }); glide(0.4, 0.3, 900, 1600, { vol: 0.05 }); break;
+        case "howl": glide(0, big ? 1.0 : 0.6, 380, 700, { vol: 0.07, f2: 500, vib: 5 }); break;
+        case "yip": for (let i = 0; i < 1 + rep; i++) glide(i * 0.18, 0.12, 900, 1400, { type: "triangle", vol: 0.06, f2: 1000 }); break;
+        case "chitter": for (let i = 0; i < 4 + rep * 2; i++) glide(i * 0.07, 0.05, 1600 + (i % 2) * 400, 1900, { type: "triangle", vol: 0.05 }); break;
+        case "hum": [0, 4, 7].forEach((n, i) => glide(i * 0.18, 0.3, 330 * 2 ** (n / 12), 330 * 2 ** (n / 12), { type: "triangle", vol: 0.06 })); break;
+        case "whinny": glide(0, big ? 0.8 : 0.5, 700, 1100, { type: "sawtooth", vol: 0.04, vib: 40, vibRate: 14, f2: 500, lp: 2400 }); break;
+        case "yawn": glide(0, 0.8, 500, 220, { type: "triangle", vol: 0.06, f2: 180 }); break;
+        case "arf": for (let i = 0; i < 1 + rep; i++) glide(i * 0.2, 0.14, 420, 300, { type: "square", vol: 0.04, lp: 1200 }); break;
+        case "song": glide(0, 0.6, 300, 600, { vol: 0.06, f2: 400, vib: 4 }); if (big) glide(0.6, 0.6, 450, 800, { vol: 0.05, f2: 500, vib: 4 }); break;
+        case "tick": for (let i = 0; i < 5; i++) glide(i * 0.08, 0.03, 2500, 2400, { type: "square", vol: 0.025 }); break;
+        case "monkey": glide(0, 0.18, 400, 700, { type: "triangle", vol: 0.07 }); glide(0.2, 0.18, 450, 750, { type: "triangle", vol: 0.07 }); if (big) glide(0.42, 0.35, 700, 1200, { type: "triangle", vol: 0.07, f2: 900 }); break;
+      }
+    } catch { /* ljud går inte – ingen fara */ }
+  }
+
+  // --- Djuret firar på skärmen ---
+  const TRICKS = ["hop", "spin", "wiggle", "flip", "dance"];
+  let partyTimer = 0;
+  const petPartyOn = () => prefs().petParty !== false;
+  function petParty(kind, text) {
+    const p = mascot();
+    petVoice(voiceOf(p), kind === "happy" ? "happy" : "win");
+    if (!petPartyOn() || reduceMotion()) { if (text) toast(text); return; }
+    const el = $("pet-party");
+    const small = kind === "happy";
+    const trick = TRICKS[hashString(`${Date.now() >> 12}|${p.id}|${kind}`) % TRICKS.length];
+    const line = text || cheersFor(p)[Math.floor(Math.random() * cheersFor(p).length)];
+    el.className = `pet-party ${small ? "small" : "big"} trick-${trick}`;
+    el.style.setProperty("--c", petColor(p));
+    el.innerHTML = `<div class="pp-stage"><div class="pp-pet">${petFace(p, { cls: "party" })}</div><div class="pp-bubble">${escapeHtml(line)}</div>
+      <div class="pp-fx" aria-hidden="true">${Array.from({ length: small ? 5 : 12 }, (_, i) => `<i style="--i:${i};--a:${(i * (360 / (small ? 5 : 12))) | 0}deg">${["♥", "★", "✦", "♪"][i % 4]}</i>`).join("")}</div></div>`;
+    el.hidden = false;
+    clearTimeout(partyTimer);
+    partyTimer = setTimeout(hideParty, small ? 1500 : 2500);
+    el.onclick = hideParty;
+  }
+  function hideParty() {
+    const el = $("pet-party");
+    if (el.hidden) return;
+    el.classList.add("out");
+    setTimeout(() => { el.hidden = true; el.classList.remove("out"); }, 350);
+  }
+
+  // --- Samlingen ---
+  const RARITY = { common: "Vanlig", rare: "Sällsynt", epic: "Episk", legendary: "Legendarisk", glitter: "Glittrig" };
+  let petTab = "all";
+  function howToGet(p) {
+    if (p.starter) return "Appens egen maskot – alltid med dig.";
+    if (p.source === "month") return `Månadens djur i ${MONTH_LONG[p.month]}${petShopAvailable() ? " – eller köp direkt" : ""}.`;
+    if (p.source === "egg") return `Kläcks ur ägg${petShopAvailable() ? " – eller köp direkt" : ""}.`;
+    if (p.source === "milestone") return `Milstolpe: ${p.goal.text.toLowerCase()}.`;
+    return `Sällsynt glittervariant av ${PD.byId[p.base].name.toLowerCase()} – kan kläckas ur ägg.`;
+  }
+  function renderPets() {
+    const month = monthKey(todayKey()), pet = petFor(month), prog = monthProgress(month), owned = ownsPet(pet);
+    const comp = mascot(), eg = eggState();
+    $("pets-hero").innerHTML = `
+      <div class="pet-big${owned ? "" : " locked"}" style="--c:${petColor(pet)}"><span>${petFace(pet)}</span></div>
+      <h3>${owned ? `${pet.name} är din!` : `Månadens djur: ${pet.name}`}</h3>
+      <p>${owned ? "Du har klarat månadens uppdrag. Snyggt!" : `Klara ${PET_NEED} av 6 uppdrag före månadsskiftet så får du ${petName(pet)} – och ${PET_GIFT} livlinor i present.`}</p>
+      <div class="pet-meter"><i style="--w:${Math.min(1, prog.done / PET_NEED)}"></i></div>
+      <small>${prog.done} av 6 uppdrag klara · ${PET_NEED} behövs</small>`;
+    $("pets-missions").innerHTML = prog.list.map((x, i) => `<li class="${x.done ? "done" : ""}" style="--i:${i}">
+      <span class="m-ico" aria-hidden="true">${x.done ? "✓" : x.icon}</span>
+      <span class="m-t"><b>${x.label}</b><span class="m-bar"><i style="--w:${x.v / x.t}"></i></span></span>
+      <span class="m-v">${x.v}/${x.t}</span></li>`).join("");
+    // Ägg
+    $("pets-eggs").innerHTML = `<div class="egg-card${eg.ready ? " ready" : ""}">
+      <div class="egg" aria-hidden="true"><span></span></div>
+      <div class="egg-t"><b>${eg.ready ? `${eg.ready} ${eg.ready === 1 ? "ägg" : "ägg"} att kläcka!` : "Nästa ägg"}</b>
+        <small>${eg.ready ? "Tryck för att se vad som finns inuti" : `Klara ${EGG_EVERY - eg.prog} ${EGG_EVERY - eg.prog === 1 ? "omgång" : "omgångar"} till`}</small>
+        <span class="egg-bar"><i style="--w:${eg.prog / EGG_EVERY}"></i></span></div>
+      ${eg.ready ? `<button class="pill egg-btn" id="egg-hatch">Kläck</button>` : ""}</div>`;
+    if ($("egg-hatch")) $("egg-hatch").addEventListener("click", openHatch);
+    // Samlingen
+    const tabs = { all: "Alla", mine: "Mina", month: "Månad", egg: "Ägg", milestone: "Milstolpar", glitter: "Glitter" };
+    $("pets-tabs").innerHTML = Object.entries(tabs).map(([k, v]) => `<button data-tab="${k}" aria-pressed="${petTab === k}">${v}</button>`).join("");
+    $("pets-tabs").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { petTab = b.dataset.tab; haptic(6); renderPets(); }));
+    const list = [OLLE, ...PETS].filter((p) => petTab === "all" ? true : petTab === "mine" ? ownsPet(p) : petTab === "month" ? p.source === "month" : petTab === "egg" ? p.source === "egg" : petTab === "milestone" ? p.source === "milestone" : p.glitter);
+    $("pets-count").textContent = `${ownedCount() + 1} av ${PETS.length + 1} djur`;
+    const thisMonth = +month.slice(5, 7) - 1;
+    $("pets-grid").innerHTML = list.map((p, i) => {
+      const has = ownsPet(p);
+      const lbl = has ? petName(p) : p.source === "month" ? MONTH_SHORT[p.month] : "???";
+      return `<button class="pet-tile${has ? " owned" : ""}${p.starter ? " starter" : ""}${comp === p ? " active" : ""}${p.source === "month" && p.month === thisMonth ? " now" : ""}${p.glitter ? " glitter" : ""} r-${p.rarity || "common"}" data-pet="${p.id}" style="--c:${petColor(p)};--i:${Math.min(i, 30)}">
+        <span class="pet-e" aria-hidden="true">${has || p.starter ? petFace(p) : PD.svg(p, { cls: "shadow" })}</span><b>${escapeHtml(lbl)}</b>${comp === p ? "<small>Följer med</small>" : has ? `<small>Nivå ${petLevel(p)}</small>` : p.rarity && p.rarity !== "common" ? `<small>${RARITY[p.rarity]}</small>` : ""}</button>`;
+    }).join("");
+    $("pets-grid").querySelectorAll(".pet-tile").forEach((b) => b.addEventListener("click", () => openPetDetail(petById(b.dataset.pet))));
+    $("pets-perk").textContent = companion()
+      ? `${comp.name} följer med dig: firar när du klarar saker, skickar dina påminnelser och ger 1 extra gratis livlina varje dag.`
+      : "Olle, appens egen orangutang, följer med dig tills du väljer ett annat djur. Djur du har vunnit ger dessutom 1 extra gratis livlina varje dag när de följer med.";
+  }
+  const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"];
+  const MONTH_LONG = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"];
+
+  // --- Ett djur i detalj: klappa det, se vänskapen och välj accessoar ---
+  let detailPet = null;
+  function renderPetDetail(p) {
+    detailPet = p;
+    const has = ownsPet(p), lvl = petLevel(p), xp = petXp(p), next = XP_LEVELS[lvl] || null, prev = XP_LEVELS[lvl - 1] || 0;
+    $("pd-stage").innerHTML = `<div class="pd-pet${has ? "" : " locked"}">${has ? petFace(p, { cls: "big" }) : PD.svg(p, { cls: "shadow big" })}</div><div class="pd-floor"></div>`;
+    $("pd-stage").style.setProperty("--c", petColor(p));
+    $("pd-name").textContent = has ? p.name : p.source === "month" ? `${p.name} (låst)` : "Okänt djur";
+    $("pd-rarity").textContent = p.starter ? "Startkompis" : RARITY[p.rarity || "common"];
+    $("pd-rarity").className = `pd-rarity r-${p.starter ? "common" : p.rarity || "common"}`;
+    $("pd-how").textContent = howToGet(p);
+    $("pd-friend").hidden = !has;
+    $("pd-level").textContent = `Vän nivå ${lvl}`;
+    $("pd-xp").style.setProperty("--w", next ? (xp - prev) / (next - prev) : 1);
+    $("pd-xp-t").textContent = next ? `${xp - prev} / ${next - prev} till nästa nivå` : "Bästa vänner – högsta nivån!";
+    const cur = (prefs().petGear || {})[p.id] || "";
+    $("pd-gear").hidden = !has;
+    $("pd-gear").innerHTML = [{ id: "", name: "Ingen", level: 1 }, ...PD.GEAR_LIST].map((g) => {
+      const open = lvl >= g.level;
+      return `<button data-gear="${g.id}" aria-pressed="${cur === g.id || (!cur && !g.id)}" ${open ? "" : "disabled"}>${g.name}${open ? "" : `<small>Nivå ${g.level}</small>`}</button>`;
+    }).join("");
+    $("pd-gear").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+      setPref("petGear", { ...(prefs().petGear || {}), [p.id]: b.dataset.gear });
+      haptic(8); renderPetDetail(p); renderPetButton(); if ($("pets-dialog").open) renderPets();
+      animate($("pd-stage").querySelector(".pd-pet"), "pd-pop", 500);
+    }));
+    const follow = $("pd-follow");
+    follow.hidden = !has;
+    follow.textContent = mascot() === p ? "✓ Följer med dig" : `Låt ${petName(p)} följa med`;
+    follow.disabled = mascot() === p;
+    const buy = $("pd-buy");
+    buy.hidden = has || !p.sku || !petShopAvailable();
+    buy.textContent = `Köp ${p.source === "month" ? petName(p) : "djuret"} för ${PET_PRICE.price}`;
+    $("pd-hint").textContent = has ? `Tryck på ${petName(p)} för att klappa – ${petName(p)} ${PD.VOICE_NAMES[voiceOf(p)] || "blir glad"}!` : "";
+  }
+  function openPetDetail(p) {
+    if (!p) return;
+    renderPetDetail(p);
+    $("pet-dialog").showModal();
+    animate($("pd-stage").querySelector(".pd-pet"), "pd-pop", 600);
+    if (ownsPet(p)) petVoice(voiceOf(p), "happy");
+    if (petShop() && petShop().price && p.sku && !ownsPet(p)) Promise.resolve(petShop().price()).then((pr) => {
+      if (typeof pr === "string" && pr) { PET_PRICE.price = escapeHtml(pr.slice(0, 30)); if (detailPet === p) renderPetDetail(p); }
+    }).catch(() => {});
+  }
+  $("pd-stage").addEventListener("click", (e) => {
+    const p = detailPet;
+    if (!p || !ownsPet(p)) return;
+    const pet = $("pd-stage").querySelector(".pd-pet");
+    animate(pet, "pd-pet-it", 700);
+    petVoice(voiceOf(p), "happy");
+    haptic([6, 30, 6]);
+    const r = $("pd-stage").getBoundingClientRect();
+    for (let i = 0; i < 5; i++) {
+      const h = document.createElement("i");
+      h.className = "pd-heart"; h.textContent = "♥";
+      h.style.cssText = `left:${(e.clientX || r.left + r.width / 2) - r.left - 8 + (i - 2) * 14}px;top:${(e.clientY || r.top + r.height / 2) - r.top - 10}px;--d:${i * 70}ms;--x:${(i - 2) * 10}px`;
+      $("pd-stage").appendChild(h);
+      setTimeout(() => h.remove(), 1200);
+    }
+  });
+  $("pd-follow").addEventListener("click", () => { if (detailPet) { if (detailPet.starter) { setPref("companion", null); renderPetButton(); scheduleReminders(); petVoice("monkey", "happy"); renderPetDetail(detailPet); if ($("pets-dialog").open) renderPets(); } else setCompanion(detailPet.id); } });
+  $("pd-buy").addEventListener("click", () => detailPet && buyPet(detailPet));
+
+  // --- Kläcka ägg ---
+  function openHatch() {
+    if (!eggState().ready) return;
+    const dlg = $("hatch-dialog");
+    $("hatch-stage").className = "hatch-stage";
+    $("hatch-stage").innerHTML = `<div class="big-egg"><span></span></div>`;
+    $("hatch-title").textContent = "Tryck på ägget!";
+    $("hatch-text").textContent = "Det rör sig där inne …";
+    $("hatch-actions").hidden = true;
+    dlg.showModal();
+    let taps = 0;
+    $("hatch-stage").onclick = () => {
+      if ($("hatch-stage").classList.contains("done")) return;
+      taps++;
+      haptic(10); sound("tap");
+      const egg = $("hatch-stage").querySelector(".big-egg");
+      animate(egg, `wobble${taps}`, 500);
+      egg.style.setProperty("--crack", taps);
+      if (taps < 3) return;
+      const got = hatchEgg();
+      $("hatch-stage").classList.add("done");
+      setTimeout(() => {
+        if (!got) { $("hatch-stage").innerHTML = `<div class="hatch-empty">♥♥♥</div>`; $("hatch-title").textContent = "Alla djur kläckta!"; $("hatch-text").textContent = "Du har redan alla äggdjur – här är 3 livlinor i stället."; }
+        else {
+          $("hatch-stage").innerHTML = `<div class="hatch-rays"></div><div class="hatch-pet">${petFace(got, { cls: "big" })}</div><div class="shell l"></div><div class="shell r"></div>`;
+          $("hatch-stage").style.setProperty("--c", petColor(got));
+          $("hatch-title").textContent = got.glitter ? `✨ ${got.name}! ✨` : got.name;
+          $("hatch-text").textContent = got.glitter ? "Ett glittrigt djur – de är riktigt sällsynta!" : `${RARITY[got.rarity || "common"]} · ${petName(got)} ${PD.VOICE_NAMES[voiceOf(got)] || "hälsar"} hej!`;
+          $("hatch-use").onclick = () => { setCompanion(got.id); dlg.close(); };
+          $("hatch-use").hidden = false;
+          petVoice(voiceOf(got), "win");
+        }
+        $("hatch-actions").hidden = false;
+        confetti(got && got.glitter ? 1.6 : 1); haptic([20, 60, 20, 60, 30]);
+        renderPetButton();
+        if ($("pets-dialog").open) renderPets();
+      }, 350);
+    };
+  }
+
+  // Köp ett djur direkt (månadens djur och äggdjuren, 25 kr st).
+  async function buyPet(p) {
+    const btn = $("pd-buy");
+    if (btn.disabled || !p.sku) return;
+    btn.disabled = true;
+    let ok = false;
+    try {
+      if (petShop()) ok = !!(await petShop().buy(p.sku - 1));
+      else if (demoAds()) ok = await confirmBox("Förhandsvisning", `I appen öppnas App Stores eller Google Plays köpruta här (${PET_PRICE.price}). Vill du låtsasköpa ${p.name}?`, "Köp");
+    } catch { ok = false; }
+    btn.disabled = false;
+    if (!ok) return;
+    if (petShop()) boughtPets.add(p.sku - 1); // köptjänsten skickar också den verifierade listan
+    else setPref("demoPets", [...new Set([...(prefs().demoPets || []), p.sku - 1])]);
+    setCompanion(p.id);
+    renderPetButton();
+    if ($("pets-dialog").open) renderPets();
+    renderPetDetail(p);
+    confetti(1); haptic([20, 80, 20]);
+  }
+  function openPets() {
+    renderPets();
+    $("pets-dialog").showModal();
+    const big = $("pets-hero").querySelector(".pet-big");
+    if (big) animate(big, "bounce", 900);
+  }
+  $("btn-pets").addEventListener("click", openPets);
+
+  // ---------- Påminnelser (som i Duolingo, fast med din maskot) ----------
+  // Webbappen räknar fram texterna för de kommande 7 dagarna och ber appskalet schemalägga dem som
+  // lokala notiser (expo-notifications). Allt sker på enheten – ingen server, ingen push-token.
+  // Varje gång appen öppnas eller stängs schemaläggs de om, så att dagens påminnelse hoppas över
+  // om man redan har övat.
+  const notifyBridge = () => (window.DagsprovNative && window.DagsprovNative.notify) || null;
+  const remindSupported = () => !!notifyBridge() || demoAds();
+  const remindOn = () => prefs().remind === true;
+  const remindTime = () => (/^([01]\d|2[0-3]):[0-5]\d$/.test(prefs().remindTime || "") ? prefs().remindTime : "18:00");
+  const REMIND_LINES = [
+    "{nudge} Dagens korsord väntar. 🧩",
+    "Fem minuter om dagen räcker långt. Kör vi en runda?",
+    "Dagens ord är ”{wotd}”. Vet du vad det betyder? 🤔",
+    "Jag har sparat en klurig matteuppgift åt dig. ➗",
+    "Tio snabba frågor – perfekt på bussen eller tåget. 🚆",
+    "Varje dag du övar gör provdagen lite lättare. 💪",
+    "Ingen stress – en liten runda när det passar dig. 🌱",
+    "{nudge} Ska vi slå förra veckans resultat?",
+  ];
+  function notifTitle() {
+    const m = mascot();
+    return `${m.e} ${petName(m)}`;
+  }
+  function notifBody(date, i) {
+    const m = mascot(), month = monthKey(date), prog = monthProgress(month), pet = petFor(month);
+    const left = PET_NEED - prog.done;
+    if (i % 3 === 2 && left > 0 && !ownsPet(pet))
+      return `Bara ${left} ${left === 1 ? "uppdrag" : "uppdrag"} kvar till ${pet.name}! ${pet.e}`;
+    const line = REMIND_LINES[hashString(`${date}|påminn`) % REMIND_LINES.length];
+    return line.replace("{nudge}", nudgeFor(m)).replace("{wotd}", wotdFor(date).word.toLowerCase()).trim();
+  }
+  // Högst en påminnelse per dag, alltid i vänlig ton. Håller sviten på att brytas blir dagens enda
+  // påminnelse en peppande svit-påminnelse (på vald tid, eller 21.30 om den tiden redan har passerat).
+  function buildReminders() {
+    if (!remindOn()) return [];
+    const st = computeStats(), today = todayKey(), now = Date.now(), out = [];
+    const practiced = st.playedDays.has(today);
+    const [hh, mm] = remindTime().split(":").map(Number);
+    const streakText = `Din svit på ${st.streak} dagar väntar på dig. Ett par minuter räcker för att hålla den vid liv 🔥`;
+    for (let d = 0; d < 7; d++) {
+      const date = addDays(today, d);
+      if (d === 0 && practiced) continue;
+      const at = fromKey(date); at.setHours(hh, mm, 0, 0);
+      const streakToday = d === 0 && prefs().remindStreak !== false && st.streak >= 2;
+      if (at.getTime() < now + 60000) {
+        if (!streakToday) continue;
+        at.setHours(21, 30, 0, 0); // vald tid har passerat – en enda kvällspåminnelse för sviten
+        if (at.getTime() < now + 60000) continue;
+      }
+      out.push({ id: `dagsprov-${date}`, title: notifTitle(), body: streakToday ? streakText : notifBody(date, d), at: at.getTime() });
+    }
+    return out;
+  }
+  // Frågar om påminnelser vid ett naturligt tillfälle: efter första klara omgången, aldrig vid start.
+  async function maybeAskReminders() {
+    const p = prefs();
+    if (!notifyBridge() || p.remind !== undefined || p.remindAsked || document.querySelector("dialog[open]")) return;
+    setPref("remindAsked", true);
+    const m = mascot();
+    const yes = await confirmBox(`Ska ${petName(m)} påminna dig?`, `En kort påminnelse kl. ${remindTime().replace(":", ".")} de dagar du inte har övat – så håller du sviten vid liv. Du kan ändra eller stänga av det när som helst i Inställningar.`, "Ja, påminn mig");
+    if (!yes) { setPref("remind", false); return; }
+    let ok = false;
+    try { ok = !!(await notifyBridge().permission()); } catch { ok = false; }
+    setPref("remind", ok);
+    if (ok) { scheduleReminders(); toast(`🔔 ${petName(m)} påminner dig kl. ${remindTime().replace(":", ".")}`); }
+  }
+  function scheduleReminders() {
+    const nb = notifyBridge();
+    if (!nb || !nb.schedule) return;
+    try { nb.schedule(buildReminders()); } catch { /* inget att göra */ }
+  }
+  // Visar en notis som den ser ut på låsskärmen (testknappen och förhandsvisningen).
+  function notifCardHtml(title, body) {
+    return `<div class="notif-card"><span class="notif-app"><img src="${document.querySelector(".set-hero img").getAttribute("src")}" alt=""></span>
+      <span class="notif-t"><span class="notif-top"><b>DAGSPROV</b><small>nu</small></span><b>${escapeHtml(title)}</b><span>${escapeHtml(body)}</span></span>
+      <span class="notif-pet" aria-hidden="true">${petFace(mascot())}</span></div>`;
+  }
+  let mockTimer = 0;
+  function showNotifMock(title, body) {
+    const el = $("notif-mock");
+    el.innerHTML = notifCardHtml(title, body);
+    el.hidden = false;
+    el.classList.remove("out");
+    haptic([8, 40, 8]);
+    clearTimeout(mockTimer);
+    mockTimer = setTimeout(() => { el.classList.add("out"); setTimeout(() => (el.hidden = true), 400); }, 4200);
+    el.onclick = () => { el.classList.add("out"); setTimeout(() => (el.hidden = true), 400); };
+  }
+  function renderRemind() {
+    const on = remindOn();
+    $("remind-toggle").checked = on;
+    $("remind-streak").checked = prefs().remindStreak !== false;
+    const sel = $("remind-time");
+    if (!sel.options.length) {
+      for (let h = 6; h <= 22; h++) for (const m of [0, 30]) {
+        const v = `${String(h).padStart(2, "0")}:${m ? "30" : "00"}`;
+        sel.add(new Option(v.replace(":", "."), v));
+      }
+    }
+    sel.value = remindTime();
+    sel.disabled = !on; $("remind-streak").disabled = !on;
+    $("remind-toggle").disabled = !remindSupported();
+    $("notif-preview").innerHTML = notifCardHtml(notifTitle(), notifBody(todayKey(), 0));
+    const note = $("remind-note");
+    note.dataset.base = note.dataset.base || note.textContent;
+    note.textContent = (remindSupported() ? "" : "Påminnelser finns i appen för iPhone och Android. ") + note.dataset.base;
+  }
+  $("remind-toggle").addEventListener("change", async (e) => {
+    const want = e.target.checked;
+    if (want && notifyBridge() && notifyBridge().permission) {
+      let ok = false;
+      try { ok = !!(await notifyBridge().permission()); } catch { ok = false; }
+      if (!ok) { e.target.checked = false; toast("Tillåt notiser för Dagsprov i telefonens inställningar"); return; }
+    }
+    setPref("remind", want);
+    haptic(8);
+    renderRemind();
+    scheduleReminders();
+    if (want) showNotifMock(notifTitle(), notifBody(todayKey(), 0));
+  });
+  $("remind-streak").addEventListener("change", (e) => { setPref("remindStreak", e.target.checked); scheduleReminders(); });
+  $("remind-time").addEventListener("change", (e) => { setPref("remindTime", e.target.value); scheduleReminders(); toast(`Påminnelse kl. ${e.target.value.replace(":", ".")} varje dag`); });
+  $("remind-test").addEventListener("click", () => {
+    const title = notifTitle(), body = notifBody(todayKey(), 1);
+    const nb = notifyBridge();
+    if (nb && nb.test) { try { nb.test({ title, body }); toast("Testnotisen kommer om 5 sekunder – lås gärna skärmen"); } catch { /* */ } }
+    else showNotifMock(title, body);
+  });
+
+  // ---------- Plus: HP-prognos, smart träning och studieplan ----------
+  // Prognosen är en grov uppskattning utifrån dina svar de senaste 90 dagarna, viktad efter nivå.
+  // Den är inte officiell och kan aldrig bli exakt – det står tydligt i appen.
+  const LEVEL_WEIGHT = { easy: 0.72, medium: 0.88, hard: 1.0, expert: 1.1 };
+  const NORM = [[0, 0], [0.25, 0.1], [0.35, 0.3], [0.45, 0.6], [0.55, 0.9], [0.65, 1.15], [0.75, 1.4], [0.85, 1.65], [0.93, 1.85], [1, 2]];
+  const toNormed = (x) => {
+    for (let i = 1; i < NORM.length; i++) if (x <= NORM[i][0]) {
+      const [a, sa] = NORM[i - 1], [b, sb] = NORM[i];
+      return sa + ((x - a) / (b - a)) * (sb - sa);
+    }
+    return 2;
+  };
+  const PROGNOSIS_MIN = 30; // minst så många svar per del
+  function hpPrognosis() {
+    const since = addDays(todayKey(), -90), part = { verb: { w: 0, n: 0 }, kvant: { w: 0, n: 0 } };
+    const kinds = { ord: "verb", mek: "verb", eng: "verb", mat: "kvant" };
+    const acc = { ord: [0, 0], mek: [0, 0], eng: [0, 0], mat: [0, 0] };
+    for (const [id, p] of Object.entries(progressAll())) {
+      const [date, rest] = id.split("|");
+      if (!rest || date < since || date > todayKey() || !p || !Array.isArray(p.answers)) continue;
+      const [kind, lv] = rest.split("-");
+      const sec = kinds[kind];
+      if (!sec) continue;
+      const f = LEVEL_WEIGHT[(lv || "").split("+")[0]] || 0.88;
+      p.answers.forEach((a, i) => {
+        if (a === null) return;
+        const ok = p.correct && a === p.correct[i];
+        part[sec].n++; part[sec].w += ok ? f : 0;
+        acc[kind][1]++; if (ok) acc[kind][0]++;
+      });
+    }
+    const score = (x) => (x.n >= PROGNOSIS_MIN ? Math.round(toNormed(Math.min(1, x.w / x.n)) * 20) / 20 : null);
+    const verb = score(part.verb), kvant = score(part.kvant);
+    const total = verb !== null && kvant !== null ? Math.round(((verb + kvant) / 2) * 20) / 20 : null;
+    return { verb, kvant, total, need: { verb: Math.max(0, PROGNOSIS_MIN - part.verb.n), kvant: Math.max(0, PROGNOSIS_MIN - part.kvant.n) }, acc };
+  }
+  // Svaga områden: matteområden och delar med lägst andel rätt (minst 3 svar).
+  function weakAreas() {
+    const st = computeStats();
+    const cats = Object.entries(st.cats || {}).filter(([, c]) => c.total >= 3).map(([k, c]) => [k, c.right / c.total]).sort((a, b) => a[1] - b[1]);
+    const parts = ["ord", "mek", "eng", "mat"].map((k) => [k, st.quiz[k].total ? st.quiz[k].right / st.quiz[k].total : null])
+      .sort((a, b) => (a[1] === null ? 1 : b[1] === null ? -1 : a[1] - b[1])); // utan svar sist
+    return { cats: cats.filter(([, a]) => a < 0.75).slice(0, 3).map(([k]) => k), parts, missed: st.missed };
+  }
+  // Anpassad nivå: upp ett steg om det går lätt, ned ett om det går tungt (senaste 30 svaren).
+  function adaptiveLevel(kind) {
+    const rows = Object.entries(progressAll()).filter(([id, p]) => id.includes(`|${kind}-`) && p && Array.isArray(p.answers)).sort(([a], [b]) => (a < b ? 1 : -1));
+    let right = 0, n = 0, lvSum = 0;
+    for (const [id, p] of rows) {
+      const lv = id.split("|")[1].split("-")[1].split("+")[0];
+      p.answers.forEach((a, i) => { if (a !== null && n < 30) { n++; lvSum += LEVEL_KEYS.indexOf(lv); if (p.correct && a === p.correct[i]) right++; } });
+      if (n >= 30) break;
+    }
+    if (n < 8) return prefs().level && LEVELS[prefs().level] ? prefs().level : "medium";
+    const base = Math.round(lvSum / n), accNow = right / n;
+    const idx = Math.max(0, Math.min(3, base + (accNow >= 0.85 ? 1 : accNow <= 0.55 ? -1 : 0)));
+    return LEVEL_KEYS[idx];
+  }
+  // Startar en smart omgång (Plus) i den del man är svagast i – eller i valt läge.
+  async function startSmart(kind) {
+    if (!isPlus() && !(await openPlus("smart"))) return;
+    const weak = weakAreas();
+    const k = kind || (weak.parts.find(([p]) => p !== "mek") || ["mat"])[0];
+    const level = adaptiveLevel(k);
+    const focus = { level, cats: k === "mat" ? weak.cats.filter((c) => c) : [], words: k === "ord" || k === "eng" ? [...weak.missed[k].keys()].slice(0, 6) : [] };
+    const all = progressAll(), date = todayKey();
+    let n = 1;
+    while (all[`${mekId(date, level, k)}+s${n}`] && all[`${mekId(date, level, k)}+s${n}`].done) n++;
+    setPref("focus", { ...(prefs().focus || {}), [`${date}|${k}|${n}`]: focus });
+    for (const d of document.querySelectorAll("dialog[open]")) d.close();
+    if (mode() !== k) { setPref("mode", k); applyMode(true); }
+    openMek(date, level, "next", `s${n}`);
+    toast(`🎯 Smart träning · ${LEVELS[level].label}${focus.cats.length ? " · " + focus.cats.map((c) => HP_MATH.CATS[c]).join(", ") : focus.words.length ? " · dina missade ord" : ""}`);
+  }
+  // Nedräkning till nästa provdag och en enkel plan för dagen.
+  function studyPlan() {
+    const today = todayKey(), next = DAGSPROV_CONFIG.nextHpDate(addDays(today, 1)) || DAGSPROV_CONFIG.nextHpDate(today);
+    const days = next ? Math.round((fromKey(next) - fromKey(today)) / 864e5) : null;
+    const weak = weakAreas();
+    const order = weak.parts.map(([k]) => k);
+    const smartKind = (weak.parts.find(([k, a]) => k !== "mek" && a !== null) || ["mat"])[0];
+    order.splice(order.indexOf(smartKind), 1); order.unshift(smartKind);
+    const names = { ord: "Ord", mek: "Meningar", eng: "Engelska", mat: "Matte" };
+    const intense = days !== null && days <= 21;
+    const plan = [
+      { k: order[0], t: `Smart träning i ${names[order[0]]}`, smart: true },
+      { k: order[1], t: `En omgång ${names[order[1]]}` },
+      { k: "cross", t: "Dagens korsord" },
+    ];
+    if (intense) plan.push({ k: order[2], t: `Extra: ${names[order[2]]} (provet närmar sig!)` });
+    return { next, days, plan, weakCats: weak.cats };
+  }
+  function planCardHtml() {
+    const plus = isPlus(), pr = hpPrognosis(), sp = studyPlan();
+    const fmt = (x) => (x === null ? "–" : x.toFixed(2).replace(".", ","));
+    const lock = plus ? "" : " locked";
+    const need = [pr.need.verb ? `${pr.need.verb} verbala svar` : "", pr.need.kvant ? `${pr.need.kvant} matteuppgifter` : ""].filter(Boolean).join(" och ");
+    return `<div class="chart-card plan-card${lock}">
+      <div class="chart-head"><b>🎯 Din HP-plan</b><span>${plus ? "Plus" : "★ Plus"}</span></div>
+      <div class="plan-count">${sp.days !== null ? `<b>${sp.days}</b><span>dagar kvar till högskoleprovet<br><small>${longDate(sp.next)} · preliminärt datum</small></span>` : "<span>Nästa provdag är inte inlagd än</span>"}</div>
+      <div class="plan-score">
+        <div><small>Verbal</small><b>${plus ? fmt(pr.verb) : "?,??"}</b></div>
+        <div class="tot"><small>Uppskattat resultat</small><b>${plus ? fmt(pr.total) : "?,??"}</b></div>
+        <div><small>Kvantitativ</small><b>${plus ? fmt(pr.kvant) : "?,??"}</b></div>
+      </div>
+      <p class="plan-note">${plus ? (need ? `Prognosen blir säkrare efter ${need} till.` : "En grov uppskattning utifrån dina svar de senaste 90 dagarna – inte ett officiellt resultat.") : "Se ditt uppskattade resultat, en plan för dagen och smart träning i dina svaga områden."}</p>
+      ${plus ? `<ol class="plan-list">${sp.plan.map((x) => `<li><button data-plan-go="${x.k}" data-smart="${x.smart ? 1 : ""}">${escapeHtml(x.t)}<span aria-hidden="true">›</span></button></li>`).join("")}</ol>`
+        : `<button class="pill plus-cta" data-plan-plus>Lås upp med Plus</button>`}
+    </div>`;
+  }
+  function bindPlanCard(root) {
+    root.querySelectorAll("[data-plan-go]").forEach((b) => b.addEventListener("click", () => {
+      const k = b.dataset.planGo;
+      if (b.dataset.smart) return startSmart(k === "cross" ? null : k);
+      $("stats-dialog").close();
+      if (mode() !== k) { setPref("mode", k); applyMode(true); }
+      openCurrent(todayKey(), cur.level);
+    }));
+    const pl = root.querySelector("[data-plan-plus]");
+    if (pl) pl.addEventListener("click", async () => { if (await openPlus("prognos")) showStats(); });
   }
 
   const PARTY = ["#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#007aff", "#af52de", "#ff2d55", "#5ac8fa"];
@@ -947,6 +1875,7 @@
       ? "Ingen fara – gå igenom orden nedan så sitter de nästa gång."
       : `${LEVELS[state.level].label}${showTime() ? " · " + formatTime(state.seconds) : ""}${hints}` +
         (state.mcMistakes ? ` och ${state.mcMistakes} fel.` : ".");
+    $("win-pet").innerHTML = state.gaveUp ? "" : petCheer(state.date + state.level);
     $("win-words").innerHTML = state.puzzle.words
       .slice()
       .sort((a, b) => a.word.localeCompare(b.word, "sv"))
@@ -1124,6 +2053,7 @@
       <div class="stat"><div class="v">${st.days}</div><div class="l">Dagar spelade</div></div>
       <div class="stat"><div class="v">${st.answeredTotal + st.words}</div><div class="l">Ord och frågor</div></div>
       <div class="stat"><div class="v">${st.answeredTotal ? Math.round((st.rightTotal / st.answeredTotal) * 100) : 0}%</div><div class="l">Rätt totalt</div></div></div>`;
+    html += planCardHtml();
     if (empty) {
       html += `<div class="chart-card empty-stats"><div class="big-emoji">📊</div><b>Här samlas allt du gör</b><p>Spela ett korsord eller en omgång Ord, Meningar, Engelska eller Matte så visas diagram och förslag på vad du bör öva på.</p></div>`;
     } else {
@@ -1166,6 +2096,7 @@
     }).join("") + `</div>`;
     $("stats-body").innerHTML = html;
     if ($("stats-rescue")) $("stats-rescue").addEventListener("click", async () => { $("stats-dialog").close(); await rescueStreak(); });
+    bindPlanCard($("stats-body"));
     $("stats-body").classList.remove("anim"); void $("stats-body").offsetWidth; $("stats-body").classList.add("anim");
     $("stats-body").querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => {
       $("stats-dialog").close();
@@ -1452,11 +2383,13 @@
   // och hur lika felsvaren är: på Svår och Expert kommer felsvaren från ord som liknar rätt ord.
   const ORD_TIERS = { easy: [1], medium: [2], hard: [3], expert: [4] };
   const ORD_DISTRACT = { easy: [1, 2], medium: [1, 2, 3], hard: [2, 3, 4], expert: [3, 4] };
-  function ordRound(rng, level) {
+  function ordRound(rng, level, focus) {
     const all = HP_WORDS.map((_, i) => i);
     const ask = all.filter((i) => (ORD_TIERS[level] || ORD_TIERS.medium).includes(TIERS[i]));
     const pool = all.filter((i) => (ORD_DISTRACT[level] || ORD_DISTRACT.medium).includes(TIERS[i]));
-    return shuffled(ask, rng).slice(0, 10).map((id) => {
+    const missed = focus && Array.isArray(focus.words) ? all.filter((i) => focus.words.includes(HP_WORDS[i][0])) : [];
+    const picked = [...new Set([...shuffled(missed, rng), ...shuffled(ask, rng)])].slice(0, 10);
+    return shuffled(picked, rng).map((id) => {
       const [w, clue] = HP_WORDS[id];
       let cand = pool.filter((j) => j !== id && HP_WORDS[j][1] !== clue);
       const other = (j) => HP_WORDS[j][0];
@@ -1488,9 +2421,11 @@
   }
 
   // Engelska (ELF): ordförråd och meningar med luckor, fyra alternativ som på provet.
-  function engRound(rng, level) {
+  function engRound(rng, level, focus) {
     const set = ENG_SETS[level];
-    const vocab = shuffled(HP_ENG_VOCAB.map((_, i) => i), rng).slice(0, set.vocab).map((id) => {
+    const missed = focus && Array.isArray(focus.words) ? HP_ENG_VOCAB.map((_, i) => i).filter((i) => focus.words.includes(HP_ENG_VOCAB[i][0])) : [];
+    const vocabCount = missed.length ? Math.max(set.vocab, Math.min(6, missed.length)) : set.vocab;
+    const vocab = [...new Set([...shuffled(missed, rng), ...shuffled(HP_ENG_VOCAB.map((_, i) => i), rng)])].slice(0, vocabCount).map((id) => {
       const [w, meaning] = HP_ENG_VOCAB[id];
       const others = shuffled(HP_ENG_VOCAB.map((_, j) => j).filter((j) => j !== id), rng).slice(0, 3);
       const opts = shuffled([id, ...others], rng);
@@ -1513,8 +2448,8 @@
   }
 
   // Matte: nya uppgifter varje dag från generatorn i mat.js.
-  function matRound(rng, level) {
-    return HP_MATH.round(rng, level, shuffled).map((t, i) => ({
+  function matRound(rng, level, focus) {
+    return HP_MATH.round(rng, level, shuffled, focus && focus.cats).map((t, i) => ({
       id: t.type + i, label: { kva: "KVA · Jämför kvantiteterna", nog: "NOG · Räcker informationen?" }[t.type] || "XYZ · Beräkna",
       prompt: () => `<span class="math">${t.prompt}</span>`,
       options: t.options, correct: t.correct, fixed: t.fixed, cat: t.cat, steps: t.steps,
@@ -1524,9 +2459,12 @@
 
   const ROUNDS = { ord: ordRound, mek: mekRound, eng: engRound, mat: matRound };
   // Bonusomgångar (livlina) får egna frön: samma nivå, nya frågor.
+  const bonusSuffix = (b) => (!b ? "" : typeof b === "string" ? `+${b}` : `+b${b}`);
   function quizRound(kind, date, level, bonus = 0) {
     const rng = mulberry32(hashString(`${SEED_VERSION}|${kind}|${date}|${level}${bonus ? "|bonus" + bonus : ""}`));
-    const qs = ROUNDS[kind](rng, level);
+    // Smart träning (Plus): fokus på svaga områden, sparat så att omgången blir densamma vid omstart.
+    const focus = typeof bonus === "string" && bonus[0] === "s" ? (prefs().focus || {})[`${date}|${kind}|${bonus.slice(1)}`] : null;
+    const qs = ROUNDS[kind](rng, level, focus);
     return { qs, sig: qs.map((q) => q.id).join(","), correct: qs.map((q) => q.correct) };
   }
 
@@ -1537,7 +2475,7 @@
     cur = { date, level };
     const kind = mode();
     const round = quizRound(kind, date, level, bonus);
-    const saved = progressAll()[mekId(date, level, kind) + (bonus ? `+b${bonus}` : "")];
+    const saved = progressAll()[mekId(date, level, kind) + bonusSuffix(bonus)];
     const blank = () => round.qs.map(() => null);
     mek = { kind, date, level, bonus, ...round, answers: blank(), times: blank(), helped: round.qs.map(() => false), retried: blank(), removed: blank(), halved: blank(), shown: 0, seconds: 0, done: false };
     if (saved && saved.sig === round.sig) {
@@ -1558,7 +2496,7 @@
   function saveMek() {
     if (!mek) return;
     const all = progressAll();
-    all[mekId(mek.date, mek.level, mek.kind) + (mek.bonus ? `+b${mek.bonus}` : "")] = {
+    all[mekId(mek.date, mek.level, mek.kind) + bonusSuffix(mek.bonus)] = {
       sig: mek.sig, answers: mek.answers, correct: mek.correct, times: mek.times, helped: mek.helped, seconds: mek.seconds, done: mek.done,
       retried: mek.retried, removed: mek.removed, halved: mek.halved,
       cats: mek.qs.map((q) => q.cat || null),
@@ -1578,7 +2516,11 @@
   }
 
   // Fel svar där andra chans fortfarande erbjuds: rätt svar hålls hemligt tills man väljer.
-  const retryPending = (i) => !mek.done && mek.answers[i] !== null && mek.answers[i] !== mek.correct[i] && !mek.retried[i];
+  // Andra chans kan användas flera gånger på samma fråga – så länge man har livlinor och minst två
+  // alternativ finns kvar (annars vore svaret givet).
+  const retries = (i) => (mek.retried[i] === true ? 1 : typeof mek.retried[i] === "number" ? mek.retried[i] : 0);
+  const optionsLeft = (i) => mek.qs[i].options.length - new Set([...(mek.removed[i] || []), mek.answers[i]].filter((x) => x !== null)).size;
+  const retryPending = (i) => !mek.done && mek.answers[i] !== null && mek.answers[i] !== mek.correct[i] && mek.retried[i] !== "seen" && optionsLeft(i) >= 2;
   let questionShownAt = 0;
   function renderMek(enter) {
     renderMekDots();
@@ -1662,14 +2604,15 @@
     const bolt = isBolt(i) ? ` <span class="bolt">⚡ Blixtsvar på ${mek.times[i]} s</span>` : "";
     const note = q.explain && prefs().notes !== false ? `<span class="fb-note">${q.explain}</span>` : "";
     // Fel svar: erbjud en andra chans (livlina) innan rätt svar avslöjas.
-    if (!right && !mek.retried[i] && !mek.done) {
-      fb.innerHTML = `<span class="fb bad">✕ Fel svar</span><button class="retry-btn" id="retry-btn"><span aria-hidden="true">↺</span> Andra chans</button><button class="reveal-btn" id="reveal-btn">Visa rätt svar</button>`;
+    if (!right && retryPending(i)) {
+      const n = retries(i), left = isPlus() ? "∞" : lifelinesLeft();
+      fb.innerHTML = `<span class="fb bad">✕ Fel svar${n ? ` igen` : ""}</span><button class="retry-btn" id="retry-btn"><span aria-hidden="true">↺</span> ${n ? "Försök igen" : "Andra chans"} <small>♥ ${left}</small></button><button class="reveal-btn" id="reveal-btn">Visa rätt svar</button>`;
       $("retry-btn").addEventListener("click", useRetry);
       $("reveal-btn").addEventListener("click", () => { mek.retried[i] = "seen"; saveMek(); renderMek(); });
       next.hidden = true;
       return;
     }
-    fb.innerHTML = (right ? `<span class="fb ok">✓ Rätt!${mek.retried[i] === true ? " (andra chans)" : ""}</span>${bolt}` : `<span class="fb bad">✕ Fel – rätt svar är ${MEK_LABELS[q.correct]}</span>`) + note;
+    fb.innerHTML = (right ? `<span class="fb ok">✓ Rätt!${retries(i) === 1 ? " (andra chans)" : retries(i) > 1 ? ` (efter ${retries(i) + 1} försök)` : ""}</span>${bolt}` : `<span class="fb bad">✕ Fel – rätt svar är ${MEK_LABELS[q.correct]}</span>`) + note;
     next.hidden = false;
     next.textContent = i === mek.qs.length - 1 ? "Se resultatet" : "Nästa fråga";
   }
@@ -1688,6 +2631,8 @@
     if (rightBtn && !retryPending(i)) animate(rightBtn, "ring", 900);
     if (right) {
       combo++;
+      addPetXp(1);
+      if (combo === 3 || combo === 6 || combo === 9) setTimeout(() => petParty("happy"), 700);
       haptic(12);
       if (btn) animate(btn, "pulse", 700);
       if (isBolt(i)) { boltFx(btn); sound("bolt"); }
@@ -1733,10 +2678,11 @@
       $("mek").scrollTop = 0;
       return;
     }
+    const firstTime = !mek.done; // bara första gången omgången blir klar ger ägg och vänskapspoäng
     mek.done = true;
     stopTimer();
     saveMek();
-    { const d = mek.date, k = mek.kind; setTimeout(() => maybeTrophy(d, k), 1800); }
+    if (firstTime) { const d = mek.date, k = mek.kind; setTimeout(() => maybeTrophy(d, k), 1800); }
     renderHeader();
     renderPause();
     showMekResult(true);
@@ -1753,7 +2699,7 @@
     const circ = 2 * Math.PI * 54;
     const items = mek.qs.map((q, i) => {
       const ok = mek.answers[i] === mek.correct[i];
-      return `<li class="${ok ? "ok" : "bad"}" style="--i:${i}"><span class="mark">${ok ? "✓" : "✕"}</span><span>${q.review || q.explain}${isBolt(i) ? " ⚡" : ""}${mek.retried[i] === true ? " ↺" : mek.helped[i] ? " 💡" : ""}</span></li>`;
+      return `<li class="${ok ? "ok" : "bad"}" style="--i:${i}"><span class="mark">${ok ? "✓" : "✕"}</span><span>${q.review || q.explain}${isBolt(i) ? " ⚡" : ""}${retries(i) ? " ↺" : mek.helped[i] ? " 💡" : ""}</span></li>`;
     }).join("");
     const nextLevel = LEVEL_KEYS.slice(LEVEL_KEYS.indexOf(mek.level) + 1).find((l) => { const p = progressAll()[mekId(mek.date, l, mek.kind)]; return !(p && p.done); });
     $("mek-result").innerHTML = `
@@ -1763,11 +2709,13 @@
           <div class="ring-num"><b id="mek-score">${right}</b><span>av ${n}</span></div>
         </div>
         <h2>${msg}</h2>
-        <p>${MODE_NAMES[mek.kind]} · ${LEVELS[mek.level].label}${mek.bonus ? ` · bonusomgång ${mek.bonus}` : ""}${showTime() ? " · " + formatTime(mek.seconds) : ""}</p>
+        ${petCheer(mek.date + mek.kind + mek.level + right)}
+        <p>${MODE_NAMES[mek.kind]} · ${LEVELS[mek.level].label}${typeof mek.bonus === "string" ? " · 🎯 smart träning" : mek.bonus ? ` · bonusomgång ${mek.bonus}` : ""}${showTime() ? " · " + formatTime(mek.seconds) : ""}</p>
         ${mek.kind === "mat" ? `<p class="bolts">${"⚡".repeat(Math.min(bolts, 10)) || "–"} <span>${bolts} blixtsvar</span></p>` : ""}
         <div class="result-actions">
           ${nextLevel && !mek.bonus ? `<button class="pill" id="mek-next-level">Spela ${LEVELS[nextLevel].label.toLowerCase()}</button>` : ""}
           <button class="pill ghost bonus-btn" id="mek-bonus"><span aria-hidden="true">🎁</span> Bonusomgång</button>
+          ${mek.kind !== "mek" ? `<button class="pill ghost bonus-btn" id="mek-smart"><span aria-hidden="true">🎯</span> Smart träning${isPlus() ? "" : " ★"}</button>` : ""}
         </div>
       </div>
       <div class="list-title">${mek.kind === "mat" ? "Uppgifter och svar" : "Rätt svar"}</div>
@@ -1776,6 +2724,7 @@
     $("mek-result").hidden = false;
     const nl = $("mek-next-level");
     if (nl) nl.addEventListener("click", () => openCurrent(mek.date, nextLevel, "next"));
+    if ($("mek-smart")) $("mek-smart").addEventListener("click", () => startSmart(mek.kind));
     $("mek-bonus").addEventListener("click", async () => {
       if (!(await offerLifeline("bonus"))) return;
       // Nästa lediga bonusomgång för samma dag, läge och nivå.
@@ -1792,6 +2741,7 @@
         requestAnimationFrame(tick);
       }
       if (pct >= 0.8) { confetti(right === n ? 1 : 0.5); haptic([15, 60, 15, 60, 30]); sound("win"); }
+      setTimeout(() => petParty(pct >= 0.5 ? "win" : "happy", pct >= 0.5 ? null : `${petName(mascot())} tycker att du kämpar bra!`), 500);
     }
   }
 
@@ -1838,16 +2788,25 @@
     const p = prefs().lifelines;
     return p && p.date === todayKey() ? { used: p.used || 0, extra: p.extra || 0 } : { used: 0, extra: 0 };
   }
-  const lifelineCap = () => FREE_LIFELINES + lifelineState().extra;
-  function lifelinesLeft() {
+  const freeToday = () => FREE_LIFELINES + (companion() ? 1 : 0); // följeslagaren ger en extra
+  const lifelineCap = () => freeToday() + lifelineState().extra;
+  // Dagens livlinor (gratis + från filmer) går ut vid midnatt. Köpta livlinor ligger i en egen
+  // "bank" som aldrig går ut och kan staplas hur högt som helst.
+  function dailyLeft() {
+    if (clockTampered) return 0; // inga dagliga livlinor medan klockan är fel
     const s = lifelineState();
-    return Math.max(0, FREE_LIFELINES + s.extra - s.used);
+    return Math.max(0, freeToday() + s.extra - s.used);
   }
+  const bankLeft = () => Math.max(0, Math.floor(+prefs().bank || 0));
+  const lifelinesLeft = () => dailyLeft() + bankLeft();
   function spendFreeLifeline() {
-    if (!lifelinesLeft()) return false;
-    const s = lifelineState();
-    setPref("lifelines", { date: todayKey(), used: s.used + 1, extra: s.extra });
-    return true;
+    if (dailyLeft()) {
+      const s = lifelineState();
+      setPref("lifelines", { date: todayKey(), used: s.used + 1, extra: s.extra });
+      return true;
+    }
+    if (bankLeft()) { setPref("bank", bankLeft() - 1); return true; }
+    return false;
   }
   function addLifelines(n) {
     const s = lifelineState();
@@ -1858,6 +2817,11 @@
   const demoAds = () => !nativeAds() && (window.top !== window || /[?&]reklamdemo=1/.test(location.search));
   const adsAvailable = () => (nativeAds() || demoAds()) && adsToday() < MAX_ADS_PER_DAY;
   async function showRewardedAd() {
+    if (adBusy) return false; // en film åt gången
+    adBusy = true;
+    try { return await showRewardedAdInner(); } finally { adBusy = false; }
+  }
+  async function showRewardedAdInner() {
     let ok = false;
     if (nativeAds()) {
       try { ok = !!(await window.DagsprovNative.showRewarded()); } catch { ok = false; }
@@ -1891,23 +2855,26 @@
       };
     });
   }
-  function renderLives(box, left) {
-    box.innerHTML = Array.from({ length: Math.max(FREE_LIFELINES, left) }, (_, i) => `<i class="${i < left ? "on" : ""}" style="--i:${i}">♥</i>`).join("");
+  function renderLives(box, left, bank = 0) {
+    box.innerHTML = Array.from({ length: Math.max(FREE_LIFELINES, left) }, (_, i) => `<i class="${i < left ? "on" : ""}" style="--i:${i}">♥</i>`).join("") +
+      (bank ? `<b class="bank-chip" style="--i:${Math.max(FREE_LIFELINES, left)}">+${bank} köpta</b>` : "");
   }
   // Frågar om en livlina ska användas. Svarar true om användaren fick den (gratis, via film eller Plus).
   let rewardResolve = null;
   function offerLifeline(kind) {
+    if (rewardResolve) return Promise.resolve(false); // ett ark åt gången – dubbeltryck ger inget extra
     // Med Plus är livlinorna obegränsade – inget ark behövs.
     if (isPlus()) { plusBurst(LIFELINES[kind].title); return Promise.resolve(true); }
-    const ll = LIFELINES[kind], left = lifelinesLeft(), ads = adsAvailable();
+    const ll = LIFELINES[kind], daily = dailyLeft(), bank = bankLeft(), left = daily + bank, ads = adsAvailable();
     $("reward-icon").textContent = ll.icon;
     $("reward-icon").style.setProperty("--c", ll.color);
     $("reward-title").textContent = ll.title;
     $("reward-text").textContent = ll.text;
-    renderLives($("reward-lives"), left);
+    renderLives($("reward-lives"), daily, bank);
     const free = $("reward-free"), ad = $("reward-ad");
     free.hidden = !left;
-    free.textContent = left ? `Använd livlina (${left} kvar i dag)` : "";
+    free.textContent = daily ? `Använd livlina (${daily} kvar i dag${bank ? ` + ${bank} köpta` : ""})` : bank ? `Använd köpt livlina (${bank} kvar)` : "";
+    $("reward-buy").hidden = !shopAvailable() || daily > 0;
     ad.hidden = !ads;
     ad.classList.toggle("primary", !left);
     $("reward-ad-t").innerHTML = `Titta på en kort film · +${AD_LIFELINES} livlinor<small>En används nu, en sparas till senare i dag</small>`;
@@ -1936,8 +2903,10 @@
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 1600);
   }
-  $("reward-free").addEventListener("click", () => finishReward(spendFreeLifeline()));
+  $("reward-free").addEventListener("click", () => { if (rewardResolve) finishReward(spendFreeLifeline()); });
+  let adBusy = false;
   $("reward-ad").addEventListener("click", async () => {
+    if (!rewardResolve || adBusy) return;
     $("reward-dialog").close();
     const ok = await showRewardedAd();
     if (ok) { addLifelines(AD_LIFELINES); spendFreeLifeline(); }
@@ -1945,6 +2914,14 @@
     finishReward(ok, ok ? `✓ +${AD_LIFELINES} livlinor · 1 sparad` : "");
   });
   $("reward-cancel").addEventListener("click", () => finishReward(false));
+  // Köp livlinor direkt från belöningsarket: köpet läggs i banken och en används direkt.
+  $("reward-buy").addEventListener("click", async () => {
+    $("reward-dialog").close();
+    const got = await openShop();
+    if (got && isPlus()) finishReward(true, "★ Plus är aktiverat");
+    else if (got && spendFreeLifeline()) finishReward(true, `✓ +${got} livlinor · ${bankLeft()} sparade`);
+    else if (rewardResolve) $("reward-dialog").showModal(); // tillbaka till valet
+  });
   // Plus från belöningsarket: köper man Plus får man livlinan direkt.
   $("reward-plus").addEventListener("click", async () => {
     $("reward-dialog").close();
@@ -1954,6 +2931,81 @@
   $("ad-privacy").addEventListener("click", () => { if (window.DagsprovNative && window.DagsprovNative.privacyOptions) window.DagsprovNative.privacyOptions(); });
   $("reward-dialog").addEventListener("cancel", (e) => { if (rewardResolve) finishReward(false); else e.preventDefault(); });
 
+  // ---------- Köpa livlinor ----------
+  // Förbrukningsbara köp (App Store / Google Play). Köpta livlinor går aldrig ut och staplas.
+  // Bryggan: DagsprovNative.shop = { products(), buy(id) } där buy svarar med antalet livlinor.
+  const SHOP_PACKS = [
+    { id: "lifelines_1", n: 1, price: DAGSPROV_CONFIG.price("lifeline1") },
+    { id: "lifelines_5", n: 5, price: DAGSPROV_CONFIG.price("lifeline5"), badge: `Spara ${Math.round((1 - DAGSPROV_CONFIG.prices.lifeline5 / (5 * DAGSPROV_CONFIG.prices.lifeline1)) * 100)} %` },
+    { id: "lifelines_15", n: 15, price: DAGSPROV_CONFIG.price("lifeline15"), badge: `Bäst värde · spara ${Math.round((1 - DAGSPROV_CONFIG.prices.lifeline15 / (15 * DAGSPROV_CONFIG.prices.lifeline1)) * 100)} %` },
+  ];
+  const shopBridge = () => (window.DagsprovNative && window.DagsprovNative.shop) || null;
+  const shopAvailable = () => !!shopBridge() || (!shopBridge() && demoAds());
+  let shopResolve = null;
+  function renderShop() {
+    $("shop-bank").textContent = bankLeft() ? `Du har ${bankLeft()} köpta livlinor` : "Köpta livlinor går aldrig ut och kan sparas hur länge du vill.";
+    $("shop-packs").innerHTML = SHOP_PACKS.map((pk) => `<button class="plan pack" data-pack="${pk.id}">
+      ${pk.badge ? `<span class="plan-badge">${pk.badge}</span>` : ""}<span class="pack-hearts" aria-hidden="true">${"♥".repeat(Math.min(pk.n, 3))}</span>
+      <span class="plan-t"><b>${pk.n} ${pk.n === 1 ? "livlina" : "livlinor"}</b><small>${pk.n > 1 ? `${(parseFloat(pk.price.replace(",", ".")) / pk.n).toFixed(2).replace(".", ",")} kr st` : "Engångsköp"}</small></span>
+      <span class="plan-p"><b>${pk.price}</b></span></button>`).join("");
+    $("shop-packs").querySelectorAll(".pack").forEach((b) => b.addEventListener("click", () => buyPack(b.dataset.pack, b)));
+    $("shop-plus").hidden = !plusAvailable();
+    $("shop-demo").hidden = !!shopBridge();
+  }
+  // Öppnar butiken. Svarar med antalet köpta livlinor (0 om inget köptes).
+  let shopStay = false;
+  function openShop(stay) {
+    shopStay = !!stay;
+    renderShop();
+    kbInput.blur();
+    $("shop-dialog").showModal();
+    animate($("shop-dialog").querySelector(".reward-icon"), "bounce", 900);
+    if (shopBridge() && shopBridge().products) {
+      Promise.resolve(shopBridge().products()).then((list) => {
+        if (!Array.isArray(list)) return;
+        for (const o of list) { const pk = SHOP_PACKS.find((x) => o && x.id === o.id); if (pk && typeof o.price === "string") pk.price = escapeHtml(o.price.slice(0, 30)); }
+        if ($("shop-dialog").open) renderShop();
+      }).catch(() => {});
+    }
+    return new Promise((resolve) => { shopResolve = resolve; });
+  }
+  function finishShop(n) {
+    const done = shopResolve;
+    shopResolve = null;
+    if ($("shop-dialog").open) $("shop-dialog").close();
+    if (done) done(n);
+  }
+  async function buyPack(id, btn) {
+    const pk = SHOP_PACKS.find((x) => x.id === id);
+    if (!pk || btn.disabled) return;
+    btn.disabled = true;
+    let n = 0;
+    try {
+      if (shopBridge()) n = Math.max(0, Math.floor(+(await shopBridge().buy(id)) || 0));
+      else if (demoAds() && await confirmBox("Förhandsvisning", `I appen öppnas App Stores eller Google Plays köpruta här (${pk.n} ${pk.n === 1 ? "livlina" : "livlinor"} för ${pk.price}). Vill du låtsasköpa?`, "Köp")) n = pk.n;
+    } catch { n = 0; }
+    btn.disabled = false;
+    if (!n) { if ($("shop-dialog").open) renderShop(); return; }
+    setPref("bank", bankLeft() + n);
+    setPref("bought", (prefs().bought || 0) + n);
+    sound("ok"); haptic([12, 40, 12]);
+    if (shopResolve && !shopStay) finishShop(n);
+    else { rewardBurst(`✓ +${n} livlinor`); renderShop(); }
+    if ($("settings-dialog").open) renderSettings();
+    if (mek && !$("mek").hidden) renderLifelineBar();
+  }
+  document.querySelector("#open-shop .val").textContent = `från ${DAGSPROV_CONFIG.price("lifeline1")}`;
+  $("reward-buy").querySelector("small").textContent = `Från ${DAGSPROV_CONFIG.price("lifeline1")} · sparas för alltid`;
+  $("shop-cancel").addEventListener("click", () => finishShop(0));
+  $("shop-dialog").addEventListener("cancel", () => finishShop(0));
+  $("shop-plus").addEventListener("click", async () => {
+    const done = shopResolve;
+    shopResolve = null;
+    $("shop-dialog").close();
+    const got = await openPlus("lifelines");
+    if (done) done(got ? Infinity : 0);
+  });
+
   // ---------- Dagsprov Plus ----------
   // Frivilligt köp via App Store / Google Play (RevenueCat i appskalet). Allt som behövs för att lära sig
   // – dagens övningar, förklaringar och hela lösningen efter svaret – är alltid gratis. Plus ger
@@ -1962,10 +3014,15 @@
   // Bryggan i appskalet: DagsprovNative.plus = { offerings(), purchase(id), restore(), manage() } och
   // window.__dagsprovPlus(active) när köpstatusen ändras. I förhandsvisningen går köpen att prova på
   // låtsas. På den vanliga webben finns inga köp – där visas att Plus finns i appen.
+  // Priser, provdagar och produkt-id:n ligger i js/config.js (ett ställe).
+  const CFG = window.DAGSPROV_CONFIG;
+  const perMonth = (kr) => `${(kr / 12).toFixed(2).replace(".", ",")} ${CFG.currency}/mån`;
+  const seasonUntil = () => CFG.seasonEnd(Date.now());
+  const shortDate = (ms) => new Date(ms).toLocaleDateString("sv-SE", { day: "numeric", month: "long" });
   const PLUS_PLANS = [
-    { id: "annual", title: "12 månader", price: "199 kr", sub: "16,58 kr/mån", badge: "Spara 53 %", trial: "7 dagar gratis, sedan 199 kr/år" },
-    { id: "monthly", title: "1 månad", price: "35 kr", sub: "per månad" },
-    { id: "lifetime", title: "För alltid", price: "399 kr", sub: "engångsköp" },
+    { id: "annual", title: "12 månader", price: CFG.price("annual"), sub: perMonth(CFG.prices.annual), badge: "Mest värde",
+      trial: `${CFG.annualTrialDays} dagar gratis, sedan ${CFG.price("annual")}/år` },
+    { id: "season", title: "Säsongspass", price: CFG.price("season"), sub: "engångsköp" },
   ];
   const FREE_ARCHIVE_DAYS = 7;
   const TRIAL_HOURS = 24;
@@ -1973,14 +3030,17 @@
   const demoPlus = () => !plusBridge() && demoAds();
   const plusAvailable = () => !!plusBridge() || demoPlus();
   function plusTrialLeft() {
-    const until = prefs().plusTrial || 0;
-    return Math.max(0, until - Date.now());
+    const until = +prefs().plusTrial || 0, left = until - Date.now();
+    // Ogiltig om klockan är fel eller om perioden är längre än en provperiod kan vara.
+    return clockTampered || left > TRIAL_HOURS * 36e5 + 60e3 ? 0 : Math.max(0, left);
   }
+  // Plus i mobilappen kommer bara från köptjänsten (RevenueCat verifierar kvittot mot App Store /
+  // Google Play) och hålls i minnet – aldrig från en sparad flagga som går att ändra.
+  let verifiedPlus = !!(window.DagsprovNative && window.DagsprovNative.plusActive === true);
   function isPlus() {
-    const p = prefs();
     if (plusTrialLeft() > 0) return true;
-    if (plusBridge()) return p.plusNative === true;
-    return demoPlus() && p.plusDemo === true;
+    if (plusBridge()) return verifiedPlus;
+    return demoPlus() && (prefs().plusDemo === true || (+prefs().plusDemoSeason || 0) > Date.now());
   }
   let plusPlan = "annual", plusResolve = null, plusFocus = null;
   let storePlans = null; // planerna som butiken faktiskt erbjuder (null = inte hämtade än)
@@ -1991,7 +3051,7 @@
     for (const o of list) {
       const plan = PLUS_PLANS.find((x) => o && x.id === o.id);
       if (!plan) continue;
-      for (const k of ["price", "sub", "trial", "badge"]) if (typeof o[k] === "string") plan[k] = o[k];
+      for (const k of ["price", "sub", "trial", "badge"]) if (typeof o[k] === "string") plan[k] = escapeHtml(o[k].slice(0, 60));
       plan.native = true;
     }
   }
@@ -2005,7 +3065,7 @@
     $("plus-plans").hidden = owned;
     $("plus-plans").innerHTML = PLUS_PLANS.filter((pl) => !storePlans || storePlans.has(pl.id)).map((pl) => `<button class="plan" role="radio" data-plan="${pl.id}" aria-checked="${pl.id === plusPlan}">
       ${pl.badge ? `<span class="plan-badge">${pl.badge}</span>` : ""}<span class="radio"></span>
-      <span class="plan-t"><b>${pl.title}</b><small>${pl.trial || (pl.id === "lifetime" ? "Betala en gång, behåll för alltid" : "Förnyas varje månad")}</small></span>
+      <span class="plan-t"><b>${pl.title}</b><small>${pl.trial || (pl.id === "season" ? `Till och med provdagen ${shortDate(seasonUntil())} · förnyas inte` : "")}</small></span>
       <span class="plan-p"><b>${pl.price}</b><small>${pl.sub}</small></span></button>`).join("");
     $("plus-plans").querySelectorAll(".plan").forEach((b) => b.addEventListener("click", () => { plusPlan = b.dataset.plan; haptic(6); renderPlus(); }));
     const plan = PLUS_PLANS.find((x) => x.id === plusPlan);
@@ -2013,7 +3073,7 @@
     buy.hidden = owned;
     buy.disabled = !plusAvailable();
     buy.textContent = !plusAvailable() ? "Plus finns i appen för iPhone och Android"
-      : plan.trial ? `Starta ${plan.trial.split(" gratis")[0]} gratis` : plan.id === "lifetime" ? `Köp för ${plan.price}` : `Fortsätt – ${plan.price}/mån`;
+      : plan.trial ? `Starta ${plan.trial.split(" gratis")[0]} gratis` : `Köp säsongspass – ${plan.price}`;
     $("plus-status").hidden = !owned;
     $("plus-status").textContent = owned ? "✓ Du har Dagsprov Plus" + (demoPlus() ? " (förhandsvisning)" : "") : "";
     const canTrial = !plus && adsAvailable() && Date.now() - (prefs().plusTrialAt || 0) > 7 * 864e5;
@@ -2023,9 +3083,10 @@
     $("plus-manage").textContent = demoPlus() ? "Avsluta Plus (förhandsvisning)" : "Hantera abonnemang";
     const store = window.DagsprovNative && window.DagsprovNative.platform === "android" ? "Google Play" : "App Store";
     $("plus-legal").textContent = owned || !plusAvailable() ? ""
-      : plan.id === "lifetime" ? `Engångsköp via ${store}. Inget abonnemang.`
-      : `${plan.trial ? "Efter provperioden förnyas" : "Förnyas"} abonnemanget automatiskt för ${plan.price} per ${plan.id === "annual" ? "år" : "månad"} tills du säger upp det. ` +
-        `Betalningen dras från ditt ${store}-konto. Säg upp när som helst, senast 24 timmar före nästa period, i kontoinställningarna i ${store}.` +
+      : (plan.id === "season"
+        ? `Engångsköp via ${store}. Gäller till och med högskoleprovet ${shortDate(seasonUntil())} och förnyas inte – inget att säga upp.`
+        : `Efter provperioden förnyas abonnemanget automatiskt för ${plan.price} per år tills du säger upp det. ` +
+          `Betalningen dras från ditt ${store}-konto. Säg upp när som helst, senast 24 timmar före nästa period, i kontoinställningarna i ${store}.`) +
         (demoPlus() ? " Förhandsvisning: inga riktiga köp görs här." : "");
   }
   // Öppnar Plus-arket. Svarar true om användaren har Plus när arket stängs.
@@ -2066,10 +3127,9 @@
   // Appskalet anropar denna när köpstatusen hämtats eller ändrats.
   window.__dagsprovPlus = (active) => {
     const was = isPlus();
-    setPref("plusNative", !!active);
+    verifiedPlus = active === true;
     plusChanged(!was && isPlus() && $("plus-dialog").open);
   };
-  if (window.DagsprovNative && typeof window.DagsprovNative.plusActive === "boolean") setPref("plusNative", window.DagsprovNative.plusActive);
   $("plus-buy").addEventListener("click", async () => {
     const btn = $("plus-buy");
     if (btn.disabled) return;
@@ -2087,22 +3147,23 @@
     btn.disabled = false;
     btn.textContent = label;
     if (!ok) return;
-    if (demoPlus()) setPref("plusDemo", true);
-    else setPref("plusNative", true);
+    if (demoPlus()) { if (plusPlan === "season") setPref("plusDemoSeason", seasonUntil()); else setPref("plusDemo", true); }
+    else verifiedPlus = true; // svaret kommer från köptjänsten efter ett verifierat köp
     plusChanged(true);
   });
   $("plus-restore").addEventListener("click", async () => {
     let ok = false;
     try { if (plusBridge()) ok = !!(await plusBridge().restore()); } catch { ok = false; }
-    if (ok) { setPref("plusNative", true); plusChanged(true); }
+    if (ok) { verifiedPlus = true; plusChanged(true); }
     else toast(plusBridge() ? "Hittade inget tidigare köp på det här kontot" : "Inga köp att återställa i förhandsvisningen");
   });
   $("plus-manage").addEventListener("click", () => {
-    if (demoPlus()) { setPref("plusDemo", false); setPref("plusTrial", 0); plusChanged(false); toast("Plus är avslutat i förhandsvisningen"); return; }
+    if (demoPlus()) { setPref("plusDemo", false); setPref("plusDemoSeason", 0); setPref("plusTrial", 0); plusChanged(false); toast("Plus är avslutat i förhandsvisningen"); return; }
     try { plusBridge().manage(); } catch { /* inget att göra */ }
   });
   // Provdag: en film ger 24 timmar Plus, en gång i veckan. Så ser man vad Plus är värt.
   $("plus-trial").addEventListener("click", async () => {
+    if (checkClock()) { toast("Telefonens klocka verkar vara fel – ställ in rätt tid först"); return; }
     const dlg = $("plus-dialog");
     dlg.close();
     const ok = await showRewardedAd();
@@ -2167,12 +3228,16 @@
   }
 
   // --- Andra chans och 50/50 i frågelägena ---
+  let retryBusy = false;
   async function useRetry() {
-    const i = mek.idx;
-    if (mek.done || mek.answers[i] === null || mek.answers[i] === mek.correct[i] || mek.retried[i]) return;
-    if (!(await offerLifeline("retry"))) return;
+    const i = mek.idx, m = mek;
+    if (retryBusy || !retryPending(i)) return;
+    retryBusy = true;
+    let ok;
+    try { ok = await offerLifeline("retry"); } finally { retryBusy = false; }
+    if (!ok || mek !== m || mek.idx !== i || !retryPending(i)) return;
     const wrong = mek.answers[i];
-    mek.retried[i] = true;
+    mek.retried[i] = retries(i) + 1;
     mek.removed[i] = [...new Set([...(mek.removed[i] || []), wrong])];
     mek.answers[i] = null;
     mek.times[i] = null;
@@ -2182,9 +3247,10 @@
     renderMekDots();
   }
   async function useHalf() {
-    const i = mek.idx, q = mek.qs[i];
+    const i = mek.idx, q = mek.qs[i], m = mek;
     if (mek.done || mek.answers[i] !== null || mek.halved[i]) return;
     if (!(await offerLifeline("half"))) return;
+    if (mek !== m || mek.idx !== i || mek.halved[i] || mek.answers[i] !== null) return;
     const removed = new Set(mek.removed[i] || []);
     const wrong = q.options.map((_, k) => k).filter((k) => k !== q.correct && !removed.has(k));
     const drop = shuffled(wrong, mulberry32(hashString(`${mek.date}|${mek.kind}|${i}|half`))).slice(0, Math.max(0, wrong.length - 1)); // kvar: rätt svar + ett fel
@@ -2199,7 +3265,7 @@
     const i = mek.idx, answered = mek.answers[i] !== null;
     $("lifeline-bar").hidden = mek.done;
     $("ll-half").disabled = answered || !!mek.halved[i];
-    $("ll-left").textContent = isPlus() ? "★ Plus · ∞" : `♥ ${lifelinesLeft()} kvar i dag`;
+    $("ll-left").textContent = isPlus() ? "★ Plus · ∞" : `♥ ${dailyLeft()} i dag${bankLeft() ? ` · ${bankLeft()} köpta` : ""}`;
   }
   $("ll-half").addEventListener("click", useHalf);
 
@@ -2556,16 +3622,22 @@
     $("sound-toggle").checked = soundOn();
     $("haptic-toggle").checked = p.haptics !== false;
     $("motion-toggle").checked = !!p.reduceMotion;
+    $("petsound-toggle").checked = p.petSounds !== false;
+    $("petparty-toggle").checked = p.petParty !== false;
     $("val-appearance").textContent = `${THEME_NAMES[p.theme || "auto"]} · ${ACCENT_NAMES[p.accent || "blue"]}`;
     $("val-check").textContent = CHECK_NAMES[checkMode()];
     $("val-bolt").textContent = boltSeconds() ? boltSeconds() + " s" : "Av";
     $("ad-privacy-row").hidden = !(window.DagsprovNative && window.DagsprovNative.privacyOptions);
     const plus = isPlus(), left = lifelinesLeft(), trial = plusTrialLeft();
-    $("val-lifelines").textContent = plus ? "∞ Obegränsat" : `${"♥".repeat(Math.min(left, 9))}${"♡".repeat(Math.max(0, lifelineCap() - left))}  ${left} kvar`;
+    const daily = dailyLeft(), bank = bankLeft();
+    $("val-lifelines").textContent = plus ? "∞ Obegränsat" : `${"♥".repeat(Math.min(daily, 9))}${"♡".repeat(Math.max(0, lifelineCap() - daily))}  ${daily} i dag${bank ? ` + ${bank} köpta` : ""}`;
+    $("shop-row").hidden = plus || !shopAvailable();
     $("lifeline-note").textContent = plus ? "Med Plus är livlinorna obegränsade – andra chans, 50/50, tips, ledtrådar före svaret, bonusomgångar och att rädda sviten."
       : `Varje dag får du ${FREE_LIFELINES} gratis livlinor: andra chans, 50/50, extra tips, ledtrådar före svaret, bonusomgångar och att rädda en bruten svit.` +
         (adsAvailable() ? ` Är de slut kan du titta på en kort film för ${AD_LIFELINES} till – helt frivilligt. Reklam visas aldrig av sig själv.` : "");
     $("set-plus").classList.toggle("active", plus);
+    $("val-remind").textContent = remindOn() ? `Kl. ${remindTime().replace(":", ".")}` : "Av";
+    renderRemind();
     $("val-plus").textContent = trial ? `Provperiod – ${Math.ceil(trial / 36e5)} h kvar` : plus ? "Aktivt – tack för ditt stöd!" : "Obegränsade livlinor, hela arkivet och mer";
     $("set-plus").hidden = !plus && !plusAvailable() && !demoPlus();
     const st = computeStats();
@@ -2634,6 +3706,7 @@
   }
   $("btn-settings").addEventListener("click", () => openSettings());
   $("set-plus").addEventListener("click", () => openPlus());
+  $("open-shop").addEventListener("click", () => openShop(true).then(() => renderSettings()));
   $("set-back").addEventListener("click", popSet);
   document.querySelectorAll("[data-push]").forEach((b) => b.addEventListener("click", () => pushSet(b.dataset.push)));
   // Svep från vänsterkanten för att gå tillbaka, som i iOS.
@@ -2668,7 +3741,7 @@
   document.querySelectorAll("#text-picker [data-text]").forEach((b) =>
     b.addEventListener("click", () => { setPref("textSize", b.dataset.text); applyTextSize(); renderTextPicker(); haptic(8); })
   );
-  const bindSwitch = (id, key, after) => $(id).addEventListener("change", (e) => { setPref(key, e.target.checked); if (after) after(); renderSettings(); haptic(8); });
+  const bindSwitch = (id, key, after) => $(id).addEventListener("change", (e) => { setPref(key, e.target.checked); if (after) after(e.target.checked); renderSettings(); haptic(8); });
   bindSwitch("time-toggle", "showTime", () => applyTimeSetting());
   bindSwitch("skip-toggle", "skipFilled");
   bindSwitch("autonext-toggle", "autoNext");
@@ -2676,6 +3749,8 @@
   bindSwitch("sound-toggle", "sound", () => { if (soundOn()) sound("ok"); });
   bindSwitch("haptic-toggle", "haptics");
   bindSwitch("motion-toggle", "reduceMotion", () => applyMotion());
+  bindSwitch("petsound-toggle", "petSounds", (on) => { if (on) petVoice(voiceOf(mascot()), "happy"); });
+  bindSwitch("petparty-toggle", "petParty", (on) => { if (on) { $("settings-dialog").close(); setTimeout(() => petParty("win", `${petName(mascot())} firar så här när du klarar något!`), 300); } });
   function applyTimeSetting() { document.body.classList.toggle("hide-time", !showTime()); }
   function applyTextSize() { document.documentElement.dataset.text = prefs().textSize || "m"; }
   function applyMotion() { document.documentElement.classList.toggle("reduce-motion", !!prefs().reduceMotion); }
@@ -2729,11 +3804,24 @@
     // Ta bara med poster som ser ut som Dagsprovs egna, så att en ändrad fil inte kan ställa till det.
     data.progress = Object.fromEntries(Object.entries(data.progress).filter(([k, v]) => /^\d{4}-\d{2}-\d{2}\|[a-z-]{2,20}$/.test(k) && isPlainObject(v)));
     data.prefs = isPlainObject(data.prefs) ? Object.fromEntries(Object.entries(data.prefs).filter(([k, v]) => /^[a-zA-Z]{1,24}$/.test(k) && ["string", "number", "boolean"].includes(typeof v) || (k === "trophies" && isPlainObject(v)))) : null;
+    // Köp, livlinor, provperioder och vunna djur kan aldrig komma från en fil – annars skulle man kunna
+    // skriva in obegränsat med livlinor eller Plus. De behåller sina värden från den här enheten
+    // (Plus återställs i stället via "Återställ köp", djuren räknas fram igen ur framstegen).
+    if (data.prefs) {
+      const PROTECTED = ["plusNative", "plusDemo", "plusTrial", "plusTrialAt", "bank", "bought", "adsToday", "adsWatched", "lifelines", "unlockedDays", "pets", "petNew", "companion", "frozen", "petsExtra", "eggs", "petXp", "petGear"];
+      const current = prefs();
+      for (const k of PROTECTED) { delete data.prefs[k]; if (current[k] !== undefined) data.prefs[k] = current[k]; }
+      for (const k of ["clockMax", "noPetsUntil", "demoPets", "bought"]) { delete data.prefs[k]; if (current[k] !== undefined) data.prefs[k] = current[k]; }
+      // Framsteg från en fil kan inte ge djur för tidigare månader.
+      const prev = monthKey(addDays(todayKey().slice(0, 7) + "-01", -1));
+      if (!data.prefs.noPetsUntil || data.prefs.noPetsUntil < prev) data.prefs.noPetsUntil = prev;
+    }
     const n = Object.keys(data.progress).length;
     if (!(await confirmBox("Återställa framsteg?", `Säkerhetskopian innehåller ${n} omgångar. Dina nuvarande framsteg på den här enheten ersätts.`, "Återställ"))) return;
     store(PROGRESS_KEY, data.progress);
     if (data.prefs && typeof data.prefs === "object") store(PREFS_KEY, data.prefs);
     reloadAfterData("Framstegen är återställda");
+    setTimeout(checkPets, 800);
   });
   $("reset-data").addEventListener("click", async () => {
     if (!(await confirmBox("Nollställa allt?", "Alla lösta korsord, omgångar och all statistik raderas från den här enheten. Det går inte att ångra.", "Nollställ"))) return;
@@ -2811,6 +3899,7 @@
         o.start(t0 + start); o.stop(t0 + start + dur + 0.02);
       };
       if (kind === "tap") tone(1400, 0, 0.035, 0.025, "triangle");
+      else if (kind === "erase") { tone(900, 0, 0.05, 0.02, "sawtooth"); tone(640, 0.04, 0.06, 0.018, "sawtooth"); tone(460, 0.09, 0.08, 0.015, "triangle"); }
       else if (kind === "ok") { tone(880, 0, 0.14, 0.08); tone(1318.5, 0.08, 0.22, 0.07); }
       else if (kind === "word") { tone(784, 0, 0.12, 0.07); tone(988, 0.07, 0.12, 0.07); tone(1318.5, 0.14, 0.28, 0.07); }
       else if (kind === "bad") { tone(220, 0, 0.16, 0.07, "triangle"); tone(185, 0.09, 0.2, 0.06, "triangle"); }
@@ -2832,8 +3921,8 @@
   $("archive-today").addEventListener("click", () => { $("archive-dialog").close(); openCurrent(todayKey(), cur.level); });
   window.addEventListener("pagehide", () => { save(); saveMek(); });
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) { save(); saveMek(); }
-    else { if (cur.date) renderHeader(); renderWotdBadge(); } // "Idag"/"Igår" och dagens ord stämmer även efter midnatt
+    if (document.hidden) { save(); saveMek(); scheduleReminders(); }
+    else { checkClock(); if (cur.date) renderHeader(); renderWotdBadge(); } // "Idag"/"Igår" och dagens ord stämmer även efter midnatt
   });
 
   // ---------- Tips om hemskärmen (bara i Safari på iPhone/iPad, en gång) ----------
@@ -2864,6 +3953,10 @@
   }
 
   // ---------- Start ----------
+  if (verifyState()) setTimeout(() => toast("Sparade belöningar hade ändrats och har återställts"), 1200);
+  checkClock();
+  // Djur från en månad som inte har börjat än (klockan har varit framvriden) tas bort.
+  { const o = ownedPets(), now = todayKey().slice(0, 7), keep = Object.fromEntries(Object.entries(o).filter(([m]) => m <= now)); if (Object.keys(keep).length !== Object.keys(o).length) setPref("pets", keep); }
   applyTheme();
   plusChanged(false);
   applyStyle();
@@ -2893,5 +3986,12 @@
   }
   // Erbjud att rädda en bruten svit en gång per dag, efter att appen har startat.
   setTimeout(() => { if (!document.querySelector("dialog[open]")) maybeOfferStreak(); }, 1500);
+  renderPetButton();
+  setTimeout(scheduleReminders, 3000);
+  setTimeout(() => {
+    if (document.querySelector("dialog[open]")) return;
+    const pending = prefs().petNew;
+    if (pending && (/^\d{4}-\d{2}$/.test(pending) || petById(pending))) showPetWon(pending); else checkPets();
+  }, 2600);
   window.__dagsprovReady = true;
 })();

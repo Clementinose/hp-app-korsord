@@ -75,7 +75,9 @@ Kontrollera att adresserna öppnas innan du skickar in appen (GitHub Pages måst
 >
 > DAGSPROV PLUS
 > Obegränsade livlinor, hela arkivet, ledtrådar steg för steg innan du svarar, ingen reklam och
-> exklusiva färgteman. Välj 12 månader (med 7 dagar gratis), 1 månad eller ett engångsköp.
+> exklusiva färgteman, uppskattat HP-resultat, smart träning och studieplan. Välj 12 månader
+> (7 dagar gratis, sedan 199 kr/år) eller ett säsongspass (79 kr, gäller till och med nästa provdag).
+> Du kan också köpa livlinor styckvis (från 5 kr) – de går aldrig ut och kan sparas.
 > Abonnemanget förnyas automatiskt tills du säger upp det i App Store-inställningarna, senast 24 timmar
 > före nästa period.
 >
@@ -89,9 +91,11 @@ Kontrollera att adresserna öppnas innan du skickar in appen (GitHub Pages måst
 - *Utan reklam (Capacitor-versionen):* välj **Data Not Collected**.
 - *Med reklam (Expo-versionen i `native/`):* AdMob samlar in uppgifter. Fyll i enligt Googles vägledning:
   <https://developers.google.com/admob/ios/privacy/data-disclosure>. Appen begär bara ej anpassade
-  annonser och spårar inte – svara därför **nej** på "tracking" och visa ingen ATT-dialog.
+  annonser utan ATT-tillstånd. Med ATT-frågan på (standard) ska du svara **ja** på tracking för
+  Device ID och Advertising Data (gäller bara de som tillåter spårning).
 - *RevenueCat (Plus):* **Purchases → Purchase History** och **Identifiers → User ID**, båda för
   "App Functionality", inte länkade till spårning.
+- Hela sammanställningen, inklusive ATT, finns i [SECURITY.md](SECURITY.md#5-app-privacy-i-app-store-connect).
 
 **Skärmdumpar:** minst iPhone 6,9" (1320 × 2868) och iPad 13" (2064 × 2752). Ta dem i simulatorn
 (⌘S) i ljust läge, till exempel av korsordet, Ord, Matte med steg-för-steg, Dagens ord och statistiken.

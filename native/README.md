@@ -39,31 +39,42 @@ då kan AdMob-kontot stängas av.
 
 ## 3b. Dagsprov Plus med RevenueCat
 
-1. **App Store Connect → din app → Prenumerationer**: skapa gruppen *Dagsprov Plus* med två
-   automatiskt förnyade abonnemang, till exempel `dagsprov_plus_annual` (1 år, 199 kr, introduktionserbjudande
-   *Gratis provperiod 1 vecka*) och `dagsprov_plus_monthly` (1 månad, 35 kr). Lägg till ett
-   **Non-Consumable**-köp `dagsprov_plus_lifetime` (399 kr). Fyll i visningsnamn, beskrivning och
-   granskningsskärmdump för varje produkt. Skriv under avtalet *Paid Apps* och fyll i bank och skatt.
-2. **Google Play Console → Tjäna pengar → Produkter**: samma tre produkter (två prenumerationer och en
-   engångsprodukt). Lägg upp gratisveckan som ett erbjudande på årsabonnemanget.
+1. **App Store Connect → din app**: skapa (priserna står i `js/config.js` – ett ställe):
+   - Prenumerationsgruppen *Dagsprov Plus* med ett automatiskt förnyat abonnemang `dagsprov_plus_annual`
+     (1 år, 199 kr, introduktionserbjudande *Gratis provperiod 1 vecka*).
+   - **Säsongspass** `dagsprov_season` (79 kr) som *Non-Consumable* eller *Non-Renewing Subscription*.
+     Det gäller till och med nästa provdag efter köpet (provdagarna står i `js/config.js` – uppdatera varje år).
+   - **Djur** `dagsprov_pet_01` … `dagsprov_pet_54` (25 kr st, Non-Consumable): 01–12 är månadens djur,
+     13–54 äggdjuren (ordningen står i `js/pets.js`). Milstolpedjur och glittriga djur kan inte köpas.
+   Fyll i visningsnamn, beskrivning och granskningsskärmdump för varje produkt. Skriv under avtalet
+   *Paid Apps* och fyll i bank och skatt.
+2. **Google Play Console → Tjäna pengar → Produkter**: samma produkter (årsprenumeration med gratisvecka,
+   säsongspass och djur som engångsprodukter).
 3. **[app.revenuecat.com](https://app.revenuecat.com)** (gratis upp till 2 500 USD i månadsintäkt):
    - Skapa ett projekt och lägg till en iOS-app och en Android-app (App Store Connect-nyckeln och
      Google Play-tjänstkontot enligt RevenueCats guide).
-   - **Entitlements** → skapa `plus` och koppla alla tre produkterna till den.
-   - **Offerings** → skapa `default` med paketen *Annual*, *Monthly* och *Lifetime*.
+   - **Entitlements** → skapa `plus` och koppla `dagsprov_plus_annual` till den. (Säsongspasset kopplas
+     *inte* – dess giltighet räknas fram i appen från kvittots köpdatum.)
+   - **Offerings** → skapa `default` med paketet *Annual*.
+   - Slå på **Trusted Entitlements** (kvittoverifiering) i projektets inställningar.
    - Kopiera de publika SDK-nycklarna (`appl_…` och `goog_…`) till `REVENUECAT_KEY` i `App.js`.
-4. Testa köpen med en **Sandbox-användare** (iOS) och en **licenstestare** (Android) innan du publicerar.
+4. **Köpta livlinor**: skapa tre köp av typen **Consumable** i App Store Connect (och engångsprodukter
+   i Google Play): `dagsprov_lifelines_1` (5 kr), `dagsprov_lifelines_5` (19 kr) och
+   `dagsprov_lifelines_15` (45 kr). Lägg till dem som produkter i RevenueCat (de ska *inte* kopplas
+   till `plus`). Köpta livlinor går aldrig ut och staplas; appen använder dagens gratis livlinor först.
+5. Testa köpen med en **Sandbox-användare** (iOS) och en **licenstestare** (Android) innan du publicerar.
 
 Priserna i appen hämtas alltid från butiken, i användarens valuta. Texterna om provperiod och
 besparing räknas fram automatiskt.
 
-### Förslag på priser och varför
+### Priser
 
-| Plan | Pris | Tanke |
+| Produkt | Pris | Tanke |
 |---|---|---|
-| År | 199 kr, 7 dagar gratis | Förvalt och markerat "Spara 53 %". De flesta väljer det, och det ger mest per användare. |
-| Månad | 35 kr | Finns som jämförelse, så att årspriset känns billigt ("ankare"). |
-| För alltid | 399 kr | Fångar dem som inte vill ha abonnemang. Ungefär två år med årsplanen. |
+| År | 199 kr, 7 dagar gratis | Förvalt. Ger mest per användare. |
+| Säsongspass | 79 kr engångsköp | För den som pluggar inför ett visst prov och inte vill ha abonnemang. |
+| Livlinor | 5 / 19 / 45 kr | 1, 5 eller 15 st, går aldrig ut. |
+| Djur | 25 kr st | Alternativ till att vinna djuret via månadens uppdrag. |
 
 Plus visas där användaren redan vill ha mer (livlinorna slut, en låst arkivdag, en Plus-färg),
 aldrig som en ruta av sig själv. En gång i veckan kan man prova Plus i 24 timmar genom att titta
