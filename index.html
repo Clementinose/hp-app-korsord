@@ -110,6 +110,10 @@
             <div class="mek-label" id="mek-label">Välj det som passar bäst</div>
             <p class="mek-text" id="mek-text"></p>
           </article>
+          <div class="lifeline-bar" id="lifeline-bar">
+            <button class="lifeline-chip" id="ll-half"><span aria-hidden="true">✂️</span> 50/50</button>
+            <span class="lifeline-left" id="ll-left"></span>
+          </div>
           <div class="mek-options" id="mek-options"></div>
           <div class="mek-feedback" id="mek-feedback" aria-live="polite"></div>
           <div class="think" id="mek-think" hidden>
@@ -146,7 +150,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.7 2.7L16 9.5"/></svg><span>Kontrollera</span>
         </button>
         <button class="tool" id="btn-letter">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.1v.1h5v-.1c0-.8.4-1.6 1.1-2.1A6 6 0 0 0 12 3z"/></svg><span>Tips</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.1v.1h5v-.1c0-.8.4-1.6 1.1-2.1A6 6 0 0 0 12 3z"/></svg><span>Tips</span><i class="tool-count" id="hint-count" aria-hidden="true"></i>
         </button>
         <button class="tool" id="btn-more">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="12" r=".5"/><circle cx="12" cy="12" r=".5"/><circle cx="16" cy="12" r=".5"/></svg><span>Mer</span>
@@ -321,6 +325,15 @@
         </ul>
         <p class="footnote tight">Med Nästa fråga automatiskt går appen vidare av sig själv efter ett rätt svar.</p>
 
+        <div class="list-title">Livlinor</div>
+        <ul class="list set-list">
+          <li class="row"><span class="ico" style="--c:#ff9500"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor"/></svg></span><span class="lbl">Gratis livlinor i dag</span><span class="val" id="val-lifelines"></span></li>
+        </ul>
+        <ul class="list set-list" id="ad-privacy-row" hidden>
+          <li><button class="row nav" id="ad-privacy"><span class="ico" style="--c:#34c759"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.4-3 8-7 9.5-4-1.5-7-5.1-7-9.5V6z"/></svg></span><span class="lbl">Samtycke till reklam</span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+        </ul>
+        <p class="footnote tight" id="lifeline-note">Varje dag får du 3 gratis livlinor: andra chans, 50/50, extra tips i korsordet, bonusomgångar och att rädda en bruten svit.</p>
+
         <div class="list-title">Ljud och känsla</div>
         <ul class="list set-list">
           <li><label class="row switch-row"><span class="ico" style="--c:#ff2d55"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg></span><span class="lbl">Ljudeffekter</span><input type="checkbox" id="sound-toggle" class="switch"></label></li>
@@ -347,7 +360,7 @@
 
         <div class="list-title">Integritet och villkor</div>
         <ul class="list set-list">
-          <li><button class="row nav" data-push="privacy"><span class="ico" style="--c:#007aff"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.4-3 8-7 9.5-4-1.5-7-5.1-7-9.5V6z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="lbl">Integritet</span><span class="val">Ingen insamling</span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+          <li><button class="row nav" data-push="privacy"><span class="ico" style="--c:#007aff"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.4-3 8-7 9.5-4-1.5-7-5.1-7-9.5V6z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="lbl">Integritet</span><span class="val">Ingen spårning</span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
           <li><button class="row nav" data-push="legal"><span class="ico" style="--c:#8e8e93"><svg viewBox="0 0 24 24"><path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5V8h4M9.5 12h6M9.5 15.5h6"/></svg></span><span class="lbl">Villkor och ansvar</span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
         </ul>
         <p class="footnote">Dagsprov är ett fristående övningsverktyg utan koppling till Universitets- och högskolerådet (UHR), som anordnar högskoleprovet.</p>
@@ -446,7 +459,8 @@
         <div class="legal-hero"><span class="ico big" style="--c:#007aff"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.4-3 8-7 9.5-4-1.5-7-5.1-7-9.5V6z"/><path d="M9 12l2 2 4-4"/></svg></span><b>Dina uppgifter stannar hos dig</b></div>
         <ul class="list legal">
           <li><b>Inga konton.</b> Du behöver inte logga in eller lämna några uppgifter om dig själv.</li>
-          <li><b>Ingen insamling.</b> Appen samlar inte in personuppgifter. Det finns ingen analys, ingen spårning, ingen reklam och inga cookies från tredje part.</li>
+          <li><b>Ingen insamling.</b> Appen samlar inte in personuppgifter. Det finns ingen analys, ingen spårning och inga cookies från tredje part.</li>
+          <li><b>Reklam bara om du själv vill.</b> Webbversionen har ingen reklam. I mobilappen kan du välja att titta på en kort reklamfilm för att få en extra livlina – aldrig annars. Filmerna kommer från Google AdMob, som då behandlar tekniska uppgifter om enheten (till exempel annons-id, IP-adress och ungefärlig plats) för att kunna visa och mäta annonsen. Annonserna är inte anpassade efter dig, och i EU får du frågan om samtycke först. Läs mer på policies.google.com/technologies/ads.</li>
           <li><b>Sparas bara på enheten.</b> Dina framsteg och inställningar sparas i webbläsarens lagring på den här enheten och skickas aldrig till någon server. Lagringen behövs för att appen ska kunna komma ihåg dina svar.</li>
           <li><b>Inga externa tjänster.</b> Appen hämtar inga typsnitt, skript eller bilder från andra webbplatser, och fungerar även utan internet när den väl har laddats.</li>
           <li><b>Webbhotellet.</b> Sidan ligger på GitHub Pages. Som för alla webbplatser kan webbhotellet tillfälligt registrera tekniska uppgifter, till exempel IP-adress, när sidan hämtas. Det styrs av GitHubs integritetspolicy.</li>
@@ -462,7 +476,7 @@
           <li><b>Fristående övningsverktyg.</b> Dagsprov har ingen koppling till, och är inte godkänt eller granskat av, Universitets- och högskolerådet (UHR), som ansvarar för högskoleprovet. Namnet högskoleprovet används bara för att beskriva vad appen hjälper dig att öva inför.</li>
           <li><b>Eget innehåll.</b> Alla ledtrådar, meningar, engelska uppgifter och förklaringar är egenskrivna, och matteuppgifterna skapas av appen själv. Inga frågor är hämtade från publicerade högskoleprov. Uppgifterna följer bara provdelarnas upplägg (ORD, MEK, ELF, XYZ, KVA och NOG).</li>
           <li><b>För övning.</b> Innehållet är till för att öva och kan innehålla fel. Appen ger inga garantier om resultat på det riktiga provet. Officiell information om högskoleprovet finns hos UHR.</li>
-          <li><b>Kostnadsfritt.</b> Appen är gratis och innehåller inga köp eller annonser.</li>
+          <li><b>Kostnadsfritt.</b> Appen är gratis. Webbversionen har ingen reklam. I mobilappen finns frivillig belöningsreklam: du kan titta på en kort film för en extra livlina, men reklam visas aldrig av sig själv och allt innehåll går att använda utan att titta.</li>
           <li><b>Upphovsrätt.</b> © 2026 Clementinose. Appens kod, texter, frågor, ordförklaringar och grafik får inte kopieras eller återanvändas utan tillstånd. Du får använda appen fritt för eget studiebruk.</li>
           <li><b>Varumärken.</b> Apple, iPhone, iPad och Magic Keyboard är varumärken som tillhör Apple Inc. De nämns bara för att beskriva vilka enheter appen fungerar på.</li>
         </ul>
@@ -535,6 +549,7 @@
         <li><b>Fem lägen.</b> <b>Korsord</b>, <b>Ord</b>, <b>Meningar</b>, <b>Engelska</b> och <b>Matte</b>. Ord är som ORD-delen: ett ord och fem betydelser (A–E). Meningar är som MEK-delen: välj det som passar bäst i luckorna.</li>
         <li><b>Engelska.</b> Som ELF-delen: välj ordet som betyder ungefär samma sak, eller det som passar bäst i meningen.</li>
         <li><b>Fyra nivåer.</b> Lätt, Medel, Svår och Expert. På Expert kommer ovanliga ord, de svåraste meningarna och de klurigaste matteuppgifterna.</li>
+        <li><b>Livlinor.</b> Svarar du fel kan du ta en <b>andra chans</b> – rätt svar visas inte förrän du valt. Du kan också använda <b>50/50</b>, få <b>extra tips</b> i korsordet, spela en <b>bonusomgång</b> eller <b>rädda en bruten svit</b>. Du får 3 gratis livlinor varje dag.</li>
         <li><b>Dagens ord.</b> Tryck på stjärnan uppe till vänster för dagens ord med betydelse och exempelmening. En röd prick betyder att du inte har sett dagens ord än.</li>
         <li><b>Matte.</b> Nya uppgifter varje dag i stil med XYZ, KVA och NOG. Tryck på 💡 <b>Visa hur man tänker</b> för att se lösningen steg för steg (eller tryck H). Svarar du rätt inom 10 sekunder utan hjälp blir det ⚡ blixtsvar.</li>
         <li><b>Inställningar.</b> Under kugghjulet ställer du in utseende, textstorlek, ljud, haptik, hur fel visas och mycket mer. Där kan du också spara en säkerhetskopia av dina framsteg.</li>
@@ -558,6 +573,31 @@
     <button class="action cancel" data-close>Avbryt</button>
   </dialog>
 
+  <!-- Livlina: gratis eller via en frivillig reklamfilm -->
+  <dialog id="reward-dialog" class="reward">
+    <div class="reward-body">
+      <div class="reward-icon" id="reward-icon" aria-hidden="true"></div>
+      <h2 id="reward-title"></h2>
+      <p id="reward-text"></p>
+      <div class="reward-lives" id="reward-lives" aria-hidden="true"></div>
+      <button class="pill" id="reward-free">Använd gratis livlina</button>
+      <button class="pill ad" id="reward-ad"><span class="play" aria-hidden="true">▶</span><span>Titta på en kort film<small>Frivilligt · ca 15–30 sekunder</small></span></button>
+      <p class="reward-note" id="reward-note"></p>
+      <button class="text-btn" id="reward-cancel">Inte nu</button>
+    </div>
+  </dialog>
+
+  <!-- Exempelreklam: bara i förhandsvisningen eller med ?reklamdemo=1, aldrig i den riktiga appen -->
+  <div class="ad-demo" id="ad-demo" hidden role="dialog" aria-label="Exempelreklam">
+    <div class="ad-top"><span class="ad-tag">Reklam · exempel</span><button class="ad-close" id="ad-close" aria-label="Stäng">✕</button></div>
+    <div class="ad-stage">
+      <div class="ad-logo" aria-hidden="true">📚</div>
+      <b>Här visas en kort reklamfilm</b>
+      <span>I App Store- och Google Play-versionen kommer en riktig film från en annonsör här. Du väljer alltid själv om du vill titta.</span>
+      <div class="ad-timer"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="17"/><circle class="ad-bar" id="ad-bar" cx="20" cy="20" r="17"/></svg><b id="ad-secs">5</b></div>
+    </div>
+  </div>
+
   <dialog id="confirm-dialog" class="alert">
     <div class="alert-body">
       <h2 id="confirm-title"></h2>
@@ -573,6 +613,7 @@
   <noscript><div class="sys-banner static">Dagsprov behöver JavaScript. Slå på JavaScript i webbläsarens inställningar och ladda om sidan.</div></noscript>
   <div class="sys-banner" id="compat-banner" hidden role="alert">Din webbläsare är för gammal för Dagsprov. Uppdatera till iOS/iPadOS 16.4 eller senare, eller använd en aktuell version av Safari, Chrome, Edge eller Firefox.</div>
   <div class="sys-banner action" id="update-banner" hidden role="status"><span>Dagsprov har uppdaterats.</span><button id="update-reload">Ladda om</button></div>
+  <div class="sys-banner action streak" id="streak-banner" hidden role="status"><span class="flame lit" aria-hidden="true">🔥</span><span id="streak-text"></span><button id="streak-rescue">Rädda</button><button class="banner-x" id="streak-close" aria-label="Stäng">✕</button></div>
   <div class="sys-banner action" id="error-banner" hidden role="alert"><span>Något gick fel. Ladda om appen om den beter sig konstigt.</span><button id="error-reload">Ladda om</button></div>
   <div class="crash" id="crash" hidden role="alertdialog" aria-labelledby="crash-title">
     <div class="crash-card">

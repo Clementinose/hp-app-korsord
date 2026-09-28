@@ -35,6 +35,11 @@
   function haptic(pattern) {
     try {
       if (prefs().haptics === false) return;
+      // I mobilappen: riktig haptik från telefonen.
+      if (window.DagsprovNative && window.DagsprovNative.haptic) {
+        window.DagsprovNative.haptic(Array.isArray(pattern) ? "success" : pattern >= 20 ? "error" : pattern >= 12 ? "medium" : "light");
+        return;
+      }
       if (navigator.vibrate) { navigator.vibrate(pattern); return; }
       // iPhone: Safari saknar vibrate(), men ett dolt iOS-reglage ger en lätt stöt när det slås om.
       // Hoppa över när tangentbordet används, så att fokus inte flyttas från textfältet.
@@ -71,9 +76,9 @@
   function save() {
     if (!state) return;
     const all = progressAll();
-    const { entries, revealed, wrong, locked, seconds, hints, done, gaveUp, mcTried, mcMistakes } = state;
+    const { entries, revealed, wrong, locked, seconds, hints, done, gaveUp, mcTried, mcMistakes } = state; // extraHints sparas separat
     all[puzzleId(state.date, state.level)] = {
-      sig: state.sig, entries, revealed, wrong, locked, seconds, hints, done, gaveUp, mcTried, mcMistakes,
+      sig: state.sig, entries, revealed, wrong, locked, seconds, hints, done, gaveUp, mcTried, mcMistakes, extraHints: state.extraHints || 0,
       words: state.puzzle.words.length,
     };
     store(PROGRESS_KEY, all);
@@ -179,7 +184,7 @@
     if (saved && saved.sig === sig) {
       Object.assign(state, {
         entries: saved.entries, revealed: saved.revealed, wrong: saved.wrong,
-        seconds: saved.seconds, hints: saved.hints, done: saved.done, gaveUp: saved.gaveUp,
+        seconds: saved.seconds, hints: saved.hints, done: saved.done, gaveUp: saved.gaveUp, extraHints: saved.extraHints || 0,
         mcTried: saved.mcTried || {}, mcMistakes: saved.mcMistakes || 0,
         locked: saved.locked || blank(false),
       });
@@ -339,6 +344,7 @@
     $("btn-solve").textContent = state.done ? "Visa lösningen" : "Ge upp och visa lösningen";
     $("btn-undo").disabled = state.done || !undoStack.length;
     for (const id of ["btn-erase", "btn-check", "btn-letter"]) $(id).disabled = state.done;
+    renderHintCount();
     renderChoices();
   }
 
@@ -1032,11 +1038,14 @@
       words += n;
       bump(date, "cross", n);
     }
+    // Räddade dagar (livlinan "Rädda sviten") räknas med i sviten men inte som spelade dagar.
+    const frozen = new Set(prefs().frozen || []);
+    const inStreak = (x) => solvedDays.has(x) || frozen.has(x);
     let streak = 0;
-    let d = solvedDays.has(todayKey()) ? todayKey() : addDays(todayKey(), -1);
-    while (solvedDays.has(d)) { streak++; d = addDays(d, -1); }
+    let d = inStreak(todayKey()) ? todayKey() : addDays(todayKey(), -1);
+    while (inStreak(d)) { streak++; d = addDays(d, -1); }
     let best = 0, run = 0, prev = null;
-    for (const day of [...solvedDays].sort()) {
+    for (const day of [...new Set([...solvedDays, ...frozen])].sort()) {
       run = prev && addDays(prev, 1) === day ? run + 1 : 1;
       best = Math.max(best, run);
       prev = day;
@@ -1046,7 +1055,7 @@
     for (const k of ["ord", "mek", "eng", "mat"]) acc[k] = quiz[k].total >= ACC_MIN ? quiz[k].right / quiz[k].total : null;
     const answeredTotal = Object.values(quiz).reduce((s, q) => s + q.total, 0);
     const rightTotal = Object.values(quiz).reduce((s, q) => s + q.right, 0);
-    return { per, streak, bestStreak: best, words, days: solvedDays.size, quiz, cats, missed, activity: days, acc, crossDone, answeredTotal, rightTotal };
+    return { per, streak, bestStreak: best, words, days: solvedDays.size, playedDays: solvedDays, quiz, cats, missed, activity: days, acc, crossDone, answeredTotal, rightTotal };
   }
 
   // Förslag på vad man bör öva på: svagaste områdena först, sedan delar man inte provat.
@@ -1111,7 +1120,7 @@
     const st = computeStats();
     const empty = !st.answeredTotal && !st.crossDone;
     let html = `<div class="stat-grid">
-      <div class="stat hero-stat"><div class="v"><span class="flame${st.streak ? " lit" : ""}">🔥</span> <span class="num">${st.streak}</span></div><div class="l">${st.streak === 1 ? "dag" : "dagar"} i rad<br><small>Längsta svit: ${st.bestStreak}</small></div></div>
+      <div class="stat hero-stat"><div class="v"><span class="flame${st.streak ? " lit" : ""}">🔥</span> <span class="num">${st.streak}</span></div><div class="l">${st.streak === 1 ? "dag" : "dagar"} i rad<br><small>Längsta svit: ${st.bestStreak}</small>${brokenStreak() ? `<br><button class="mini-rescue" id="stats-rescue">🔥 Rädda sviten</button>` : ""}</div></div>
       <div class="stat"><div class="v">${st.days}</div><div class="l">Dagar spelade</div></div>
       <div class="stat"><div class="v">${st.answeredTotal + st.words}</div><div class="l">Ord och frågor</div></div>
       <div class="stat"><div class="v">${st.answeredTotal ? Math.round((st.rightTotal / st.answeredTotal) * 100) : 0}%</div><div class="l">Rätt totalt</div></div></div>`;
@@ -1156,6 +1165,7 @@
       return `<div class="stat"><div class="v">${s.solved}</div><div class="l">${lvl.label}${s.best !== null ? `<br><small>Bäst ${formatTime(s.best)}</small>` : ""}</div></div>`;
     }).join("") + `</div>`;
     $("stats-body").innerHTML = html;
+    if ($("stats-rescue")) $("stats-rescue").addEventListener("click", async () => { $("stats-dialog").close(); await rescueStreak(); });
     $("stats-body").classList.remove("anim"); void $("stats-body").offsetWidth; $("stats-body").classList.add("anim");
     $("stats-body").querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => {
       $("stats-dialog").close();
@@ -1508,23 +1518,28 @@
   }
 
   const ROUNDS = { ord: ordRound, mek: mekRound, eng: engRound, mat: matRound };
-  function quizRound(kind, date, level) {
-    const rng = mulberry32(hashString(`${SEED_VERSION}|${kind}|${date}|${level}`));
+  // Bonusomgångar (livlina) får egna frön: samma nivå, nya frågor.
+  function quizRound(kind, date, level, bonus = 0) {
+    const rng = mulberry32(hashString(`${SEED_VERSION}|${kind}|${date}|${level}${bonus ? "|bonus" + bonus : ""}`));
     const qs = ROUNDS[kind](rng, level);
     return { qs, sig: qs.map((q) => q.id).join(","), correct: qs.map((q) => q.correct) };
   }
 
-  function openMek(date, level, dir) {
+  function openMek(date, level, dir, bonus = 0) {
     stopTimer();
     if (state) save();
     if (mek) saveMek();
     cur = { date, level };
     const kind = mode();
-    const round = quizRound(kind, date, level);
-    const saved = progressAll()[mekId(date, level, kind)];
-    mek = { kind, date, level, ...round, answers: round.qs.map(() => null), times: round.qs.map(() => null), helped: round.qs.map(() => false), shown: 0, seconds: 0, done: false };
-    if (saved && saved.sig === round.sig) Object.assign(mek, { answers: saved.answers, times: saved.times || mek.times, helped: saved.helped || mek.helped, seconds: saved.seconds, done: saved.done });
-    mek.idx = Math.max(0, mek.answers.findIndex((a) => a === null));
+    const round = quizRound(kind, date, level, bonus);
+    const saved = progressAll()[mekId(date, level, kind) + (bonus ? `+b${bonus}` : "")];
+    const blank = () => round.qs.map(() => null);
+    mek = { kind, date, level, bonus, ...round, answers: blank(), times: blank(), helped: round.qs.map(() => false), retried: blank(), removed: blank(), halved: blank(), shown: 0, seconds: 0, done: false };
+    if (saved && saved.sig === round.sig) {
+      Object.assign(mek, { answers: saved.answers, times: saved.times || mek.times, helped: saved.helped || mek.helped, seconds: saved.seconds, done: saved.done });
+      for (const k of ["retried", "removed", "halved"]) if (Array.isArray(saved[k])) mek[k] = saved[k];
+    }
+    mek.idx = Math.max(0, mek.answers.findIndex((a, i) => a === null || retryPending(i)));
     if (mek.done || mek.answers.every((a) => a !== null)) mek.idx = mek.qs.length - 1;
     paused = false;
     combo = 0;
@@ -1538,8 +1553,9 @@
   function saveMek() {
     if (!mek) return;
     const all = progressAll();
-    all[mekId(mek.date, mek.level, mek.kind)] = {
+    all[mekId(mek.date, mek.level, mek.kind) + (mek.bonus ? `+b${mek.bonus}` : "")] = {
       sig: mek.sig, answers: mek.answers, correct: mek.correct, times: mek.times, helped: mek.helped, seconds: mek.seconds, done: mek.done,
+      retried: mek.retried, removed: mek.removed, halved: mek.halved,
       cats: mek.qs.map((q) => q.cat || null),
       keys: mek.qs.map((q) => q.key || null), // ordet självt, så att statistiken tål att ordlistan växer
     };
@@ -1556,6 +1572,8 @@
     $("mek-count").textContent = mek.done ? "Klart" : `Fråga ${mek.idx + 1} av ${mek.qs.length}`;
   }
 
+  // Fel svar där andra chans fortfarande erbjuds: rätt svar hålls hemligt tills man väljer.
+  const retryPending = (i) => !mek.done && mek.answers[i] !== null && mek.answers[i] !== mek.correct[i] && !mek.retried[i];
   let questionShownAt = 0;
   function renderMek(enter) {
     renderMekDots();
@@ -1563,20 +1581,25 @@
     $("mek-body").hidden = false;
     $("mek-result").hidden = true;
     const i = mek.idx, q = mek.qs[i], answered = mek.answers[i];
+    const pending = retryPending(i);
     $("mek-label").textContent = q.label;
     $("mek-card").classList.toggle("big", !!q.big);
-    $("mek-text").innerHTML = q.prompt(answered !== null, answered === q.correct);
+    $("mek-text").innerHTML = q.prompt(answered !== null && !pending, answered === q.correct);
     $("mek-options").classList.toggle("fixed", !!q.fixed);
     // Korta svar (siffror, enstaka ord) visas två och två så att alla får plats utan skroll på små skärmar.
     const plain = q.options.map((o) => o.replace(/<[^>]+>/g, "").trim());
     $("mek-options").classList.toggle("short", !q.fixed && q.options.length === 4 && plain.every((t) => t.length <= 14));
+    const gone = new Set(mek.removed[i] || []);
     $("mek-options").innerHTML = q.options.map((text, k) => {
       let cls = "";
-      if (answered !== null) cls = k === q.correct ? "right" : k === answered ? "wrong" : "dim";
-      return `<button class="mek-opt ${cls}" data-k="${k}" style="--i:${k}" ${answered !== null ? "disabled" : ""}>` +
+      if (pending) cls = k === answered ? "wrong" : gone.has(k) ? "gone" : "dim";
+      else if (answered !== null) cls = k === q.correct ? "right" : k === answered ? "wrong" : "dim";
+      else if (gone.has(k)) cls = "gone";
+      return `<button class="mek-opt ${cls}" data-k="${k}" style="--i:${k}" ${answered !== null || gone.has(k) ? "disabled" : ""}>` +
         `<span class="opt">${MEK_LABELS[k]}</span><span class="opt-word">${text}</span></button>`;
     }).join("");
     renderMekFeedback();
+    renderLifelineBar();
     mek.shown = answered === null && !mek.helped[i] ? 0 : mek.shown;
     renderSteps(false);
     if (answered === null) questionShownAt = performance.now();
@@ -1593,7 +1616,7 @@
   // "Visa hur man tänker": stegen visas ett i taget. Före svaret räknas det som hjälp (inget blixtsvar).
   function renderSteps(animLast) {
     const q = mek.qs[mek.idx], box = $("mek-think");
-    box.hidden = !q.steps;
+    box.hidden = !q.steps || retryPending(mek.idx);
     if (!q.steps) return;
     const answered = mek.answers[mek.idx] !== null;
     const n = q.steps.length, shown = Math.min(mek.shown, n);
@@ -1625,7 +1648,15 @@
     const right = a === q.correct;
     const bolt = isBolt(i) ? ` <span class="bolt">⚡ Blixtsvar på ${mek.times[i]} s</span>` : "";
     const note = q.explain && prefs().notes !== false ? `<span class="fb-note">${q.explain}</span>` : "";
-    fb.innerHTML = (right ? `<span class="fb ok">✓ Rätt!</span>${bolt}` : `<span class="fb bad">✕ Fel – rätt svar är ${MEK_LABELS[q.correct]}</span>`) + note;
+    // Fel svar: erbjud en andra chans (livlina) innan rätt svar avslöjas.
+    if (!right && !mek.retried[i] && !mek.done) {
+      fb.innerHTML = `<span class="fb bad">✕ Fel svar</span><button class="retry-btn" id="retry-btn"><span aria-hidden="true">↺</span> Andra chans</button><button class="reveal-btn" id="reveal-btn">Visa rätt svar</button>`;
+      $("retry-btn").addEventListener("click", useRetry);
+      $("reveal-btn").addEventListener("click", () => { mek.retried[i] = "seen"; saveMek(); renderMek(); });
+      next.hidden = true;
+      return;
+    }
+    fb.innerHTML = (right ? `<span class="fb ok">✓ Rätt!${mek.retried[i] === true ? " (andra chans)" : ""}</span>${bolt}` : `<span class="fb bad">✕ Fel – rätt svar är ${MEK_LABELS[q.correct]}</span>`) + note;
     next.hidden = false;
     next.textContent = i === mek.qs.length - 1 ? "Se resultatet" : "Nästa fråga";
   }
@@ -1634,14 +1665,14 @@
   function answerMek(k) {
     if (!mek || mek.done || paused || mek.answers[mek.idx] !== null) return;
     const i = mek.idx;
-    if (k < 0 || k >= mek.qs[i].options.length) return;
+    if (k < 0 || k >= mek.qs[i].options.length || (mek.removed[i] || []).includes(k)) return;
     mek.answers[i] = k;
     mek.times[i] = Math.max(1, Math.round((performance.now() - questionShownAt) / 1000));
     const right = k === mek.correct[i];
     renderMek();
     const btn = $("mek-options").querySelector(`[data-k="${k}"]`);
     const rightBtn = $("mek-options").querySelector(`[data-k="${mek.correct[i]}"]`);
-    if (rightBtn) animate(rightBtn, "ring", 900);
+    if (rightBtn && !retryPending(i)) animate(rightBtn, "ring", 900);
     if (right) {
       combo++;
       haptic(12);
@@ -1681,6 +1712,7 @@
 
   function nextMek() {
     if (!mek || mek.answers[mek.idx] === null) return;
+    if (retryPending(mek.idx)) { mek.retried[mek.idx] = "seen"; saveMek(); renderMek(); return; }
     if (mek.idx < mek.qs.length - 1) {
       mek.idx++;
       mek.shown = 0;
@@ -1708,7 +1740,7 @@
     const circ = 2 * Math.PI * 54;
     const items = mek.qs.map((q, i) => {
       const ok = mek.answers[i] === mek.correct[i];
-      return `<li class="${ok ? "ok" : "bad"}" style="--i:${i}"><span class="mark">${ok ? "✓" : "✕"}</span><span>${q.review || q.explain}${isBolt(i) ? " ⚡" : ""}${mek.helped[i] ? " 💡" : ""}</span></li>`;
+      return `<li class="${ok ? "ok" : "bad"}" style="--i:${i}"><span class="mark">${ok ? "✓" : "✕"}</span><span>${q.review || q.explain}${isBolt(i) ? " ⚡" : ""}${mek.retried[i] === true ? " ↺" : mek.helped[i] ? " 💡" : ""}</span></li>`;
     }).join("");
     const nextLevel = LEVEL_KEYS.slice(LEVEL_KEYS.indexOf(mek.level) + 1).find((l) => { const p = progressAll()[mekId(mek.date, l, mek.kind)]; return !(p && p.done); });
     $("mek-result").innerHTML = `
@@ -1718,9 +1750,12 @@
           <div class="ring-num"><b id="mek-score">${right}</b><span>av ${n}</span></div>
         </div>
         <h2>${msg}</h2>
-        <p>${MODE_NAMES[mek.kind]} · ${LEVELS[mek.level].label}${showTime() ? " · " + formatTime(mek.seconds) : ""}</p>
+        <p>${MODE_NAMES[mek.kind]} · ${LEVELS[mek.level].label}${mek.bonus ? ` · bonusomgång ${mek.bonus}` : ""}${showTime() ? " · " + formatTime(mek.seconds) : ""}</p>
         ${mek.kind === "mat" ? `<p class="bolts">${"⚡".repeat(Math.min(bolts, 10)) || "–"} <span>${bolts} blixtsvar</span></p>` : ""}
-        ${nextLevel ? `<button class="pill" id="mek-next-level">Spela ${LEVELS[nextLevel].label.toLowerCase()}</button>` : ""}
+        <div class="result-actions">
+          ${nextLevel && !mek.bonus ? `<button class="pill" id="mek-next-level">Spela ${LEVELS[nextLevel].label.toLowerCase()}</button>` : ""}
+          <button class="pill ghost bonus-btn" id="mek-bonus"><span aria-hidden="true">🎁</span> Bonusomgång</button>
+        </div>
       </div>
       <div class="list-title">${mek.kind === "mat" ? "Uppgifter och svar" : "Rätt svar"}</div>
       <ul class="list mek-review">${items}</ul>`;
@@ -1728,6 +1763,14 @@
     $("mek-result").hidden = false;
     const nl = $("mek-next-level");
     if (nl) nl.addEventListener("click", () => openCurrent(mek.date, nextLevel, "next"));
+    $("mek-bonus").addEventListener("click", async () => {
+      if (!(await offerLifeline("bonus"))) return;
+      // Nästa lediga bonusomgång för samma dag, läge och nivå.
+      const all = progressAll(), base = mekId(mek.date, mek.level, mek.kind);
+      let n = 1;
+      while (all[`${base}+b${n}`] && all[`${base}+b${n}`].done) n++;
+      openMek(mek.date, mek.level, "next", n);
+    });
     if (celebrate) {
       animate($("mek-result"), "enter", 900);
       if (!reduceMotion()) {
@@ -1759,6 +1802,196 @@
         { transform: `translate(calc(-50% + ${Math.cos(ang) * dist}px), calc(-50% + ${Math.sin(ang) * dist}px)) scale(1)`, opacity: 0 },
       ], { duration: 800 + Math.random() * 300, easing: "cubic-bezier(.2,.8,.3,1)", fill: "forwards" });
     }
+  }
+
+  // ---------- Livlinor och frivillig reklam ----------
+  // Alla får 3 gratis livlinor per dag. I App Store- och Google Play-versionen kan man dessutom
+  // välja att titta på en kort reklamfilm för en extra livlina. Reklam visas aldrig automatiskt.
+  // Appskalet (Expo) lägger in window.DagsprovNative.showRewarded() som visar en riktig film och
+  // svarar true om filmen har setts klart. I förhandsvisningen (eller med ?reklamdemo=1) visas en exempelfilm.
+  const FREE_LIFELINES = 3;
+  const LIFELINES = {
+    retry: { icon: "↺", color: "#ff9500", title: "Andra chans", text: "Ta bort ditt felsvar och försök igen. Frågan räknas som vanligt om du svarar rätt." },
+    half: { icon: "✂️", color: "#af52de", title: "50/50", text: "Alla felaktiga alternativ utom ett försvinner – kvar blir rätt svar och ett fel." },
+    hint: { icon: "💡", color: "#ffcc00", title: "Extra tips", text: "Du har använt korsordets gratis tips. Få ett tips till." },
+    streak: { icon: "🔥", color: "#ff3b30", title: "Rädda sviten", text: "Du missade i går. Rädda sviten så räknas i går som en övningsdag." },
+    bonus: { icon: "🎁", color: "#34c759", title: "Bonusomgång", text: "Tio nya frågor på samma nivå – perfekt när du vill öva mer." },
+  };
+  function lifelinesLeft() {
+    const p = prefs().lifelines;
+    return p && p.date === todayKey() ? Math.max(0, FREE_LIFELINES - (p.used || 0)) : FREE_LIFELINES;
+  }
+  function spendFreeLifeline() {
+    const left = lifelinesLeft();
+    if (!left) return false;
+    setPref("lifelines", { date: todayKey(), used: FREE_LIFELINES - left + 1 });
+    return true;
+  }
+  const nativeAds = () => !!(window.DagsprovNative && typeof window.DagsprovNative.showRewarded === "function");
+  const demoAds = () => !nativeAds() && (window.top !== window || /[?&]reklamdemo=1/.test(location.search));
+  const adsAvailable = () => nativeAds() || demoAds();
+  async function showRewardedAd() {
+    if (nativeAds()) {
+      try { return !!(await window.DagsprovNative.showRewarded()); } catch { return false; }
+    }
+    return demoAds() ? demoAd() : false;
+  }
+  // Exempelfilm: 5 sekunder med nedräkning. Stänger man tidigare ges ingen belöning.
+  function demoAd() {
+    return new Promise((resolve) => {
+      const el = $("ad-demo"), secs = 5;
+      el.hidden = false;
+      el.classList.remove("done");
+      const start = performance.now();
+      let raf = 0;
+      const tick = (t) => {
+        const k = Math.min(1, (t - start) / (secs * 1000));
+        $("ad-secs").textContent = k < 1 ? Math.ceil(secs * (1 - k)) : "✓";
+        $("ad-bar").style.strokeDashoffset = String(107 * (1 - k));
+        if (k < 1) raf = requestAnimationFrame(tick);
+        else el.classList.add("done");
+      };
+      raf = requestAnimationFrame(tick);
+      $("ad-close").onclick = () => {
+        cancelAnimationFrame(raf);
+        el.hidden = true;
+        resolve(el.classList.contains("done"));
+      };
+    });
+  }
+  function renderLives(box, left) {
+    box.innerHTML = Array.from({ length: FREE_LIFELINES }, (_, i) => `<i class="${i < left ? "on" : ""}" style="--i:${i}">♥</i>`).join("");
+  }
+  // Frågar om en livlina ska användas. Svarar true om användaren fick den (gratis eller via film).
+  let rewardResolve = null;
+  function offerLifeline(kind) {
+    const ll = LIFELINES[kind], left = lifelinesLeft();
+    $("reward-icon").textContent = ll.icon;
+    $("reward-icon").style.setProperty("--c", ll.color);
+    $("reward-title").textContent = ll.title;
+    $("reward-text").textContent = ll.text;
+    renderLives($("reward-lives"), left);
+    const free = $("reward-free"), ad = $("reward-ad");
+    free.hidden = !left;
+    free.textContent = left ? `Använd gratis livlina (${left} kvar)` : "";
+    ad.hidden = !adsAvailable();
+    ad.classList.toggle("primary", !left);
+    $("reward-note").textContent = !left && !adsAvailable()
+      ? "Dagens gratis livlinor är slut. Nya kommer i morgon."
+      : !left ? "Dagens gratis livlinor är slut – men du kan titta på en kort film för en till." : "";
+    kbInput.blur();
+    $("reward-dialog").showModal();
+    animate($("reward-icon"), "bounce", 900);
+    haptic(8);
+    return new Promise((resolve) => { rewardResolve = resolve; });
+  }
+  function finishReward(ok) {
+    const done = rewardResolve;
+    rewardResolve = null;
+    if ($("reward-dialog").open) $("reward-dialog").close();
+    if (ok) { sound("ok"); haptic([12, 40, 12]); rewardBurst(); }
+    if (done) done(ok);
+  }
+  function rewardBurst() {
+    const el = document.createElement("div");
+    el.className = "reward-burst";
+    el.textContent = "✓ Livlina aktiverad";
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1600);
+  }
+  $("reward-free").addEventListener("click", () => finishReward(spendFreeLifeline()));
+  $("reward-ad").addEventListener("click", async () => {
+    $("reward-dialog").close();
+    const ok = await showRewardedAd();
+    if (ok) setPref("adsWatched", (prefs().adsWatched || 0) + 1);
+    else toast("Filmen avbröts – ingen livlina den här gången");
+    finishReward(ok);
+  });
+  $("reward-cancel").addEventListener("click", () => finishReward(false));
+  $("ad-privacy").addEventListener("click", () => { if (window.DagsprovNative && window.DagsprovNative.privacyOptions) window.DagsprovNative.privacyOptions(); });
+  $("reward-dialog").addEventListener("cancel", () => finishReward(false));
+
+  // --- Andra chans och 50/50 i frågelägena ---
+  async function useRetry() {
+    const i = mek.idx;
+    if (mek.done || mek.answers[i] === null || mek.answers[i] === mek.correct[i] || mek.retried[i]) return;
+    if (!(await offerLifeline("retry"))) return;
+    const wrong = mek.answers[i];
+    mek.retried[i] = true;
+    mek.removed[i] = [...new Set([...(mek.removed[i] || []), wrong])];
+    mek.answers[i] = null;
+    mek.times[i] = null;
+    mek.helped[i] = true; // inget blixtsvar efter en andra chans
+    saveMek();
+    renderMek("from-next");
+    renderMekDots();
+  }
+  async function useHalf() {
+    const i = mek.idx, q = mek.qs[i];
+    if (mek.done || mek.answers[i] !== null || mek.halved[i]) return;
+    if (!(await offerLifeline("half"))) return;
+    const removed = new Set(mek.removed[i] || []);
+    const wrong = q.options.map((_, k) => k).filter((k) => k !== q.correct && !removed.has(k));
+    const drop = shuffled(wrong, mulberry32(hashString(`${mek.date}|${mek.kind}|${i}|half`))).slice(0, Math.max(0, wrong.length - 1)); // kvar: rätt svar + ett fel
+    mek.removed[i] = [...removed, ...drop];
+    mek.halved[i] = true;
+    mek.helped[i] = true;
+    saveMek();
+    renderMek();
+    drop.forEach((k) => { const b = $("mek-options").querySelector(`[data-k="${k}"]`); if (b) animate(b, "vanish", 600); });
+  }
+  function renderLifelineBar() {
+    const i = mek.idx, answered = mek.answers[i] !== null;
+    $("lifeline-bar").hidden = mek.done;
+    $("ll-half").disabled = answered || !!mek.halved[i];
+    $("ll-left").textContent = `♥ ${lifelinesLeft()} kvar i dag`;
+  }
+  $("ll-half").addEventListener("click", useHalf);
+
+  // --- Rädda sviten ---
+  // Missade man i går men övade i förrgår kan i går räknas som en övningsdag (en gång per dag).
+  function brokenStreak() {
+    const st = computeStats(), today = todayKey(), y = addDays(today, -1);
+    if (st.playedDays.has(today) || st.playedDays.has(y) || (prefs().frozen || []).includes(y)) return 0;
+    let n = 0, d = addDays(today, -2);
+    while (st.playedDays.has(d) || (prefs().frozen || []).includes(d)) { n++; d = addDays(d, -1); }
+    return n >= 2 ? n : 0;
+  }
+  async function rescueStreak() {
+    const n = brokenStreak();
+    if (!n) return;
+    if (!(await offerLifeline("streak"))) return;
+    setPref("frozen", [...(prefs().frozen || []), addDays(todayKey(), -1)].slice(-30));
+    $("streak-banner").hidden = true;
+    toast(`🔥 Sviten på ${n + 1} dagar är räddad!`);
+  }
+  function maybeOfferStreak() {
+    const n = brokenStreak();
+    if (!n || prefs().streakOffered === todayKey()) return;
+    setPref("streakOffered", todayKey());
+    $("streak-text").textContent = `Sviten på ${n} dagar bröts i går`;
+    $("streak-banner").hidden = false;
+  }
+  $("streak-rescue").addEventListener("click", rescueStreak);
+  $("streak-close").addEventListener("click", () => ($("streak-banner").hidden = true));
+
+  // --- Extra tips i korsordet ---
+  const FREE_HINTS = { easy: 5, medium: 4, hard: 3, expert: 3 };
+  const hintsLeft = () => (state ? FREE_HINTS[state.level] + (state.extraHints || 0) - state.hints : 0);
+  function renderHintCount() {
+    if (!state) return;
+    const left = Math.max(0, hintsLeft());
+    $("hint-count").textContent = left ? left : "+";
+    $("hint-count").classList.toggle("empty", !left);
+  }
+  async function withHint(fn) {
+    if (!playable()) return;
+    if (hintsLeft() <= 0) {
+      if (!(await offerLifeline("hint"))) return;
+      state.extraHints = (state.extraHints || 0) + 1;
+    }
+    fn();
+    renderHintCount();
   }
 
   // ---------- Dagens ord (eget ark med vändbart kort) ----------
@@ -2029,10 +2262,10 @@
   $("mek-think-btn").addEventListener("click", showStep);
   $("mek-resume").addEventListener("click", () => setPaused(false));
   $("btn-check").addEventListener("click", () => playable() && check());
-  $("btn-letter").addEventListener("click", () => { if (!playable()) return; animate($("btn-letter"), "used", 900); reveal([[state.sel.r, state.sel.c]]); });
+  $("btn-letter").addEventListener("click", () => withHint(() => { animate($("btn-letter"), "used", 900); reveal([[state.sel.r, state.sel.c]]); }));
   $("btn-undo").addEventListener("click", undo);
   $("btn-erase").addEventListener("click", erase);
-  $("btn-word").addEventListener("click", () => { $("more-dialog").close(); if (playable()) reveal(cellsOf(currentWord())); });
+  $("btn-word").addEventListener("click", () => { $("more-dialog").close(); withHint(() => reveal(cellsOf(currentWord()))); });
   $("btn-more").addEventListener("click", () => { kbInput.blur(); $("more-dialog").showModal(); });
   $("btn-reset").addEventListener("click", async () => {
     $("more-dialog").close();
@@ -2070,6 +2303,10 @@
     $("val-appearance").textContent = `${THEME_NAMES[p.theme || "auto"]} · ${ACCENT_NAMES[p.accent || "blue"]}`;
     $("val-check").textContent = CHECK_NAMES[checkMode()];
     $("val-bolt").textContent = boltSeconds() ? boltSeconds() + " s" : "Av";
+    $("ad-privacy-row").hidden = !(window.DagsprovNative && window.DagsprovNative.privacyOptions);
+    $("val-lifelines").textContent = `${"♥".repeat(lifelinesLeft())}${"♡".repeat(FREE_LIFELINES - lifelinesLeft())}  ${lifelinesLeft()} av ${FREE_LIFELINES}`;
+    $("lifeline-note").textContent = `Varje dag får du ${FREE_LIFELINES} gratis livlinor: andra chans, 50/50, extra tips i korsordet, bonusomgångar och att rädda en bruten svit.` +
+      (adsAvailable() ? " Är de slut kan du titta på en kort reklamfilm för en till – helt frivilligt. Reklam visas aldrig av sig själv." : "");
     const st = computeStats();
     $("set-hero-sub").textContent = st.days
       ? `🔥 ${st.streak} ${st.streak === 1 ? "dag" : "dagar"} i rad · ${st.answeredTotal + st.words} ord och frågor`
@@ -2340,7 +2577,7 @@
   // ---------- Tips om hemskärmen (bara i Safari på iPhone/iPad, en gång) ----------
   const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   // I App Store-versionen (Capacitor) körs appen redan som en riktig app – då ska inget hemskärmstips visas.
-  const isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const isNativeApp = !!window.DagsprovNative || !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   const standalone = isNativeApp || navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
   function maybeShowInstallHint(delay) {
     if (!isIOS || standalone || prefs().installHint || window.top !== window) return;
@@ -2378,7 +2615,8 @@
 
   // Offline och uppdateringar: när en ny version har installerats i bakgrunden visas en
   // diskret banner med "Ladda om" (inte första gången appen installeras).
-  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  // I mobilappen (Expo-skalet) ligger allt redan inbyggt – där behövs ingen service worker.
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http") && !window.DagsprovNative) {
     const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register("sw.js").then((reg) => {
       const check = () => reg.update().catch(() => {});
@@ -2389,5 +2627,7 @@
       if (hadController) $("update-banner").hidden = false;
     });
   }
+  // Erbjud att rädda en bruten svit en gång per dag, efter att appen har startat.
+  setTimeout(() => { if (!document.querySelector("dialog[open]")) maybeOfferStreak(); }, 1500);
   window.__dagsprovReady = true;
 })();
