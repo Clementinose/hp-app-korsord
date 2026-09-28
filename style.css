@@ -118,6 +118,9 @@ html, body { margin: 0; height: 100%; }
 html { overflow: hidden; overscroll-behavior: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   height: var(--app-h, 100dvh);
+  /* Appen ligger fast i den synliga ytan; --vv-top följer iOS när tangentbordet skjuter upp sidan. */
+  position: fixed; top: 0; left: 0; width: 100%;
+  transform: translateY(var(--vv-top, 0px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1646,7 +1649,7 @@ dialog.settings[open] .set-page[data-page="root"] > :nth-child(n+8) { animation-
   background: var(--label); color: var(--bg); font-size: 15px; line-height: 1.35;
   box-shadow: 0 16px 40px rgba(0, 0, 0, .25); animation: banner-in .45s cubic-bezier(.2, 1.2, .4, 1) both;
 }
-.sys-banner[hidden] { display: none; }
+.sys-banner[hidden] { display: none !important; }
 .sys-banner.static { position: static; transform: none; margin: 16px auto; }
 .sys-banner.action { display: flex; align-items: center; gap: 12px; }
 .sys-banner.action span { flex: 1; }
@@ -1660,3 +1663,7 @@ dialog.settings[open] .set-page[data-page="root"] > :nth-child(n+8) { animation-
 .crash-card p { margin: 0 0 8px; color: var(--label-2); line-height: 1.45; }
 .crash-card .pill { margin: 0; }
 .set-list a.row { color: inherit; text-decoration: none; }
+
+/* Tangentbordet uppe och hela rutnätet syns: ingen bokstavsrad, och ledtråden högst två rader. */
+body.compact.board-fits .cc-strip { display: none; }
+body.compact .cc-clue { -webkit-line-clamp: 2; }
