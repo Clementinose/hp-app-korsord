@@ -8,12 +8,17 @@
 - Arkiv med kalender där du ser vilka dagar du löst och kan spela missade korsord
 - Timer med paus, och en svit (🔥 dagar i rad) i statistiken
 - Skriv med iPhonens/iPadens eget tangentbord eller ett externt tangentbord som Magic Keyboard (piltangenter, Tab/Enter för nästa ord, mellanslag byter riktning, ⌘Z ångrar)
-- Fem lägen: **Korsord**, **Ord** (som ORD-delen: ett ord och fem betydelser, A–E), **Meningar** (meningskomplettering som i MEK-delen), **Engelska** (som ELF-delen: ordförråd och meningar med luckor) och **Matte** (XYZ- och KVA-uppgifter). En ny omgång varje dag på tre nivåer
+- Fem lägen: **Korsord**, **Ord** (som ORD-delen: ett ord och fem betydelser, A–E), **Meningar** (meningskomplettering som i MEK-delen), **Engelska** (som ELF-delen: ordförråd och meningar med luckor) och **Matte** (XYZ-, KVA- och NOG-uppgifter). En ny omgång varje dag på fyra nivåer
 - Matte genereras varje dag med nya siffror: 32 uppgiftstyper i XYZ-, KVA- och NOG-stil (procent, bråk, ekvationer, statistik, geometri, potenser, algebra, funktioner, sannolikhet m.m.). Knappen 💡 Visa hur man tänker visar lösningen steg för steg. Rätt svar inom 10 sekunder utan hjälp ger ⚡ blixtsvar
 - Statistik med diagram: aktivitet senaste två veckorna, profil per del (radardiagram), träffsäkerhet per matteområde, ord att repetera och förslag på vad du bör öva på
 - Inställningar som i iOS med undersidor: utseende med förhandsvisning (tema, färg, rutor, bokstäver, textstorlek), visa fel, hoppa över ifyllda rutor, nästa fråga automatiskt, förklaringar, blixtsvarstid, ljudeffekter, haptik, minska rörelse, säkerhetskopia (exportera/återställ) och nollställning
 - Ark kan dras ner för att stängas och undersidor i inställningarna kan svepas tillbaka från vänsterkanten
-- Innehåll: 2 365 HP-ord, 188 MEK-frågor, 118 engelska meningar och 481 engelska ord
+- Fyra nivåer i alla lägen: Lätt, Medel, Svår och **Expert** – orden har svårighetsnivåer 1–4, och Expert använder ovanliga ord, de svåraste meningarna och fler KVA/NOG
+- **Dagens ord** med betydelse, egenskriven exempelmening, vändbart kort, delning och tidigare dagars ord
+- Pokal när alla nivåer i ett läge är klara samma dag
+- Produktionsklar: uppdateringsbanner när en ny version finns, felåterställning, kontroll av gamla webbläsare, säkerhetspolicy (CSP), tillgänglighetsetiketter
+- Innehåll: 2 987 HP-ord (varav 622 expertord), 224 dagens ord med exempelmeningar, 188 MEK-frågor, 118 engelska meningar och 481 engelska ord
+- Kan paketeras för App Store med Capacitor – se [APP_STORE.md](APP_STORE.md)
 - Visa fel: per ord (standard – rätt eller fel visas först när ordet är ifyllt), direkt eller av. Ord som visats som rätt låses
 - Stilval: fyra rutformer (Rundad, Bubblor, Mjuk, Klassisk), sex färgteman och fyra typsnitt
 - Flikrad i botten på iPhone som i iOS-appar

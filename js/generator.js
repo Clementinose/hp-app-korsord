@@ -12,10 +12,13 @@
   }
 
   function build(pool, count, maxSize, rng) {
-    const cells = new Map(); // "r,c" -> { ch, across: bool, down: bool }
+    // Rutorna lagras med ett numeriskt nyckelvärde (snabbare än textnycklar) och
+    // indexeras per bokstav så att bara rutor med rätt bokstav behöver provas.
+    const cells = new Map(); // nyckel -> { r, c, ch, across: bool, down: bool }
+    const byLetter = new Map(); // bokstav -> [rutor]
     const placed = [];
     let minR = 0, maxR = 0, minC = 0, maxC = 0;
-    const key = (r, c) => r + "," + c;
+    const key = (r, c) => (r + 512) * 1024 + (c + 512);
     const at = (r, c) => cells.get(key(r, c));
 
     function check(word, r, c, dir) {
@@ -45,9 +48,14 @@
       for (let i = 0; i < word.length; i++) {
         const rr = r + dr * i, cc = c + dc * i;
         const k = key(rr, cc);
-        const cell = cells.get(k) || { ch: word[i], across: false, down: false };
+        let cell = cells.get(k);
+        if (!cell) {
+          cell = { r: rr, c: cc, ch: word[i], across: false, down: false };
+          cells.set(k, cell);
+          if (!byLetter.has(cell.ch)) byLetter.set(cell.ch, []);
+          byLetter.get(cell.ch).push(cell);
+        }
         cell[dir] = true;
-        cells.set(k, cell);
       }
       minR = Math.min(minR, r); maxR = Math.max(maxR, r + dr * (word.length - 1));
       minC = Math.min(minC, c); maxC = Math.max(maxC, c + dc * (word.length - 1));
@@ -57,10 +65,11 @@
     function tryPlace(entry) {
       const word = entry[0];
       let best = null, bestScore = -Infinity;
-      for (const [k, cell] of cells) {
-        const [r, c] = k.split(",").map(Number);
-        for (let i = 0; i < word.length; i++) {
-          if (word[i] !== cell.ch) continue;
+      for (let i = 0; i < word.length; i++) {
+        const matches = byLetter.get(word[i]);
+        if (!matches) continue;
+        for (const cell of matches) {
+          const { r, c } = cell;
           for (const dir of ["across", "down"]) {
             if (cell[dir]) continue;
             const sr = dir === "down" ? r - i : r;

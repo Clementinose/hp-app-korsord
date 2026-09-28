@@ -1,0 +1,19 @@
+{
+  "name": "dagsprov",
+  "version": "3.1.0",
+  "private": true,
+  "description": "Dagsprov – öva inför högskoleprovet varje dag: korsord, ord, meningar, engelska och matte.",
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "build": "node scripts/build-www.mjs",
+    "ios": "npm run build && npx cap sync ios && npx cap open ios",
+    "sync": "npm run build && npx cap sync"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  },
+  "dependencies": {
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0"
+  }
+}
