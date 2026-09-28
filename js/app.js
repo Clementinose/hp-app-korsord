@@ -70,7 +70,7 @@
   // Det här är ett hinder mot fusk, inte ett vattentätt skydd – det kräver en server.
   const SIG_KEY = "hpk-sig-v1";
   const CRITICAL = ["bank", "bought", "pets", "petNew", "companion", "plusTrial", "plusTrialAt", "plusDemo", "plusDemoSeason", "demoPets",
-    "lifelines", "unlockedDays", "frozen", "adsToday", "clockMax", "noPetsUntil"];
+    "lifelines", "unlockedDays", "frozen", "adsToday", "clockMax", "noPetsUntil", "petsExtra", "eggs", "petXp", "petGear"];
   const stateKey = () => (window.DagsprovNative && typeof window.DagsprovNative.stateKey === "string" && window.DagsprovNative.stateKey.length >= 16
     ? window.DagsprovNative.stateKey : "dagsprov|webb|2026");
   function cyrb53(str) {
@@ -101,7 +101,7 @@
   }
   // Körs vid start. Har någon ändrat i lagringen återställs belöningarna till säkra värden, och
   // ändrade framsteg kan inte ge djur (själva övningarna behålls – de är ju ditt eget lärande).
-  const SAFE_CRITICAL = { bank: 0, bought: 0, pets: {}, petNew: null, companion: null, plusTrial: 0, plusDemo: false, demoPets: [], unlockedDays: [], frozen: [] };
+  const SAFE_CRITICAL = { bank: 0, bought: 0, pets: {}, petsExtra: {}, eggs: {}, petXp: {}, petGear: {}, petNew: null, companion: null, plusTrial: 0, plusDemo: false, demoPets: [], unlockedDays: [], frozen: [] };
   function verifyState() {
     let sig = null, rawPrefs = null, rawProgress = null;
     try { sig = JSON.parse(localStorage.getItem(SIG_KEY)); rawPrefs = localStorage.getItem(PREFS_KEY); rawProgress = localStorage.getItem(PROGRESS_KEY); } catch { return; }
@@ -719,7 +719,9 @@
     });
     sparkle(cells);
     combo++;
+    addPetXp(1);
     if (combo >= 2) comboToast(combo);
+    if (combo > 0 && combo % 4 === 0) setTimeout(() => petParty("happy"), 500);
   }
 
   // När ett ord blir helt ifyllt avgör inställningen vad som visas:
@@ -948,7 +950,8 @@
     }
     save();
     renderHeader();
-    setTimeout(showWinDialog, gaveUp ? 0 : 1300);
+    if (!gaveUp) setTimeout(() => petParty("win", `${petName(mascot())} ${PD.VOICE_NAMES[voiceOf(mascot())] || "jublar"} – hela korsordet klart!`), 350);
+    setTimeout(showWinDialog, gaveUp ? 0 : petPartyOn() && !reduceMotion() ? 2900 : 1300);
     if (!gaveUp) { const d = state.date; setTimeout(() => maybeTrophy(d, "cross"), 1600); }
   }
 
@@ -961,7 +964,9 @@
     });
   }
   function maybeTrophy(date, kind) {
-    setTimeout(checkPets, 3900); // månadens uppdrag kan ha blivit klara
+    addPetXp(5);
+    eggTick();
+    setTimeout(checkPets, 3900); // månadens uppdrag och milstolpar kan ha blivit klara
     setTimeout(maybeAskReminders, 5200);
     const key = `${date}|${kind}`;
     const got = prefs().trophies || {};
@@ -980,28 +985,37 @@
     setTimeout(() => el.remove(), 3700);
   }
 
-  // ---------- Maskotar och månadens uppdrag ----------
-  // Varje månad har ett eget djur. Klarar man minst 4 av månadens 6 uppdrag får man djuret för alltid
-  // (missar man ett djur kommer det tillbaka samma månad nästa år). Djuren går att använda:
-  // - Välj en följeslagare: den syns i menyraden, hejar på dig efter varje omgång och ger
-  //   1 extra gratis livlina varje dag.
-  // - Varje nytt djur ger 3 livlinor i present (de sparas som köpta livlinor).
-  const PETS = [
-    { e: "🐧", name: "Pingvinen Pim", c: "#5ac8fa", cheer: ["Isande bra!", "Pim glider vidare – du med!", "Kallt och klart: snyggt!"], nudge: "Pim väntar vid isflaket." },
-    { e: "🦊", name: "Räven Frida", c: "#ff9500", cheer: ["Listigt löst!", "Frida är imponerad!", "Slugt tänkt!"], nudge: "Frida har sniffat upp dagens korsord." },
-    { e: "🐰", name: "Haren Hilda", c: "#ff9ec7", cheer: ["Hopp hopp – snabbt jobbat!", "Hilda skuttar av glädje!", "Snabbtänkt!"], nudge: "Hilda skuttar otåligt." },
-    { e: "🦔", name: "Igelkotten Ivar", c: "#a2845e", cheer: ["Vasst!", "Ivar rullar ihop sig av stolthet.", "Taggad inför nästa?"], nudge: "Ivar har rullat fram till dagens uppgifter." },
-    { e: "🐨", name: "Koalan Kiki", c: "#8e8e93", cheer: ["Kiki kramar dig!", "Mysigt jobbat!", "Lugnt och klokt."], nudge: "Kiki har vaknat ur sin tupplur." },
-    { e: "🐢", name: "Sköldpaddan Sigge", c: "#34c759", cheer: ["Sakta men säkert – det lönar sig!", "Sigge nickar gillande.", "Uthållighet vinner!"], nudge: "Sigge har kommit fram – nu är det din tur." },
-    { e: "🐬", name: "Delfinen Doris", c: "#007aff", cheer: ["Plask! Superbra!", "Doris gör en volt!", "Du simmar igenom det här!"], nudge: "Doris har plaskat fram nya frågor." },
-    { e: "🦦", name: "Uttern Otto", c: "#bf8a4d", cheer: ["Otto klappar med tassarna!", "Utterst bra!", "Lekande lätt!"], nudge: "Otto har letat fram dagens ord." },
-    { e: "🦉", name: "Ugglan Ugo", c: "#af52de", cheer: ["Klokt tänkt!", "Ugo hoar av glädje!", "Visdom på riktigt."], nudge: "Ugo har vässat pennan." },
-    { e: "🐿️", name: "Ekorren Ella", c: "#ff6b00", cheer: ["Ella samlar dina poäng i boet!", "Nötigt bra!", "Kvickt!"], nudge: "Ella har samlat nötter – och nya frågor." },
-    { e: "🐻", name: "Björnen Bruno", c: "#8b5a2b", cheer: ["Björnstarkt!", "Bruno brummar belåtet.", "Stark insats!"], nudge: "Bruno har vaknat ur idet och vill plugga." },
-    { e: "🦌", name: "Renen Rolf", c: "#c0392b", cheer: ["Rolf drar dig framåt!", "Ren glädje!", "Stjärnklart!"], nudge: "Rolf står redo med släden." },
-  ];
-  // Olle är appens egen maskot och startkompis: en liten orangutang med glasögon. Han är alltid med,
-  // hejar på dig och skickar påminnelserna – tills du väljer ett annat djur som följeslagare.
+  // ---------- Maskotar ----------
+  // Över hundra djur att samla, alla ritade i samma gulliga stil (js/pets.js). Man får dem:
+  // - Månadens djur: klara minst 4 av månadens 6 uppdrag (kommer tillbaka samma månad nästa år).
+  // - Ägg: var tredje avklarade omgång ger ett ägg som kläcks till ett nytt djur (ibland glittrigt!).
+  // - Milstolpar: särskilda djur för första korsordet, långa sviter, många rätt svar …
+  // - Köp: månadens djur och äggdjuren kan också köpas för 25 kr st.
+  // Djuret som följer med dig hejar, firar med sin egen röst och animation när du klarar något, skickar
+  // dina påminnelser, ger 1 extra gratis livlina om dagen och blir din vän: med tiden låser det upp
+  // accessoarer som halsduk, glasögon och krona.
+  const PD = window.DAGSPROV_PETS;
+  const PETS = PD.pets;
+  const MONTH_PETS = PETS.filter((p) => p.source === "month");
+  const CHEERS = {
+    penguin: ["Isande bra!", "Pim glider vidare – du med!"], fox: ["Listigt löst!", "Frida är imponerad!"],
+    hare: ["Hopp hopp – snabbt jobbat!", "Hilda skuttar av glädje!"], hedgehog: ["Vasst!", "Taggad inför nästa?"],
+    koala: ["Kiki kramar dig!", "Mysigt jobbat!"], turtle: ["Sakta men säkert – det lönar sig!", "Uthållighet vinner!"],
+    dolphin: ["Plask! Superbra!", "Doris gör en volt!"], otter: ["Utterst bra!", "Lekande lätt!"],
+    owl: ["Klokt tänkt!", "Visdom på riktigt."], squirrel: ["Nötigt bra!", "Kvickt!"], bear: ["Björnstarkt!", "Stark insats!"],
+    reindeer: ["Ren glädje!", "Stjärnklart!"], elephant: ["En elefant glömmer aldrig – och nu inte du heller!", "Trumpetande bra!"],
+    lion: ["Lejonstarkt!", "Kungligt jobbat!"], unicorn: ["Magiskt!", "Rena glittret!"], dragon: ["Eldigt bra!", "Drakstarkt!"],
+    cat: ["Mjau-bra!", "Kattsnabbt!"], dog: ["Voff – superbra!", "Bästa vännen är stolt!"], frog: ["Kvack-bra!", "Hopp till nästa!"],
+  };
+  const petName = (p) => p.name.split(" ").slice(1).join(" ");
+  const species = (p) => (p && PD.S[p.species]) || null;
+  const voiceOf = (p) => (p.starter ? "monkey" : species(p).voice);
+  function cheersFor(p) {
+    const own = CHEERS[p.species] || [];
+    const n = petName(p);
+    return own.concat([`${n} ${PD.VOICE_NAMES[voiceOf(p)] || "jublar"} av glädje!`, `Snyggt! ${n} är stolt.`, `${n} gör en liten glädjedans!`]);
+  }
+  const nudgeFor = (p) => (p.starter ? OLLE.nudge : `${petName(p)} väntar på dig.`);
   const OLLE_SVG = `<svg class="olle" viewBox="0 0 64 64" aria-hidden="true">
     <circle cx="10" cy="35" r="7.5" fill="#c05f1c"/><circle cx="54" cy="35" r="7.5" fill="#c05f1c"/>
     <circle cx="10" cy="35" r="3.8" fill="#f2b98a"/><circle cx="54" cy="35" r="3.8" fill="#f2b98a"/>
@@ -1018,13 +1032,15 @@
     <ellipse cx="32" cy="41" rx="2.3" ry="1.5" fill="#8a4a1c"/>
     <path d="M27 45c3 2.8 7 2.8 10 0" fill="none" stroke="#8a4a1c" stroke-width="1.9" stroke-linecap="round"/>
   </svg>`;
-  const OLLE = { e: "🦧", svg: OLLE_SVG, name: "Orangutangen Olle", c: "#d9772b", starter: true,
-    cheer: ["Olle putsar glasögonen – imponerande!", "Smart! Olle är stolt.", "Hjärngympa deluxe!", "Olle gör en liten glädjedans!"],
+  const OLLE = { id: "olle", e: "🦧", svg: OLLE_SVG, name: "Orangutangen Olle", starter: true, source: "starter",
     nudge: "Olle har putsat glasögonen och är redo att plugga." };
-  const petName = (p) => p.name.split(" ").slice(1).join(" ");
-  const petFace = (p) => p.svg || escapeHtml(p.e);
+  CHEERS.olle = ["Olle putsar glasögonen – imponerande!", "Smart! Olle är stolt.", "Hjärngympa deluxe!"];
+  OLLE.species = "olle";
+  const petById = (id) => (id === "olle" ? OLLE : PD.byId[id] || null);
+  const petColor = (p) => (p.starter ? "#d9772b" : species(p).body === "#ffffff" || species(p).body === "#f4f7fb" || species(p).body === "#fafafa" ? "#8e9bb0" : species(p).body);
+  const petFace = (p, opts) => (p.starter ? (gearOf(p) ? OLLE_SVG.replace("</svg>", `<g transform="translate(-2 -6) scale(.64)">${PD.GEAR[gearOf(p)]()}</g></svg>`) : OLLE_SVG) : PD.svg(p, { gear: gearOf(p), ...(opts || {}) }));
   const mascot = () => companion() || OLLE; // Olle tar över när inget djur är valt
-  const PET_GIFT = 3, PET_NEED = 4;
+  const PET_GIFT = 3, PET_NEED = 4, EGG_EVERY = 3;
   const MISSIONS = {
     days: { t: 12, label: "Öva 12 dagar", icon: "📅" },
     streak: { t: 5, label: "Öva 5 dagar i rad", icon: "🔥" },
@@ -1039,7 +1055,6 @@
     eng: { t: 4, label: "Klara 4 omgångar Engelska", icon: "EN" },
   };
   const monthKey = (d) => d.slice(0, 7);
-  const petFor = (month) => PETS[+month.slice(5, 7) - 1];
   function missionsFor(month) {
     return shuffled(Object.keys(MISSIONS), mulberry32(hashString(`${SEED_VERSION}|uppdrag|${month}`))).slice(0, 6);
   }
@@ -1085,11 +1100,14 @@
     const list = missionsFor(month).map((k) => ({ k, ...MISSIONS[k], v: Math.min(st[k], MISSIONS[k].t), done: st[k] >= MISSIONS[k].t }));
     return { list, done: list.filter((x) => x.done).length };
   }
+  const petFor = (month) => MONTH_PETS[+month.slice(5, 7) - 1];
   const ownedPets = () => { const o = prefs().pets; return o && typeof o === "object" && !Array.isArray(o) ? o : {}; };
+  const extraPets = () => { const o = prefs().petsExtra; return o && typeof o === "object" && !Array.isArray(o) ? o : {}; };
   // Köpta djur (25 kr st). I appen kommer listan från köptjänsten (verifierade kvitton), inte från lagringen.
   const PET_PRICE = { price: DAGSPROV_CONFIG.price("pet") };
+  const SKU_COUNT = Math.max(...PETS.filter((p) => p.sku).map((p) => p.sku));
   let boughtPets = new Set();
-  const validPets = (list) => new Set((Array.isArray(list) ? list : []).filter((i) => Number.isInteger(i) && i >= 0 && i < 12));
+  const validPets = (list) => new Set((Array.isArray(list) ? list : []).filter((i) => Number.isInteger(i) && i >= 0 && i < SKU_COUNT));
   if (window.DagsprovNative && Array.isArray(window.DagsprovNative.petsOwned)) boughtPets = validPets(window.DagsprovNative.petsOwned);
   window.__dagsprovPets = (list) => {
     boughtPets = validPets(list);
@@ -1098,131 +1116,422 @@
   };
   const petShop = () => (window.DagsprovNative && window.DagsprovNative.pets) || null;
   const petShopAvailable = () => !!petShop() || (!petShop() && demoAds());
-  const earnedPet = (idx) => Object.keys(ownedPets()).some((m) => +m.slice(5, 7) - 1 === idx);
-  const ownsPet = (idx) => earnedPet(idx) || boughtPets.has(idx) || (!petShop() && demoAds() && (prefs().demoPets || []).includes(idx));
-  function companion() {
-    const c = prefs().companion;
-    return Number.isInteger(c) && c >= 0 && c < 12 && ownsPet(c) ? PETS[c] : null;
+  const bought = (p) => !!p.sku && (boughtPets.has(p.sku - 1) || (!petShop() && demoAds() && (prefs().demoPets || []).includes(p.sku - 1)));
+  function ownsPet(p) {
+    if (!p) return false;
+    if (p.starter) return true;
+    if (p.source === "month" && Object.keys(ownedPets()).some((m) => +m.slice(5, 7) - 1 === p.month)) return true;
+    return !!extraPets()[p.id] || bought(p);
   }
-  // Delar ut djur för alla månader där minst 4 uppdrag är klara (även tidigare månader).
+  const ownedCount = () => PETS.filter(ownsPet).length;
+  function companion() {
+    let c = prefs().companion;
+    if (Number.isInteger(c)) c = MONTH_PETS[c] && MONTH_PETS[c].id; // äldre sparat format
+    const p = typeof c === "string" ? PD.byId[c] : null;
+    return p && ownsPet(p) ? p : null;
+  }
+
+  // --- Vänskap och accessoarer ---
+  const XP_LEVELS = [0, 15, 40, 80, 140, 220, 320, 450, 600, 800];
+  const petXp = (p) => Math.max(0, Math.floor(+((prefs().petXp || {})[p.id]) || 0));
+  const petLevel = (p) => XP_LEVELS.filter((x) => petXp(p) >= x).length;
+  function gearOf(p) {
+    const g = (prefs().petGear || {})[p.id];
+    const def = PD.GEAR_LIST.find((x) => x.id === g);
+    return def && petLevel(p) >= def.level ? g : "";
+  }
+  function addPetXp(n) {
+    if (clockTampered || !n) return;
+    const p = mascot(), before = petLevel(p);
+    setPref("petXp", { ...(prefs().petXp || {}), [p.id]: petXp(p) + n });
+    const after = petLevel(p);
+    if (after > before) {
+      const gear = PD.GEAR_LIST.find((g) => g.level === after);
+      setTimeout(() => petParty("level", `${petName(p)} är nu vän nivå ${after}!${gear ? ` Ny accessoar: ${gear.name.toLowerCase()}.` : ""}`), 900);
+    }
+  }
+
+  // --- Ägg ---
+  const eggState = () => { const e = prefs().eggs || {}; return { prog: +e.prog || 0, ready: +e.ready || 0, hatched: +e.hatched || 0 }; };
+  function eggTick() {
+    if (clockTampered) return;
+    const e = eggState();
+    e.prog++;
+    if (e.prog >= EGG_EVERY) { e.prog = 0; e.ready++; setTimeout(() => rewardBurst("🥚 Du fick ett ägg! Kläck det under Maskotar"), 2400); }
+    setPref("eggs", e);
+    renderPetButton();
+  }
+  // Vad som kläcks bestäms av ett frö som bara appen känner till, så att det inte går att "slå om".
+  function hatchEgg() {
+    const e = eggState();
+    if (!e.ready) return null;
+    const rng = mulberry32(hashString(`${stateKey()}|ägg|${e.hatched}`));
+    const eggs = PETS.filter((p) => p.source === "egg");
+    const glitters = PETS.filter((p) => p.glitter && !ownsPet(p) && (PD.byId[p.base].source === "egg" || PD.byId[p.base].source === "month"));
+    const fresh = eggs.filter((p) => !ownsPet(p));
+    const rare = fresh.filter((p) => p.rarity === "rare");
+    const roll = rng();
+    let got = null;
+    if ((roll < 0.08 || !fresh.length) && glitters.length) got = glitters[Math.floor(rng() * glitters.length)];
+    else if (fresh.length) got = roll < 0.25 && rare.length ? rare[Math.floor(rng() * rare.length)] : fresh[Math.floor(rng() * fresh.length)];
+    e.ready--; e.hatched++;
+    setPref("eggs", e);
+    if (got) setPref("petsExtra", { ...extraPets(), [got.id]: Date.now() });
+    else setPref("bank", bankLeft() + 3); // alla djur redan kläckta: livlinor i stället
+    return got;
+  }
+
+  // --- Milstolpar ---
+  function milestoneValue(kind) {
+    const st = computeStats();
+    if (kind === "cross") return st.crossDone;
+    if (kind === "streak") return Math.max(st.streak, st.bestStreak);
+    if (kind === "right") return st.rightTotal;
+    if (kind === "days") return st.days;
+    if (kind === "perfect") return Object.values(st.quiz).reduce((a, q) => a + q.perfect, 0);
+    if (kind === "trophy") return Object.keys(prefs().trophies || {}).length;
+    if (kind === "expert") return Object.entries(progressAll()).filter(([id, p]) => p && p.done && !p.gaveUp && /(^|\|)([a-z]+-)?expert(\+|$)/.test(id.split("|")[1] || "")).length;
+    return 0;
+  }
+
+  // Delar ut månadens djur och milstolpedjur (även för tidigare månader).
   function checkPets() {
     if (checkClock()) return; // inga djur medan klockan är fel
-    const owned = ownedPets(), fresh = [], blockUntil = prefs().noPetsUntil || "";
+    const owned = ownedPets(), extra = extraPets(), fresh = [], blockUntil = prefs().noPetsUntil || "";
     for (let m = monthKey(FIRST_DAY); m <= monthKey(todayKey()); m = monthKey(addDays(m + "-28", 7))) {
       if (owned[m] || m <= blockUntil) continue;
-      if (monthProgress(m).done >= PET_NEED) { owned[m] = Date.now(); fresh.push(m); }
+      if (monthProgress(m).done >= PET_NEED) { owned[m] = Date.now(); fresh.push(petFor(m)); }
+    }
+    if (!prefs().noPetsUntil || prefs().noPetsUntil < monthKey(todayKey())) {
+      for (const p of PETS.filter((x) => x.source === "milestone")) {
+        if (extra[p.id]) continue;
+        if (milestoneValue(p.goal.kind) >= p.goal.n) { extra[p.id] = Date.now(); fresh.push(p); }
+      }
     }
     if (!fresh.length) return;
     setPref("pets", owned);
+    setPref("petsExtra", extra);
     setPref("bank", bankLeft() + PET_GIFT * fresh.length);
     renderPetButton();
-    if (!document.querySelector("dialog[open]")) showPetWon(fresh[fresh.length - 1]);
-    else setPref("petNew", fresh[fresh.length - 1]);
+    const last = fresh[fresh.length - 1];
+    if (!document.querySelector("dialog[open]")) showPetWon(last);
+    else setPref("petNew", last.id);
   }
-  function showPetWon(month) {
-    const pet = petFor(month);
-    const idx = PETS.indexOf(pet);
-    $("petwon-emoji").innerHTML = petFace(pet);
-    $("petwon-emoji").style.setProperty("--c", pet.c);
-    $("petwon-name").textContent = pet.name;
-    $("petwon-text").textContent = `Du klarade månadens uppdrag och fick ${pet.name}! Som present får du ${PET_GIFT} livlinor.`;
-    $("petwon-use").hidden = companion() === pet;
-    $("petwon-use").onclick = () => { setCompanion(idx); $("petwon-dialog").close(); };
+  function showPetWon(p, how) {
+    if (typeof p === "string") p = /^\d{4}-\d{2}$/.test(p) ? petFor(p) : petById(p);
+    if (!p) return;
+    $("petwon-emoji").innerHTML = petFace(p, { cls: "big" });
+    $("petwon-emoji").style.setProperty("--c", petColor(p));
+    $("petwon-kicker").textContent = p.glitter ? "✨ Glittrigt djur! ✨" : p.rarity === "legendary" ? "Legendariskt djur!" : "Nytt djur!";
+    $("petwon-name").textContent = p.name;
+    $("petwon-text").textContent = how || (p.source === "month" ? `Du klarade månadens uppdrag och fick ${p.name}! Som present får du ${PET_GIFT} livlinor.`
+      : p.source === "milestone" ? `${p.goal.text} – klart! ${p.name} är din, och du får ${PET_GIFT} livlinor i present.`
+      : `${p.name} är din!`);
+    $("petwon-use").hidden = companion() === p;
+    $("petwon-use").onclick = () => { setCompanion(p.id); $("petwon-dialog").close(); };
     setPref("petNew", null);
+    $("petwon-dialog").classList.toggle("glitter", !!p.glitter);
     $("petwon-dialog").showModal();
-    confetti(1.4); sound("win"); haptic([20, 80, 20, 80, 40]);
+    confetti(1.4); haptic([20, 80, 20, 80, 40]);
+    petVoice(voiceOf(p), "win");
   }
-  function setCompanion(idx) {
-    setPref("companion", idx);
+  function setCompanion(id) {
+    setPref("companion", id);
     scheduleReminders();
     renderPetButton();
-    const pet = PETS[idx];
-    rewardBurst(`${pet.e} ${petName(pet)} följer med dig!`);
+    const p = petById(id) || OLLE;
+    rewardBurst(`${p.e} ${petName(p)} följer med dig!`);
     haptic([10, 30, 10]);
+    petVoice(voiceOf(p), "happy");
     if ($("pets-dialog").open) renderPets();
+    if ($("pet-dialog").open) renderPetDetail(p);
   }
   function petCheer(seed) {
-    const pet = mascot();
-    const line = pet.cheer[hashString(String(seed)) % pet.cheer.length];
-    return `<div class="pet-cheer" style="--c:${pet.c}"><span class="pet-mini" aria-hidden="true">${petFace(pet)}</span><span class="bubble">${line}</span></div>`;
+    const pet = mascot(), lines = cheersFor(pet);
+    const line = lines[hashString(String(seed)) % lines.length];
+    return `<div class="pet-cheer" style="--c:${petColor(pet)}"><span class="pet-mini" aria-hidden="true">${petFace(pet)}</span><span class="bubble">${escapeHtml(line)}</span></div>`;
   }
   function renderPetButton() {
     const pet = mascot(), btn = $("btn-pets");
     btn.querySelector(".pet-face").innerHTML = petFace(pet);
     btn.classList.add("has-pet");
-    btn.setAttribute("aria-label", `Maskotar och månadens uppdrag – ${pet.name}`);
+    btn.classList.toggle("has-egg", eggState().ready > 0);
+    btn.setAttribute("aria-label", `Maskotar – ${pet.name}${eggState().ready ? ", ägg att kläcka" : ""}`);
+  }
+
+  // --- Ljud: varje djur har sin egen röst (syntetiserad, inga ljudfiler) ---
+  const petSoundsOn = () => soundOn() && prefs().petSounds !== false;
+  let petNoise = null;
+  function petVoice(voice, kind) {
+    if (!petSoundsOn()) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!audioCtx) { if (navigator.audioSession) navigator.audioSession.type = "ambient"; audioCtx = new AC(); }
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      const ctx = audioCtx, t0 = ctx.currentTime + 0.02, big = kind !== "happy";
+      const out = ctx.createGain(); out.gain.value = 0.9; out.connect(ctx.destination);
+      // Glidande ton med valfri vibrato och filter.
+      const glide = (start, dur, f0, f1, { type = "sine", vol = 0.08, vib = 0, vibRate = 7, f2, lp } = {}) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(f0, t0 + start);
+        if (f2) { o.frequency.exponentialRampToValueAtTime(f1, t0 + start + dur * 0.5); o.frequency.exponentialRampToValueAtTime(f2, t0 + start + dur); }
+        else o.frequency.exponentialRampToValueAtTime(f1, t0 + start + dur);
+        if (vib) { const l = ctx.createOscillator(), lg = ctx.createGain(); l.frequency.value = vibRate; lg.gain.value = vib; l.connect(lg).connect(o.frequency); l.start(t0 + start); l.stop(t0 + start + dur + 0.05); }
+        g.gain.setValueAtTime(0.0001, t0 + start);
+        g.gain.exponentialRampToValueAtTime(vol, t0 + start + Math.min(0.04, dur / 4));
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + start + dur);
+        let node = o;
+        if (lp) { const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = lp; o.connect(f); node = f; }
+        node.connect(g).connect(out);
+        o.start(t0 + start); o.stop(t0 + start + dur + 0.05);
+      };
+      const noise = (start, dur, freq, vol = 0.05) => {
+        if (!petNoise) { petNoise = ctx.createBuffer(1, ctx.sampleRate * 0.6, ctx.sampleRate); const d = petNoise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+        const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+        src.buffer = petNoise; f.type = "bandpass"; f.frequency.value = freq; f.Q.value = 1.2;
+        g.gain.setValueAtTime(0.0001, t0 + start); g.gain.exponentialRampToValueAtTime(vol, t0 + start + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t0 + start + dur);
+        src.connect(f).connect(g).connect(out); src.start(t0 + start); src.stop(t0 + start + dur + 0.05);
+      };
+      const rep = big ? 2 : 1;
+      switch (voice) {
+        case "trumpet": glide(0, 0.18, 330, 520, { type: "sawtooth", vol: 0.06, lp: 1800 }); glide(0.16, big ? 0.7 : 0.4, 520, 700, { type: "sawtooth", vol: 0.07, vib: 18, vibRate: 9, f2: 600, lp: 2200 }); glide(0.16, big ? 0.7 : 0.4, 1040, 1400, { vol: 0.02, f2: 1200 }); break;
+        case "meow": for (let i = 0; i < rep; i++) glide(i * 0.5, 0.42, 620, 980, { type: "triangle", vol: 0.07, f2: 560, vib: 6 }); break;
+        case "woof": for (let i = 0; i < rep + 1; i++) { glide(i * 0.2, 0.13, 260, 150, { type: "square", vol: 0.05, lp: 900 }); noise(i * 0.2, 0.1, 500, 0.03); } break;
+        case "hoot": for (let i = 0; i < rep + 1; i++) glide(i * 0.32, 0.26, 420, 380, { vol: 0.09, vib: 4 }); break;
+        case "chirp": case "squawk": for (let i = 0; i < 2 + rep; i++) glide(i * 0.12, 0.09, voice === "squawk" ? 1400 : 2400, voice === "squawk" ? 2200 : 3400, { type: voice === "squawk" ? "sawtooth" : "sine", vol: voice === "squawk" ? 0.04 : 0.06, lp: 4000 }); break;
+        case "squeak": for (let i = 0; i < 1 + rep; i++) glide(i * 0.16, 0.1, 1300, 2000, { type: "triangle", vol: 0.06 }); break;
+        case "croak": for (let i = 0; i < 1 + rep; i++) glide(i * 0.3, 0.22, 140, 110, { type: "sawtooth", vol: 0.06, vib: 30, vibRate: 32, lp: 700 }); break;
+        case "growl": glide(0, big ? 0.6 : 0.35, 110, 90, { type: "sawtooth", vol: 0.06, vib: 8, vibRate: 22, lp: 500 }); glide(big ? 0.5 : 0.3, 0.2, 180, 260, { type: "triangle", vol: 0.05 }); break;
+        case "boing": for (let i = 0; i < rep + 1; i++) glide(i * 0.22, 0.2, 260, 900, { vol: 0.08 }); break;
+        case "purr": glide(0, big ? 0.9 : 0.5, 70, 75, { type: "sawtooth", vol: 0.05, vib: 20, vibRate: 25, lp: 400 }); glide(big ? 0.7 : 0.4, 0.3, 600, 900, { type: "triangle", vol: 0.05, f2: 650 }); break;
+        case "bubble": for (let i = 0; i < 3 + rep; i++) glide(i * 0.09, 0.08, 400 + i * 180, 900 + i * 220, { vol: 0.06 }); break;
+        case "honk": for (let i = 0; i < 1 + rep; i++) glide(i * 0.24, 0.18, 330, 300, { type: "square", vol: 0.04, lp: 1400 }); break;
+        case "moo": glide(0, big ? 0.9 : 0.55, 180, 150, { type: "sawtooth", vol: 0.06, f2: 140, lp: 800, vib: 3 }); break;
+        case "baa": glide(0, big ? 0.6 : 0.4, 380, 360, { type: "sawtooth", vol: 0.05, vib: 26, vibRate: 12, lp: 1600 }); break;
+        case "oink": for (let i = 0; i < 1 + rep; i++) { glide(i * 0.22, 0.14, 300, 200, { type: "square", vol: 0.04, lp: 900 }); noise(i * 0.22, 0.1, 700, 0.03); } break;
+        case "buzz": glide(0, big ? 0.7 : 0.4, 220, 260, { type: "sawtooth", vol: 0.04, vib: 30, vibRate: 40, lp: 1200, f2: 230 }); break;
+        case "roar": glide(0, big ? 0.8 : 0.45, 160, 90, { type: "sawtooth", vol: 0.07, vib: 12, vibRate: 18, lp: 900 }); noise(0, big ? 0.7 : 0.4, 400, 0.05); break;
+        case "sparkle": [0, 4, 7, 12, 16, 19].slice(0, big ? 6 : 4).forEach((n, i) => glide(i * 0.08, 0.3, 880 * 2 ** (n / 12), 880 * 2 ** (n / 12) * 1.01, { vol: 0.05 })); break;
+        case "click": for (let i = 0; i < 4 + rep * 2; i++) glide(i * 0.06, 0.03, 3000, 2600, { type: "square", vol: 0.03 }); glide(0.4, 0.3, 900, 1600, { vol: 0.05 }); break;
+        case "howl": glide(0, big ? 1.0 : 0.6, 380, 700, { vol: 0.07, f2: 500, vib: 5 }); break;
+        case "yip": for (let i = 0; i < 1 + rep; i++) glide(i * 0.18, 0.12, 900, 1400, { type: "triangle", vol: 0.06, f2: 1000 }); break;
+        case "chitter": for (let i = 0; i < 4 + rep * 2; i++) glide(i * 0.07, 0.05, 1600 + (i % 2) * 400, 1900, { type: "triangle", vol: 0.05 }); break;
+        case "hum": [0, 4, 7].forEach((n, i) => glide(i * 0.18, 0.3, 330 * 2 ** (n / 12), 330 * 2 ** (n / 12), { type: "triangle", vol: 0.06 })); break;
+        case "whinny": glide(0, big ? 0.8 : 0.5, 700, 1100, { type: "sawtooth", vol: 0.04, vib: 40, vibRate: 14, f2: 500, lp: 2400 }); break;
+        case "yawn": glide(0, 0.8, 500, 220, { type: "triangle", vol: 0.06, f2: 180 }); break;
+        case "arf": for (let i = 0; i < 1 + rep; i++) glide(i * 0.2, 0.14, 420, 300, { type: "square", vol: 0.04, lp: 1200 }); break;
+        case "song": glide(0, 0.6, 300, 600, { vol: 0.06, f2: 400, vib: 4 }); if (big) glide(0.6, 0.6, 450, 800, { vol: 0.05, f2: 500, vib: 4 }); break;
+        case "tick": for (let i = 0; i < 5; i++) glide(i * 0.08, 0.03, 2500, 2400, { type: "square", vol: 0.025 }); break;
+        case "monkey": glide(0, 0.18, 400, 700, { type: "triangle", vol: 0.07 }); glide(0.2, 0.18, 450, 750, { type: "triangle", vol: 0.07 }); if (big) glide(0.42, 0.35, 700, 1200, { type: "triangle", vol: 0.07, f2: 900 }); break;
+      }
+    } catch { /* ljud går inte – ingen fara */ }
+  }
+
+  // --- Djuret firar på skärmen ---
+  const TRICKS = ["hop", "spin", "wiggle", "flip", "dance"];
+  let partyTimer = 0;
+  const petPartyOn = () => prefs().petParty !== false;
+  function petParty(kind, text) {
+    const p = mascot();
+    petVoice(voiceOf(p), kind === "happy" ? "happy" : "win");
+    if (!petPartyOn() || reduceMotion()) { if (text) toast(text); return; }
+    const el = $("pet-party");
+    const small = kind === "happy";
+    const trick = TRICKS[hashString(`${Date.now() >> 12}|${p.id}|${kind}`) % TRICKS.length];
+    const line = text || cheersFor(p)[Math.floor(Math.random() * cheersFor(p).length)];
+    el.className = `pet-party ${small ? "small" : "big"} trick-${trick}`;
+    el.style.setProperty("--c", petColor(p));
+    el.innerHTML = `<div class="pp-stage"><div class="pp-pet">${petFace(p, { cls: "party" })}</div><div class="pp-bubble">${escapeHtml(line)}</div>
+      <div class="pp-fx" aria-hidden="true">${Array.from({ length: small ? 5 : 12 }, (_, i) => `<i style="--i:${i};--a:${(i * (360 / (small ? 5 : 12))) | 0}deg">${["♥", "★", "✦", "♪"][i % 4]}</i>`).join("")}</div></div>`;
+    el.hidden = false;
+    clearTimeout(partyTimer);
+    partyTimer = setTimeout(hideParty, small ? 1500 : 2500);
+    el.onclick = hideParty;
+  }
+  function hideParty() {
+    const el = $("pet-party");
+    if (el.hidden) return;
+    el.classList.add("out");
+    setTimeout(() => { el.hidden = true; el.classList.remove("out"); }, 350);
+  }
+
+  // --- Samlingen ---
+  const RARITY = { common: "Vanlig", rare: "Sällsynt", epic: "Episk", legendary: "Legendarisk", glitter: "Glittrig" };
+  let petTab = "all";
+  function howToGet(p) {
+    if (p.starter) return "Appens egen maskot – alltid med dig.";
+    if (p.source === "month") return `Månadens djur i ${MONTH_LONG[p.month]}${petShopAvailable() ? " – eller köp direkt" : ""}.`;
+    if (p.source === "egg") return `Kläcks ur ägg${petShopAvailable() ? " – eller köp direkt" : ""}.`;
+    if (p.source === "milestone") return `Milstolpe: ${p.goal.text.toLowerCase()}.`;
+    return `Sällsynt glittervariant av ${PD.byId[p.base].name.toLowerCase()} – kan kläckas ur ägg.`;
   }
   function renderPets() {
-    const month = monthKey(todayKey()), pet = petFor(month), prog = monthProgress(month), owned = ownsPet(PETS.indexOf(pet));
-    const comp = companion();
+    const month = monthKey(todayKey()), pet = petFor(month), prog = monthProgress(month), owned = ownsPet(pet);
+    const comp = mascot(), eg = eggState();
     $("pets-hero").innerHTML = `
-      <div class="pet-big${owned ? "" : " locked"}" style="--c:${pet.c}"><span>${petFace(pet)}</span></div>
+      <div class="pet-big${owned ? "" : " locked"}" style="--c:${petColor(pet)}"><span>${petFace(pet)}</span></div>
       <h3>${owned ? `${pet.name} är din!` : `Månadens djur: ${pet.name}`}</h3>
-      <p>${owned ? "Du har klarat månadens uppdrag. Snyggt!" : `Klara ${PET_NEED} av 6 uppdrag före månadsskiftet så får du ${pet.name.split(" ")[1]} – och ${PET_GIFT} livlinor i present.`}</p>
+      <p>${owned ? "Du har klarat månadens uppdrag. Snyggt!" : `Klara ${PET_NEED} av 6 uppdrag före månadsskiftet så får du ${petName(pet)} – och ${PET_GIFT} livlinor i present.`}</p>
       <div class="pet-meter"><i style="--w:${Math.min(1, prog.done / PET_NEED)}"></i></div>
       <small>${prog.done} av 6 uppdrag klara · ${PET_NEED} behövs</small>`;
     $("pets-missions").innerHTML = prog.list.map((x, i) => `<li class="${x.done ? "done" : ""}" style="--i:${i}">
       <span class="m-ico" aria-hidden="true">${x.done ? "✓" : x.icon}</span>
       <span class="m-t"><b>${x.label}</b><span class="m-bar"><i style="--w:${x.v / x.t}"></i></span></span>
       <span class="m-v">${x.v}/${x.t}</span></li>`).join("");
+    // Ägg
+    $("pets-eggs").innerHTML = `<div class="egg-card${eg.ready ? " ready" : ""}">
+      <div class="egg" aria-hidden="true"><span></span></div>
+      <div class="egg-t"><b>${eg.ready ? `${eg.ready} ${eg.ready === 1 ? "ägg" : "ägg"} att kläcka!` : "Nästa ägg"}</b>
+        <small>${eg.ready ? "Tryck för att se vad som finns inuti" : `Klara ${EGG_EVERY - eg.prog} ${EGG_EVERY - eg.prog === 1 ? "omgång" : "omgångar"} till`}</small>
+        <span class="egg-bar"><i style="--w:${eg.prog / EGG_EVERY}"></i></span></div>
+      ${eg.ready ? `<button class="pill egg-btn" id="egg-hatch">Kläck</button>` : ""}</div>`;
+    if ($("egg-hatch")) $("egg-hatch").addEventListener("click", openHatch);
+    // Samlingen
+    const tabs = { all: "Alla", mine: "Mina", month: "Månad", egg: "Ägg", milestone: "Milstolpar", glitter: "Glitter" };
+    $("pets-tabs").innerHTML = Object.entries(tabs).map(([k, v]) => `<button data-tab="${k}" aria-pressed="${petTab === k}">${v}</button>`).join("");
+    $("pets-tabs").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { petTab = b.dataset.tab; haptic(6); renderPets(); }));
+    const list = [OLLE, ...PETS].filter((p) => petTab === "all" ? true : petTab === "mine" ? ownsPet(p) : petTab === "month" ? p.source === "month" : petTab === "egg" ? p.source === "egg" : petTab === "milestone" ? p.source === "milestone" : p.glitter);
+    $("pets-count").textContent = `${ownedCount() + 1} av ${PETS.length + 1} djur`;
     const thisMonth = +month.slice(5, 7) - 1;
-    const olle = `<button class="pet-tile owned starter${comp ? "" : " active"}" data-pet="olle" style="--c:${OLLE.c};--i:0">
-        <span class="pet-e" aria-hidden="true">${OLLE_SVG}</span><b>Olle</b><small>${comp ? "Startkompis" : "Följer med"}</small></button>`;
-    $("pets-grid").innerHTML = olle + PETS.map((p, i) => {
-      const has = ownsPet(i);
-      return `<button class="pet-tile${has ? " owned" : ""}${comp === p ? " active" : ""}${i === thisMonth ? " now" : ""}" data-pet="${i}" style="--c:${p.c};--i:${i}" ${has ? "" : "aria-disabled=\"true\""}>
-        <span class="pet-e" aria-hidden="true">${p.e}</span><b>${has ? petName(p) : MONTH_SHORT[i]}</b>${comp === p ? "<small>Följer med</small>" : has ? "<small>Välj</small>" : ""}</button>`;
+    $("pets-grid").innerHTML = list.map((p, i) => {
+      const has = ownsPet(p);
+      const lbl = has ? petName(p) : p.source === "month" ? MONTH_SHORT[p.month] : "???";
+      return `<button class="pet-tile${has ? " owned" : ""}${p.starter ? " starter" : ""}${comp === p ? " active" : ""}${p.source === "month" && p.month === thisMonth ? " now" : ""}${p.glitter ? " glitter" : ""} r-${p.rarity || "common"}" data-pet="${p.id}" style="--c:${petColor(p)};--i:${Math.min(i, 30)}">
+        <span class="pet-e" aria-hidden="true">${has || p.starter ? petFace(p) : PD.svg(p, { cls: "shadow" })}</span><b>${escapeHtml(lbl)}</b>${comp === p ? "<small>Följer med</small>" : has ? `<small>Nivå ${petLevel(p)}</small>` : p.rarity && p.rarity !== "common" ? `<small>${RARITY[p.rarity]}</small>` : ""}</button>`;
     }).join("");
-    $("pets-grid").querySelectorAll(".pet-tile").forEach((b) => b.addEventListener("click", () => {
-      if (b.dataset.pet === "olle") {
-        if (companion()) { setPref("companion", null); renderPetButton(); renderPets(); rewardBurst("🦧 Olle följer med dig!"); haptic([10, 30, 10]); scheduleReminders(); }
-        return;
-      }
-      const i = +b.dataset.pet;
-      if (!ownsPet(i)) { if (petShopAvailable()) openPetBuy(i); else { animate(b, "shake", 500); toast(`${PETS[i].name} kan vinnas i ${MONTH_LONG[i]}`); } return; }
-      if (companion() === PETS[i]) { setPref("companion", null); renderPetButton(); renderPets(); toast("Olle tar över som följeslagare"); scheduleReminders(); return; }
-      setCompanion(i);
-    }));
-    $("pets-perk").textContent = comp
-      ? `${comp.name} följer med dig: hejar efter varje omgång, skickar dina påminnelser och ger 1 extra gratis livlina varje dag.`
-      : "Olle, appens egen orangutang, följer med dig tills du vinner ett djur. Djur du vinner ger dessutom 1 extra gratis livlina varje dag när de följer med.";
+    $("pets-grid").querySelectorAll(".pet-tile").forEach((b) => b.addEventListener("click", () => openPetDetail(petById(b.dataset.pet))));
+    $("pets-perk").textContent = companion()
+      ? `${comp.name} följer med dig: firar när du klarar saker, skickar dina påminnelser och ger 1 extra gratis livlina varje dag.`
+      : "Olle, appens egen orangutang, följer med dig tills du väljer ett annat djur. Djur du har vunnit ger dessutom 1 extra gratis livlina varje dag när de följer med.";
   }
   const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"];
   const MONTH_LONG = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"];
-  // Köp ett djur direkt i stället för att vänta på dess månad.
-  function openPetBuy(i) {
-    const pet = PETS[i];
-    $("petbuy-emoji").textContent = pet.e;
-    $("petbuy-emoji").style.setProperty("--c", pet.c);
-    $("petbuy-name").textContent = pet.name;
-    $("petbuy-text").textContent = `Vinn ${petName(pet)} gratis genom månadens uppdrag i ${MONTH_LONG[i]} – eller ta med ${petName(pet)} direkt. Alla djur följer med dig, hejar på dig och ger 1 extra gratis livlina varje dag.`;
-    $("petbuy-buy").textContent = `Köp ${petName(pet)} för ${PET_PRICE.price}`;
-    $("petbuy-buy").disabled = false;
-    $("petbuy-buy").onclick = () => buyPet(i);
-    $("petbuy-dialog").showModal();
-    animate($("petbuy-emoji"), "bounce", 900);
-    if (petShop() && petShop().price) Promise.resolve(petShop().price()).then((pr) => {
-      if (typeof pr === "string" && pr) { PET_PRICE.price = escapeHtml(pr.slice(0, 30)); $("petbuy-buy").textContent = `Köp ${petName(pet)} för ${PET_PRICE.price}`; }
+
+  // --- Ett djur i detalj: klappa det, se vänskapen och välj accessoar ---
+  let detailPet = null;
+  function renderPetDetail(p) {
+    detailPet = p;
+    const has = ownsPet(p), lvl = petLevel(p), xp = petXp(p), next = XP_LEVELS[lvl] || null, prev = XP_LEVELS[lvl - 1] || 0;
+    $("pd-stage").innerHTML = `<div class="pd-pet${has ? "" : " locked"}">${has ? petFace(p, { cls: "big" }) : PD.svg(p, { cls: "shadow big" })}</div><div class="pd-floor"></div>`;
+    $("pd-stage").style.setProperty("--c", petColor(p));
+    $("pd-name").textContent = has ? p.name : p.source === "month" ? `${p.name} (låst)` : "Okänt djur";
+    $("pd-rarity").textContent = p.starter ? "Startkompis" : RARITY[p.rarity || "common"];
+    $("pd-rarity").className = `pd-rarity r-${p.starter ? "common" : p.rarity || "common"}`;
+    $("pd-how").textContent = howToGet(p);
+    $("pd-friend").hidden = !has;
+    $("pd-level").textContent = `Vän nivå ${lvl}`;
+    $("pd-xp").style.setProperty("--w", next ? (xp - prev) / (next - prev) : 1);
+    $("pd-xp-t").textContent = next ? `${xp - prev} / ${next - prev} till nästa nivå` : "Bästa vänner – högsta nivån!";
+    const cur = (prefs().petGear || {})[p.id] || "";
+    $("pd-gear").hidden = !has;
+    $("pd-gear").innerHTML = [{ id: "", name: "Ingen", level: 1 }, ...PD.GEAR_LIST].map((g) => {
+      const open = lvl >= g.level;
+      return `<button data-gear="${g.id}" aria-pressed="${cur === g.id || (!cur && !g.id)}" ${open ? "" : "disabled"}>${g.name}${open ? "" : `<small>Nivå ${g.level}</small>`}</button>`;
+    }).join("");
+    $("pd-gear").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+      setPref("petGear", { ...(prefs().petGear || {}), [p.id]: b.dataset.gear });
+      haptic(8); renderPetDetail(p); renderPetButton(); if ($("pets-dialog").open) renderPets();
+      animate($("pd-stage").querySelector(".pd-pet"), "pd-pop", 500);
+    }));
+    const follow = $("pd-follow");
+    follow.hidden = !has;
+    follow.textContent = mascot() === p ? "✓ Följer med dig" : `Låt ${petName(p)} följa med`;
+    follow.disabled = mascot() === p;
+    const buy = $("pd-buy");
+    buy.hidden = has || !p.sku || !petShopAvailable();
+    buy.textContent = `Köp ${p.source === "month" ? petName(p) : "djuret"} för ${PET_PRICE.price}`;
+    $("pd-hint").textContent = has ? `Tryck på ${petName(p)} för att klappa – ${petName(p)} ${PD.VOICE_NAMES[voiceOf(p)] || "blir glad"}!` : "";
+  }
+  function openPetDetail(p) {
+    if (!p) return;
+    renderPetDetail(p);
+    $("pet-dialog").showModal();
+    animate($("pd-stage").querySelector(".pd-pet"), "pd-pop", 600);
+    if (ownsPet(p)) petVoice(voiceOf(p), "happy");
+    if (petShop() && petShop().price && p.sku && !ownsPet(p)) Promise.resolve(petShop().price()).then((pr) => {
+      if (typeof pr === "string" && pr) { PET_PRICE.price = escapeHtml(pr.slice(0, 30)); if (detailPet === p) renderPetDetail(p); }
     }).catch(() => {});
   }
-  async function buyPet(i) {
-    const btn = $("petbuy-buy");
-    if (btn.disabled) return;
+  $("pd-stage").addEventListener("click", (e) => {
+    const p = detailPet;
+    if (!p || !ownsPet(p)) return;
+    const pet = $("pd-stage").querySelector(".pd-pet");
+    animate(pet, "pd-pet-it", 700);
+    petVoice(voiceOf(p), "happy");
+    haptic([6, 30, 6]);
+    const r = $("pd-stage").getBoundingClientRect();
+    for (let i = 0; i < 5; i++) {
+      const h = document.createElement("i");
+      h.className = "pd-heart"; h.textContent = "♥";
+      h.style.cssText = `left:${(e.clientX || r.left + r.width / 2) - r.left - 8 + (i - 2) * 14}px;top:${(e.clientY || r.top + r.height / 2) - r.top - 10}px;--d:${i * 70}ms;--x:${(i - 2) * 10}px`;
+      $("pd-stage").appendChild(h);
+      setTimeout(() => h.remove(), 1200);
+    }
+  });
+  $("pd-follow").addEventListener("click", () => { if (detailPet) { if (detailPet.starter) { setPref("companion", null); renderPetButton(); scheduleReminders(); petVoice("monkey", "happy"); renderPetDetail(detailPet); if ($("pets-dialog").open) renderPets(); } else setCompanion(detailPet.id); } });
+  $("pd-buy").addEventListener("click", () => detailPet && buyPet(detailPet));
+
+  // --- Kläcka ägg ---
+  function openHatch() {
+    if (!eggState().ready) return;
+    const dlg = $("hatch-dialog");
+    $("hatch-stage").className = "hatch-stage";
+    $("hatch-stage").innerHTML = `<div class="big-egg"><span></span></div>`;
+    $("hatch-title").textContent = "Tryck på ägget!";
+    $("hatch-text").textContent = "Det rör sig där inne …";
+    $("hatch-actions").hidden = true;
+    dlg.showModal();
+    let taps = 0;
+    $("hatch-stage").onclick = () => {
+      if ($("hatch-stage").classList.contains("done")) return;
+      taps++;
+      haptic(10); sound("tap");
+      const egg = $("hatch-stage").querySelector(".big-egg");
+      animate(egg, `wobble${taps}`, 500);
+      egg.style.setProperty("--crack", taps);
+      if (taps < 3) return;
+      const got = hatchEgg();
+      $("hatch-stage").classList.add("done");
+      setTimeout(() => {
+        if (!got) { $("hatch-stage").innerHTML = `<div class="hatch-empty">♥♥♥</div>`; $("hatch-title").textContent = "Alla djur kläckta!"; $("hatch-text").textContent = "Du har redan alla äggdjur – här är 3 livlinor i stället."; }
+        else {
+          $("hatch-stage").innerHTML = `<div class="hatch-rays"></div><div class="hatch-pet">${petFace(got, { cls: "big" })}</div><div class="shell l"></div><div class="shell r"></div>`;
+          $("hatch-stage").style.setProperty("--c", petColor(got));
+          $("hatch-title").textContent = got.glitter ? `✨ ${got.name}! ✨` : got.name;
+          $("hatch-text").textContent = got.glitter ? "Ett glittrigt djur – de är riktigt sällsynta!" : `${RARITY[got.rarity || "common"]} · ${petName(got)} ${PD.VOICE_NAMES[voiceOf(got)] || "hälsar"} hej!`;
+          $("hatch-use").onclick = () => { setCompanion(got.id); dlg.close(); };
+          $("hatch-use").hidden = false;
+          petVoice(voiceOf(got), "win");
+        }
+        $("hatch-actions").hidden = false;
+        confetti(got && got.glitter ? 1.6 : 1); haptic([20, 60, 20, 60, 30]);
+        renderPetButton();
+        if ($("pets-dialog").open) renderPets();
+      }, 350);
+    };
+  }
+
+  // Köp ett djur direkt (månadens djur och äggdjuren, 25 kr st).
+  async function buyPet(p) {
+    const btn = $("pd-buy");
+    if (btn.disabled || !p.sku) return;
     btn.disabled = true;
     let ok = false;
     try {
-      if (petShop()) ok = !!(await petShop().buy(i));
-      else if (demoAds()) ok = await confirmBox("Förhandsvisning", `I appen öppnas App Stores eller Google Plays köpruta här (${PET_PRICE.price}). Vill du låtsasköpa ${PETS[i].name}?`, "Köp");
+      if (petShop()) ok = !!(await petShop().buy(p.sku - 1));
+      else if (demoAds()) ok = await confirmBox("Förhandsvisning", `I appen öppnas App Stores eller Google Plays köpruta här (${PET_PRICE.price}). Vill du låtsasköpa ${p.name}?`, "Köp");
     } catch { ok = false; }
     btn.disabled = false;
     if (!ok) return;
-    if (petShop()) boughtPets.add(i); // köptjänsten skickar också den verifierade listan
-    else setPref("demoPets", [...new Set([...(prefs().demoPets || []), i])]);
-    if ($("petbuy-dialog").open) $("petbuy-dialog").close();
-    setCompanion(i);
+    if (petShop()) boughtPets.add(p.sku - 1); // köptjänsten skickar också den verifierade listan
+    else setPref("demoPets", [...new Set([...(prefs().demoPets || []), p.sku - 1])]);
+    setCompanion(p.id);
     renderPetButton();
     if ($("pets-dialog").open) renderPets();
-    confetti(1); sound("win"); haptic([20, 80, 20]);
+    renderPetDetail(p);
+    confetti(1); haptic([20, 80, 20]);
   }
   function openPets() {
     renderPets();
@@ -1258,10 +1567,10 @@
   function notifBody(date, i) {
     const m = mascot(), month = monthKey(date), prog = monthProgress(month), pet = petFor(month);
     const left = PET_NEED - prog.done;
-    if (i % 3 === 2 && left > 0 && !ownsPet(PETS.indexOf(pet)))
+    if (i % 3 === 2 && left > 0 && !ownsPet(pet))
       return `Bara ${left} ${left === 1 ? "uppdrag" : "uppdrag"} kvar till ${pet.name}! ${pet.e}`;
     const line = REMIND_LINES[hashString(`${date}|påminn`) % REMIND_LINES.length];
-    return line.replace("{nudge}", m.nudge || "").replace("{wotd}", wotdFor(date).word.toLowerCase()).trim();
+    return line.replace("{nudge}", nudgeFor(m)).replace("{wotd}", wotdFor(date).word.toLowerCase()).trim();
   }
   // Högst en påminnelse per dag, alltid i vänlig ton. Håller sviten på att brytas blir dagens enda
   // påminnelse en peppande svit-påminnelse (på vald tid, eller 21.30 om den tiden redan har passerat).
@@ -2322,6 +2631,8 @@
     if (rightBtn && !retryPending(i)) animate(rightBtn, "ring", 900);
     if (right) {
       combo++;
+      addPetXp(1);
+      if (combo === 3 || combo === 6 || combo === 9) setTimeout(() => petParty("happy"), 700);
       haptic(12);
       if (btn) animate(btn, "pulse", 700);
       if (isBolt(i)) { boltFx(btn); sound("bolt"); }
@@ -2367,10 +2678,11 @@
       $("mek").scrollTop = 0;
       return;
     }
+    const firstTime = !mek.done; // bara första gången omgången blir klar ger ägg och vänskapspoäng
     mek.done = true;
     stopTimer();
     saveMek();
-    { const d = mek.date, k = mek.kind; setTimeout(() => maybeTrophy(d, k), 1800); }
+    if (firstTime) { const d = mek.date, k = mek.kind; setTimeout(() => maybeTrophy(d, k), 1800); }
     renderHeader();
     renderPause();
     showMekResult(true);
@@ -2429,6 +2741,7 @@
         requestAnimationFrame(tick);
       }
       if (pct >= 0.8) { confetti(right === n ? 1 : 0.5); haptic([15, 60, 15, 60, 30]); sound("win"); }
+      setTimeout(() => petParty(pct >= 0.5 ? "win" : "happy", pct >= 0.5 ? null : `${petName(mascot())} tycker att du kämpar bra!`), 500);
     }
   }
 
@@ -3309,6 +3622,8 @@
     $("sound-toggle").checked = soundOn();
     $("haptic-toggle").checked = p.haptics !== false;
     $("motion-toggle").checked = !!p.reduceMotion;
+    $("petsound-toggle").checked = p.petSounds !== false;
+    $("petparty-toggle").checked = p.petParty !== false;
     $("val-appearance").textContent = `${THEME_NAMES[p.theme || "auto"]} · ${ACCENT_NAMES[p.accent || "blue"]}`;
     $("val-check").textContent = CHECK_NAMES[checkMode()];
     $("val-bolt").textContent = boltSeconds() ? boltSeconds() + " s" : "Av";
@@ -3426,7 +3741,7 @@
   document.querySelectorAll("#text-picker [data-text]").forEach((b) =>
     b.addEventListener("click", () => { setPref("textSize", b.dataset.text); applyTextSize(); renderTextPicker(); haptic(8); })
   );
-  const bindSwitch = (id, key, after) => $(id).addEventListener("change", (e) => { setPref(key, e.target.checked); if (after) after(); renderSettings(); haptic(8); });
+  const bindSwitch = (id, key, after) => $(id).addEventListener("change", (e) => { setPref(key, e.target.checked); if (after) after(e.target.checked); renderSettings(); haptic(8); });
   bindSwitch("time-toggle", "showTime", () => applyTimeSetting());
   bindSwitch("skip-toggle", "skipFilled");
   bindSwitch("autonext-toggle", "autoNext");
@@ -3434,6 +3749,8 @@
   bindSwitch("sound-toggle", "sound", () => { if (soundOn()) sound("ok"); });
   bindSwitch("haptic-toggle", "haptics");
   bindSwitch("motion-toggle", "reduceMotion", () => applyMotion());
+  bindSwitch("petsound-toggle", "petSounds", (on) => { if (on) petVoice(voiceOf(mascot()), "happy"); });
+  bindSwitch("petparty-toggle", "petParty", (on) => { if (on) { $("settings-dialog").close(); setTimeout(() => petParty("win", `${petName(mascot())} firar så här när du klarar något!`), 300); } });
   function applyTimeSetting() { document.body.classList.toggle("hide-time", !showTime()); }
   function applyTextSize() { document.documentElement.dataset.text = prefs().textSize || "m"; }
   function applyMotion() { document.documentElement.classList.toggle("reduce-motion", !!prefs().reduceMotion); }
@@ -3491,7 +3808,7 @@
     // skriva in obegränsat med livlinor eller Plus. De behåller sina värden från den här enheten
     // (Plus återställs i stället via "Återställ köp", djuren räknas fram igen ur framstegen).
     if (data.prefs) {
-      const PROTECTED = ["plusNative", "plusDemo", "plusTrial", "plusTrialAt", "bank", "bought", "adsToday", "adsWatched", "lifelines", "unlockedDays", "pets", "petNew", "companion", "frozen"];
+      const PROTECTED = ["plusNative", "plusDemo", "plusTrial", "plusTrialAt", "bank", "bought", "adsToday", "adsWatched", "lifelines", "unlockedDays", "pets", "petNew", "companion", "frozen", "petsExtra", "eggs", "petXp", "petGear"];
       const current = prefs();
       for (const k of PROTECTED) { delete data.prefs[k]; if (current[k] !== undefined) data.prefs[k] = current[k]; }
       for (const k of ["clockMax", "noPetsUntil", "demoPets", "bought"]) { delete data.prefs[k]; if (current[k] !== undefined) data.prefs[k] = current[k]; }
@@ -3674,7 +3991,7 @@
   setTimeout(() => {
     if (document.querySelector("dialog[open]")) return;
     const pending = prefs().petNew;
-    if (pending && /^\d{4}-\d{2}$/.test(pending)) showPetWon(pending); else checkPets();
+    if (pending && (/^\d{4}-\d{2}$/.test(pending) || petById(pending))) showPetWon(pending); else checkPets();
   }, 2600);
   window.__dagsprovReady = true;
 })();

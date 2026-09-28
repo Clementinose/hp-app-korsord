@@ -192,7 +192,7 @@ const PET_PRODUCT = (i) => `${products.petPrefix}${String(i + 1).padStart(2, "0"
 const ownedPets = (info) => {
   if (!info || (info.entitlements && info.entitlements.verification === "FAILED")) return [];
   const ids = info.allPurchasedProductIdentifiers || [];
-  return Array.from({ length: 12 }, (_, i) => i).filter((i) => ids.includes(PET_PRODUCT(i)));
+  return Array.from({ length: products.petCount }, (_, i) => i).filter((i) => ids.includes(PET_PRODUCT(i)));
 };
 async function preparePlus(onChange) {
   try {
@@ -268,7 +268,7 @@ async function petPrice() {
   return prod ? prod.priceString : "";
 }
 async function buyPet(i) {
-  if (!plusReady || !Number.isInteger(i) || i < 0 || i > 11) return null;
+  if (!plusReady || !Number.isInteger(i) || i < 0 || i >= products.petCount) return null;
   const [prod] = await Purchases.getProducts([PET_PRODUCT(i)], Purchases.PRODUCT_CATEGORY.NON_SUBSCRIPTION);
   if (!prod) return null;
   try {
@@ -435,7 +435,7 @@ export default function App() {
     } else if (msg.type === "petPrice") {
       reply(msg.id, await petPrice().catch(() => ""));
     } else if (msg.type === "petBuy") {
-      if (!Number.isInteger(msg.pet) || msg.pet < 0 || msg.pet > 11 || busy.current) return reply(msg.id, false);
+      if (!Number.isInteger(msg.pet) || msg.pet < 0 || msg.pet >= products.petCount || busy.current) return reply(msg.id, false);
       busy.current = true;
       const info = await buyPet(msg.pet).finally(() => { busy.current = false; });
       sendInfo(info);

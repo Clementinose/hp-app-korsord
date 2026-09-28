@@ -1,8 +1,8 @@
 // Offline-stöd: allt sparas vid installation. Appen startar direkt från cachen
 // och hämtar samtidigt en ny version i bakgrunden (visas nästa gång den öppnas).
-const CACHE = "dagsprov-v23";
+const CACHE = "dagsprov-v24";
 const FILES = [
-  "./", "index.html", "style.css", "js/config.js", "js/words.js", "js/mek.js", "js/wotd.js", "js/eng.js", "js/mat.js", "js/generator.js", "js/app.js",
+  "./", "index.html", "style.css", "js/config.js", "js/words.js", "js/mek.js", "js/wotd.js", "js/eng.js", "js/mat.js", "js/pets.js", "js/generator.js", "js/app.js",
   "icon.svg", "icon-180.png", "icon-192.png", "icon-512.png", "manifest.webmanifest",
 ];
 

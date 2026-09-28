@@ -20,7 +20,8 @@
       season: "dagsprov_season",
       annual: "dagsprov_plus_annual",
       lifelines: { lifelines_1: "dagsprov_lifelines_1", lifelines_5: "dagsprov_lifelines_5", lifelines_15: "dagsprov_lifelines_15" },
-      petPrefix: "dagsprov_pet_", // + 01 … 12
+      petPrefix: "dagsprov_pet_", // + 01 … 54 (1–12 månadens djur, 13–54 äggdjuren – se js/pets.js)
+      petCount: 54,
     },
     // Högskoleprovets provdagar. PRELIMINÄRA – kontrollera mot studera.nu och uppdatera varje år.
     // Säsongspasset gäller till och med den första provdagen på eller efter köpdagen.

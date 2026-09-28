@@ -44,7 +44,8 @@ då kan AdMob-kontot stängas av.
      (1 år, 199 kr, introduktionserbjudande *Gratis provperiod 1 vecka*).
    - **Säsongspass** `dagsprov_season` (79 kr) som *Non-Consumable* eller *Non-Renewing Subscription*.
      Det gäller till och med nästa provdag efter köpet (provdagarna står i `js/config.js` – uppdatera varje år).
-   - **Djur** `dagsprov_pet_01` … `dagsprov_pet_12` (25 kr st, Non-Consumable).
+   - **Djur** `dagsprov_pet_01` … `dagsprov_pet_54` (25 kr st, Non-Consumable): 01–12 är månadens djur,
+     13–54 äggdjuren (ordningen står i `js/pets.js`). Milstolpedjur och glittriga djur kan inte köpas.
    Fyll i visningsnamn, beskrivning och granskningsskärmdump för varje produkt. Skriv under avtalet
    *Paid Apps* och fyll i bank och skatt.
 2. **Google Play Console → Tjäna pengar → Produkter**: samma produkter (årsprenumeration med gratisvecka,

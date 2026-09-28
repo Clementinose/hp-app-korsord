@@ -351,6 +351,8 @@
           <li><label class="row switch-row"><span class="ico" style="--c:#ff2d55"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg></span><span class="lbl">Ljudeffekter</span><input type="checkbox" id="sound-toggle" class="switch"></label></li>
           <li><label class="row switch-row"><span class="ico" style="--c:#ff3b30"><svg viewBox="0 0 24 24"><rect x="8" y="4" width="8" height="16" rx="2"/><path d="M4.5 9v6M19.5 9v6"/></svg></span><span class="lbl">Haptik</span><input type="checkbox" id="haptic-toggle" class="switch"></label></li>
           <li><label class="row switch-row"><span class="ico" style="--c:#8e8e93"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></span><span class="lbl">Minska rörelse</span><input type="checkbox" id="motion-toggle" class="switch"></label></li>
+          <li><label class="row switch-row"><span class="ico" style="--c:#d9772b"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="6.5"/><circle cx="7" cy="7" r="2.6"/><circle cx="17" cy="7" r="2.6"/><path d="M10 14.5q2 1.6 4 0"/></svg></span><span class="lbl">Maskotens ljud</span><input type="checkbox" id="petsound-toggle" class="switch"></label></li>
+          <li><label class="row switch-row"><span class="ico" style="--c:#ff9500"><svg viewBox="0 0 24 24"><path d="M12 3l2.4 5 5.6.8-4 3.9 1 5.5-5-2.7-5 2.7 1-5.5-4-3.9 5.6-.8z"/></svg></span><span class="lbl">Maskoten firar på skärmen</span><input type="checkbox" id="petparty-toggle" class="switch"></label></li>
         </ul>
         <p class="footnote tight">Minska rörelse stänger av konfetti och de flesta animationer.</p>
 
@@ -629,29 +631,58 @@
       <div class="pets-hero" id="pets-hero"></div>
       <div class="list-title">Månadens uppdrag</div>
       <ul class="pets-missions" id="pets-missions"></ul>
-      <div class="list-title">Din samling</div>
+      <div class="list-title">Ägg</div>
+      <div id="pets-eggs"></div>
+      <div class="list-title pets-coll-title"><span>Din samling</span><span id="pets-count"></span></div>
+      <div class="pets-tabs" id="pets-tabs" role="toolbar" aria-label="Visa djur"></div>
       <div class="pets-grid" id="pets-grid"></div>
       <p class="footnote" id="pets-perk"></p>
-      <p class="footnote">Varje månad har ett eget djur. Klarar du minst 4 av månadens 6 uppdrag är djuret ditt för alltid. Missar du ett djur kommer det tillbaka samma månad nästa år.</p>
+      <p class="footnote">Varje månad har ett eget djur – klara minst 4 av månadens 6 uppdrag så är det ditt för alltid (missar du det kommer det tillbaka nästa år). Var tredje klar omgång ger ett ägg, och milstolpar ger särskilda djur. Glittriga djur är de allra mest sällsynta.</p>
     </div>
   </dialog>
 
-  <dialog id="petbuy-dialog" class="reward">
-    <div class="reward-body">
-      <div class="reward-icon petbuy-emoji" id="petbuy-emoji" aria-hidden="true"></div>
-      <h2 id="petbuy-name"></h2>
-      <p id="petbuy-text"></p>
-      <button class="pill plus-cta" id="petbuy-buy"></button>
-      <p class="plus-legal">Engångsköp via App Store eller Google Play. Djuret är ditt för alltid och följer med ditt konto (Återställ köp).</p>
-      <button class="text-btn" data-close>Inte nu</button>
+  <dialog id="pet-dialog" class="sheet pet-sheet" aria-labelledby="pd-name">
+    <div class="sheet-bar">
+      <span class="grabber" aria-hidden="true"></span>
+      <h2></h2>
+      <button class="text-btn" data-close>Klar</button>
+    </div>
+    <div class="sheet-body">
+      <div class="pd-stage" id="pd-stage" role="button" aria-label="Klappa djuret"></div>
+      <p class="pd-hint" id="pd-hint"></p>
+      <div class="pd-head"><h2 id="pd-name"></h2><span class="pd-rarity" id="pd-rarity"></span></div>
+      <p class="pd-how" id="pd-how"></p>
+      <div class="pd-friend" id="pd-friend">
+        <div class="pd-friend-top"><b id="pd-level"></b><small id="pd-xp-t"></small></div>
+        <div class="pd-xp"><i id="pd-xp"></i></div>
+        <div class="list-title">Accessoarer</div>
+        <div class="pd-gear" id="pd-gear"></div>
+        <p class="footnote tight">Djuret blir din vän när det följer med dig: varje rätt svar och varje klar omgång ger vänskapspoäng.</p>
+      </div>
+      <button class="pill plus-cta" id="pd-follow"></button>
+      <button class="pill plus-cta" id="pd-buy" hidden></button>
     </div>
   </dialog>
+
+  <dialog id="hatch-dialog" class="reward hatch">
+    <div class="reward-body">
+      <div class="hatch-stage" id="hatch-stage"></div>
+      <h2 id="hatch-title"></h2>
+      <p id="hatch-text"></p>
+      <div class="hatch-actions" id="hatch-actions" hidden>
+        <button class="pill plus-cta" id="hatch-use" hidden>Låt djuret följa med</button>
+        <button class="text-btn" data-close>Stäng</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="pet-party" id="pet-party" hidden role="status"></div>
 
   <dialog id="petwon-dialog" class="reward petwon">
     <div class="reward-body">
       <div class="petwon-rays" aria-hidden="true"></div>
       <div class="petwon-emoji" id="petwon-emoji" aria-hidden="true"></div>
-      <small class="petwon-kicker">Nytt djur!</small>
+      <small class="petwon-kicker" id="petwon-kicker">Nytt djur!</small>
       <h2 id="petwon-name"></h2>
       <p id="petwon-text"></p>
       <button class="pill plus-cta" id="petwon-use">Gör till följeslagare</button>
@@ -795,6 +826,7 @@
   <script src="js/wotd.js"></script>
   <script src="js/eng.js"></script>
   <script src="js/mat.js"></script>
+  <script src="js/pets.js"></script>
   <script src="js/generator.js"></script>
   <script src="js/app.js"></script>
 </body>
