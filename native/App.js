@@ -11,6 +11,7 @@ import { Linking, Platform, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { WebView } from "react-native-webview";
 import * as Haptics from "expo-haptics";
+import * as Notifications from "expo-notifications";
 import mobileAds, {
   AdEventType,
   AdsConsent,
@@ -24,6 +25,8 @@ import APP_HTML from "./web/app-html";
 
 // Byt till dina egna annonsenheter från AdMob innan appen publiceras.
 // I utvecklingsläge används alltid Googles testannonser.
+const APP_ORIGIN = "https://app.dagsprov.local/";
+
 const REWARDED_UNIT = __DEV__
   ? TestIds.REWARDED
   : Platform.select({
@@ -54,6 +57,15 @@ const BRIDGE = `
       },
       haptic: function (style) {
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: "haptic", style: style || "light" }));
+      },
+      notify: {
+        permission: function () { return call("notifyPermission"); },
+        schedule: function (list) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: "notifySchedule", list: list })); },
+        test: function (n) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: "notifyTest", title: n.title, body: n.body })); }
+      },
+      shop: {
+        products: function () { return call("shopProducts"); },
+        buy: function (id) { return call("shopBuy", { pack: id }); }
       },
       plus: {
         offerings: function () { return call("offerings"); },
@@ -181,6 +193,72 @@ async function restorePlus() {
   try { return isPlusActive(await Purchases.restorePurchases()); } catch { return false; }
 }
 
+// ---------- Köpta livlinor (förbrukningsbara köp) ----------
+// Skapa produkterna som "Consumable" i App Store Connect och som engångsprodukter i Google Play.
+// Webbappen sparar livlinorna; skalet svarar bara med hur många som köptes.
+const PACKS = {
+  lifelines_1: { product: "dagsprov_lifelines_1", n: 1 },
+  lifelines_5: { product: "dagsprov_lifelines_5", n: 5 },
+  lifelines_15: { product: "dagsprov_lifelines_15", n: 15 },
+};
+async function storeProducts() {
+  const ids = Object.values(PACKS).map((p) => p.product);
+  return Purchases.getProducts(ids, Purchases.PRODUCT_CATEGORY.NON_SUBSCRIPTION);
+}
+async function shopProducts() {
+  if (!plusReady) return [];
+  const products = await storeProducts();
+  return Object.entries(PACKS).map(([id, p]) => {
+    const prod = products.find((x) => x.identifier === p.product);
+    return prod ? { id, price: prod.priceString } : null;
+  }).filter(Boolean);
+}
+async function buyPack(id) {
+  const pack = PACKS[id];
+  if (!plusReady || !pack) return 0;
+  const prod = (await storeProducts()).find((x) => x.identifier === pack.product);
+  if (!prod) return 0;
+  try {
+    await Purchases.purchaseStoreProduct(prod);
+    return pack.n;
+  } catch {
+    return 0; // avbrutet eller misslyckat köp
+  }
+}
+
+// ---------- Påminnelser (lokala notiser, ingen server) ----------
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false }),
+});
+async function notifyPermission() {
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("paminnelser", { name: "Påminnelser", importance: Notifications.AndroidImportance.DEFAULT });
+  }
+  const cur = await Notifications.getPermissionsAsync();
+  if (cur.granted) return true;
+  const res = await Notifications.requestPermissionsAsync();
+  return !!res.granted;
+}
+const cleanText = (t, max) => String(t || "").replace(/[\u0000-\u001f]/g, " ").slice(0, max);
+let scheduling = Promise.resolve();
+function scheduleReminders(list) {
+  // Körs i tur och ordning så att två snabba anrop inte blandas ihop.
+  scheduling = scheduling.then(async () => {
+    const { granted } = await Notifications.getPermissionsAsync();
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    if (!granted || !Array.isArray(list)) return;
+    const now = Date.now();
+    for (const n of list.slice(0, 10)) {
+      const at = Number(n && n.at);
+      if (!Number.isFinite(at) || at < now || at > now + 8 * 864e5) continue;
+      await Notifications.scheduleNotificationAsync({
+        content: { title: cleanText(n.title, 60), body: cleanText(n.body, 180) },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(at), channelId: "paminnelser" },
+      });
+    }
+  }).catch(() => {});
+}
+
 const HAPTIC = {
   light: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
   medium: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium),
@@ -192,6 +270,7 @@ export default function App() {
   const web = useRef(null);
 
   const plusActive = useRef(null);
+  const busy = useRef(false); // ett köp eller en film i taget
 
   // Skickar köpstatusen till webbappen (vid start och när den ändras, t.ex. vid förnyelse).
   const sendPlus = useCallback((active) => {
@@ -205,21 +284,45 @@ export default function App() {
     web.current?.injectJavaScript(`window.__dagsprovAdResult(${JSON.stringify(id)}, ${JSON.stringify(value)}); true;`);
 
   const onMessage = useCallback(async (event) => {
+    // Ta bara emot meddelanden från den inbyggda appen, aldrig från någon annan sida.
+    if (!String(event.nativeEvent.url || "").startsWith(APP_ORIGIN)) return;
     let msg;
     try { msg = JSON.parse(event.nativeEvent.data); } catch { return; }
+    if (!msg || typeof msg.type !== "string") return;
     if (msg.type === "rewarded") {
-      // Med Plus visas aldrig reklam.
-      reply(msg.id, plusActive.current ? false : await showRewarded());
+      // Med Plus visas aldrig reklam. Bara en film åt gången.
+      if (plusActive.current || busy.current) return reply(msg.id, false);
+      busy.current = true;
+      reply(msg.id, await showRewarded().finally(() => { busy.current = false; }));
+    } else if (msg.type === "notifyPermission") {
+      reply(msg.id, await notifyPermission().catch(() => false));
+    } else if (msg.type === "notifySchedule") {
+      scheduleReminders(msg.list);
+    } else if (msg.type === "notifyTest") {
+      if (await notifyPermission().catch(() => false)) {
+        Notifications.scheduleNotificationAsync({
+          content: { title: cleanText(msg.title, 60), body: cleanText(msg.body, 180) },
+          trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 5, channelId: "paminnelser" },
+        }).catch(() => {});
+      }
     } else if (msg.type === "offerings") {
       reply(msg.id, await plusOfferings().catch(() => []));
     } else if (msg.type === "purchase") {
-      const ok = await purchasePlus(msg.plan);
+      if (!PLAN_TYPES[msg.plan] || busy.current) return reply(msg.id, false);
+      busy.current = true;
+      const ok = await purchasePlus(msg.plan).finally(() => { busy.current = false; });
       if (ok) sendPlus(true);
       reply(msg.id, ok);
     } else if (msg.type === "restore") {
       const ok = await restorePlus();
       if (ok) sendPlus(true);
       reply(msg.id, ok);
+    } else if (msg.type === "shopProducts") {
+      reply(msg.id, await shopProducts().catch(() => []));
+    } else if (msg.type === "shopBuy") {
+      if (!Object.prototype.hasOwnProperty.call(PACKS, msg.pack) || busy.current) return reply(msg.id, 0);
+      busy.current = true;
+      reply(msg.id, await buyPack(msg.pack).finally(() => { busy.current = false; }));
     } else if (msg.type === "manage") {
       Purchases.showManageSubscriptions().catch(() => Linking.openURL(Platform.OS === "ios"
         ? "https://apps.apple.com/account/subscriptions"
@@ -234,7 +337,7 @@ export default function App() {
 
   // Länkar till andra webbplatser (t.ex. support) öppnas i webbläsaren, inte i appen.
   const onShouldStartLoad = useCallback((req) => {
-    if (req.url.startsWith("https://app.dagsprov.local") || req.url.startsWith("about:") || req.url.startsWith("data:") || req.url.startsWith("blob:")) return true;
+    if (req.url.startsWith(APP_ORIGIN) || req.url.startsWith("about:") || req.url.startsWith("data:") || req.url.startsWith("blob:")) return true;
     Linking.openURL(req.url).catch(() => {});
     return false;
   }, []);
@@ -253,6 +356,15 @@ export default function App() {
         onShouldStartLoadWithRequest={onShouldStartLoad}
         javaScriptEnabled
         domStorageEnabled
+        // Säkerhet: ingen filåtkomst, inga popup-fönster, ingen blandning av http och https och
+        // ingen felsökning av webbvyn i den publicerade appen.
+        allowFileAccess={false}
+        allowFileAccessFromFileURLs={false}
+        allowUniversalAccessFromFileURLs={false}
+        javaScriptCanOpenWindowsAutomatically={false}
+        mixedContentMode="never"
+        webviewDebuggingEnabled={__DEV__}
+        cacheEnabled={false}
         // Tangentbordet ska kunna öppnas när man trycker på en ruta i korsordet.
         keyboardDisplayRequiresUserAction={false}
         // Ingen verktygsrad ovanför tangentbordet på iOS – mer plats åt korsordet.

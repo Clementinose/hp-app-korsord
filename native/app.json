@@ -21,6 +21,7 @@
       "adaptiveIcon": { "foregroundImage": "../icon-1024.png", "backgroundColor": "#1a73e8" }
     },
     "plugins": [
+      ["expo-notifications", { "color": "#d9772b" }],
       [
         "react-native-google-mobile-ads",
         {

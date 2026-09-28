@@ -52,7 +52,11 @@ då kan AdMob-kontot stängas av.
    - **Entitlements** → skapa `plus` och koppla alla tre produkterna till den.
    - **Offerings** → skapa `default` med paketen *Annual*, *Monthly* och *Lifetime*.
    - Kopiera de publika SDK-nycklarna (`appl_…` och `goog_…`) till `REVENUECAT_KEY` i `App.js`.
-4. Testa köpen med en **Sandbox-användare** (iOS) och en **licenstestare** (Android) innan du publicerar.
+4. **Köpta livlinor**: skapa tre köp av typen **Consumable** i App Store Connect (och engångsprodukter
+   i Google Play): `dagsprov_lifelines_1` (5 kr), `dagsprov_lifelines_5` (19 kr) och
+   `dagsprov_lifelines_15` (45 kr). Lägg till dem som produkter i RevenueCat (de ska *inte* kopplas
+   till `plus`). Köpta livlinor går aldrig ut och staplas; appen använder dagens gratis livlinor först.
+5. Testa köpen med en **Sandbox-användare** (iOS) och en **licenstestare** (Android) innan du publicerar.
 
 Priserna i appen hämtas alltid från butiken, i användarens valuta. Texterna om provperiod och
 besparing räknas fram automatiskt.

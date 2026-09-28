@@ -76,6 +76,7 @@ Kontrollera att adresserna öppnas innan du skickar in appen (GitHub Pages måst
 > DAGSPROV PLUS
 > Obegränsade livlinor, hela arkivet, ledtrådar steg för steg innan du svarar, ingen reklam och
 > exklusiva färgteman. Välj 12 månader (med 7 dagar gratis), 1 månad eller ett engångsköp.
+> Du kan också köpa livlinor styckvis (från 5 kr) – de går aldrig ut och kan sparas.
 > Abonnemanget förnyas automatiskt tills du säger upp det i App Store-inställningarna, senast 24 timmar
 > före nästa period.
 >

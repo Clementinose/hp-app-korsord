@@ -57,6 +57,7 @@
       </div>
     </div>
     <div class="nav-side right">
+      <button class="icon-btn pet-btn" id="btn-pets" aria-label="Maskotar och månadens uppdrag"><span class="pet-face" aria-hidden="true">🐾</span></button>
       <button class="icon-btn" id="btn-stats" aria-label="Statistik">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 20v-7M12 20V5M18.5 20v-10"/></svg>
       </button>
@@ -249,6 +250,7 @@
       <div class="hero">
         <div class="hero-icon" id="win-icon">🎉</div>
         <p id="win-summary"></p>
+        <div id="win-pet"></div>
       </div>
       <div class="list-title">Orden i korsordet</div>
       <ul class="list glossary" id="win-words"></ul>
@@ -331,10 +333,18 @@
         <ul class="list set-list">
           <li class="row"><span class="ico" style="--c:#ff9500"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="currentColor"/></svg></span><span class="lbl">Gratis livlinor i dag</span><span class="val" id="val-lifelines"></span></li>
         </ul>
+        <ul class="list set-list" id="shop-row" hidden>
+          <li><button class="row nav" id="open-shop"><span class="ico" style="--c:#ff3b30"><svg viewBox="0 0 24 24"><path d="M5 8h14l-1.2 11H6.2z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg></span><span class="lbl">Köp livlinor</span><span class="val">från 5 kr</span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+        </ul>
         <ul class="list set-list" id="ad-privacy-row" hidden>
           <li><button class="row nav" id="ad-privacy"><span class="ico" style="--c:#34c759"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.4-3 8-7 9.5-4-1.5-7-5.1-7-9.5V6z"/></svg></span><span class="lbl">Samtycke till reklam</span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
         </ul>
         <p class="footnote tight" id="lifeline-note">Varje dag får du 3 gratis livlinor: andra chans, 50/50, extra tips i korsordet, bonusomgångar och att rädda en bruten svit.</p>
+
+        <div class="list-title">Påminnelser</div>
+        <ul class="list set-list">
+          <li><button class="row nav" data-push="remind"><span class="ico" style="--c:#ff3b30"><svg viewBox="0 0 24 24"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg></span><span class="lbl">Påminnelser</span><span class="val" id="val-remind"></span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>
+        </ul>
 
         <div class="list-title">Ljud och känsla</div>
         <ul class="list set-list">
@@ -442,6 +452,19 @@
           <li><button class="row" data-bolt="30" role="radio"><span class="lbl">30 sekunder<small>Ungefär den tid man har per uppgift på provet.</small></span><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4 4 9-9"/></svg></button></li>
         </ul>
         <p class="footnote">Ett rätt svar inom tiden, utan att ha tittat på stegen först, ger ⚡ blixtsvar.</p>
+      </div>
+
+      <div class="set-page" data-page="remind" data-title="Påminnelser" hidden>
+        <div class="notif-preview" id="notif-preview"></div>
+        <ul class="list set-list">
+          <li><label class="row switch-row"><span class="lbl">Daglig påminnelse</span><input type="checkbox" id="remind-toggle" class="switch"></label></li>
+          <li class="row"><span class="lbl">Tid</span><select id="remind-time" class="time-select" aria-label="Tid för påminnelsen"></select></li>
+          <li><label class="row switch-row"><span class="lbl">Rädda sviten på kvällen<small>En extra påminnelse kl. 21.30 om sviten håller på att brytas.</small></span><input type="checkbox" id="remind-streak" class="switch"></label></li>
+        </ul>
+        <ul class="list set-list">
+          <li><button class="row" id="remind-test"><span class="lbl tint">Visa en testnotis</span></button></li>
+        </ul>
+        <p class="footnote" id="remind-note">Påminnelserna skickas av din följeslagare – Olle om du inte har valt något djur. De skapas på din enhet och inget skickas till någon server. Kommer du inte in och övar hoppar appen över dagens påminnelse när du redan har övat.</p>
       </div>
 
       <!-- Om appen -->
@@ -587,9 +610,54 @@
       <div class="reward-lives" id="reward-lives" aria-hidden="true"></div>
       <button class="pill" id="reward-free">Använd gratis livlina</button>
       <button class="pill ad" id="reward-ad"><span class="play" aria-hidden="true">▶</span><span id="reward-ad-t">Titta på en kort film<small>Frivilligt · ca 15–30 sekunder</small></span></button>
+      <button class="pill buy" id="reward-buy"><span class="coin" aria-hidden="true">♥</span><span>Köp livlinor<small>Från 5 kr · sparas för alltid</small></span></button>
       <p class="reward-note" id="reward-note"></p>
       <button class="plus-link" id="reward-plus"><span aria-hidden="true">★</span> Obegränsade livlinor med Plus</button>
       <button class="text-btn" id="reward-cancel">Inte nu</button>
+    </div>
+  </dialog>
+
+  <div class="notif-mock" id="notif-mock" hidden role="status"></div>
+
+  <dialog id="pets-dialog" class="sheet tall" aria-labelledby="pets-h">
+    <div class="sheet-bar">
+      <span class="grabber" aria-hidden="true"></span>
+      <h2 id="pets-h">Maskotar</h2>
+      <button class="text-btn" data-close>Klar</button>
+    </div>
+    <div class="sheet-body">
+      <div class="pets-hero" id="pets-hero"></div>
+      <div class="list-title">Månadens uppdrag</div>
+      <ul class="pets-missions" id="pets-missions"></ul>
+      <div class="list-title">Din samling</div>
+      <div class="pets-grid" id="pets-grid"></div>
+      <p class="footnote" id="pets-perk"></p>
+      <p class="footnote">Varje månad har ett eget djur. Klarar du minst 4 av månadens 6 uppdrag är djuret ditt för alltid. Missar du ett djur kommer det tillbaka samma månad nästa år.</p>
+    </div>
+  </dialog>
+
+  <dialog id="petwon-dialog" class="reward petwon">
+    <div class="reward-body">
+      <div class="petwon-rays" aria-hidden="true"></div>
+      <div class="petwon-emoji" id="petwon-emoji" aria-hidden="true"></div>
+      <small class="petwon-kicker">Nytt djur!</small>
+      <h2 id="petwon-name"></h2>
+      <p id="petwon-text"></p>
+      <button class="pill plus-cta" id="petwon-use">Gör till följeslagare</button>
+      <button class="text-btn" data-close>Senare</button>
+    </div>
+  </dialog>
+
+  <dialog id="shop-dialog" class="reward" aria-labelledby="shop-h">
+    <div class="reward-body">
+      <div class="reward-icon" style="--c:#ff3b30" aria-hidden="true">♥</div>
+      <h2 id="shop-h">Köp livlinor</h2>
+      <p id="shop-bank"></p>
+      <div class="plus-plans shop-packs" id="shop-packs"></div>
+      <p class="reward-note" id="shop-demo">Förhandsvisning: inga riktiga köp görs här.</p>
+      <p class="plus-legal">Engångsköp via App Store eller Google Play. Köpta livlinor sparas på den här enheten och går aldrig ut. De följer inte med i säkerhetskopior.</p>
+      <button class="plus-link" id="shop-plus"><span aria-hidden="true">★</span> Eller obegränsat med Plus</button>
+      <button class="text-btn" id="shop-cancel">Stäng</button>
     </div>
   </dialog>
 
