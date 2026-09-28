@@ -1,13 +1,14 @@
 // Offline-stöd: allt sparas vid installation. Appen startar direkt från cachen
 // och hämtar samtidigt en ny version i bakgrunden (visas nästa gång den öppnas).
-const CACHE = "dagsprov-v17";
+const CACHE = "dagsprov-v19";
 const FILES = [
-  "./", "index.html", "style.css", "js/words.js", "js/mek.js", "js/eng.js", "js/mat.js", "js/generator.js", "js/app.js",
+  "./", "index.html", "style.css", "js/words.js", "js/mek.js", "js/wotd.js", "js/eng.js", "js/mat.js", "js/generator.js", "js/app.js",
   "icon.svg", "icon-180.png", "icon-192.png", "icon-512.png", "manifest.webmanifest",
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  // cache: "reload" hämtar filerna direkt från servern, förbi webbläsarens vanliga cache.
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", (e) => {
   e.waitUntil(

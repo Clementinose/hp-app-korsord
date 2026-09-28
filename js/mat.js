@@ -637,7 +637,7 @@
         () => { const k = pick(rng, [4, 9, 16, 25]); return { pre: `x² = ${k}`, I: "x", II: num(Math.sqrt(k)), c: 3, steps: [`x² = ${k} har ${b("två")} lösningar: x = ${Math.sqrt(k)} och x = −${Math.sqrt(k)}.`, `Om x = ${Math.sqrt(k)} är de lika, om x = −${Math.sqrt(k)} är II större.`, `Otillräcklig information.`] }; },
         () => { const [p, q] = pick(rng, [[3, 4], [2, 5], [5, 7]]); return { pre: `x och y är positiva och x / y = ${p}/${q}`, I: "x", II: "y", c: 1, steps: [`x / y = ${p}/${q} betyder att x = ${frac(p, q)} · y.`, `Eftersom ${frac(p, q)} < 1 och y > 0 är x mindre än y.`, `II är större.`] }; },
       ];
-      const k = (hard && rng() < 0.6 ? pick(rng, hardCases) : pick(rng, cases))();
+      const k = (hard && rng() < (hard === 2 ? 0.85 : 0.6) ? pick(rng, hardCases) : pick(rng, cases))();
       return {
         cat: "kva",
         q: `${k.pre ? `<span class="kva-pre">${k.pre}</span>` : ""}<span class="kva"><span><small>Kvantitet I</small>${k.I}</span><span><small>Kvantitet II</small>${k.II}</span></span>`,
@@ -680,12 +680,18 @@
     easy: ["percentOf", "fractionOf", "simpleEq", "average", "median", "orderOps", "rectArea", "triangleAngle", "ratio", "unitPrice", "probability", "fvalue", "handshake"],
     medium: ["percentChange", "percentBack", "fractionsAdd", "simpleEq", "system", "average", "median", "triangleAngle", "circle", "ratio", "speed", "unitConv", "powers", "roots", "simplify", "slope", "fvalue", "probability", "handshake"],
     hard: ["percentChange", "percentBack", "compound", "fractionsAdd", "eqBoth", "system", "circle", "pythagoras", "volume", "speed", "unitConv", "work", "powers", "roots", "expand", "simplify", "slope", "probability"],
+    // Expert: de mest sammansatta typerna, fler KVA/NOG och nästan bara de kluriga KVA-fallen.
+    expert: ["percentBack", "compound", "eqBoth", "system", "pythagoras", "volume", "work", "powers", "roots", "expand", "slope", "probability"],
   };
 
   // En omgång med tio uppgifter. rng styr både urval och siffror.
   function round(rng, level, shuffle) {
-    const hard = level === "hard";
-    const types = shuffle(POOL[level], rng).slice(0, 6).concat(["kva", "kva", "kva", "nog"]);
+    // hard: 0 = lätt/medel, 1 = svår, 2 = expert
+    const hard = level === "expert" ? 2 : level === "hard" ? 1 : 0;
+    const pool = POOL[level] || POOL.medium;
+    const types = level === "expert"
+      ? shuffle(pool, rng).slice(0, 5).concat(["kva", "kva", "kva", "nog", "nog"])
+      : shuffle(pool, rng).slice(0, 6).concat(["kva", "kva", "kva", "nog"]);
     const seen = new Set();
     return types.map((type) => {
       let t, guard = 0;

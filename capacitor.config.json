@@ -1,0 +1,10 @@
+{
+  "appId": "com.clementinose.dagsprov",
+  "appName": "Dagsprov",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#f2f2f7",
+    "limitsNavigationsToAppBoundDomains": true
+  }
+}

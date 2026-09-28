@@ -13,6 +13,11 @@
   <meta name="apple-mobile-web-app-title" content="Dagsprov">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta property="og:title" content="Dagsprov – öva inför högskoleprovet">
+  <meta property="og:description" content="Korsord, ord, meningar, engelska och matte – nytt varje dag. Fristående och gratis.">
+  <meta property="og:image" content="icon-512.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
   <link rel="apple-touch-icon" href="icon-180.png">
@@ -22,7 +27,8 @@
     try {
       const p = JSON.parse(localStorage.getItem("hpk-prefs-v2") || "{}"), d = document.documentElement.dataset;
       if (p.theme === "light" || p.theme === "dark") { d.theme = p.theme; d.themeByApp = ""; }
-      d.cells = p.cells || "rounded"; d.accent = p.accent || "blue"; d.font = p.font || "standard";
+      d.cells = p.cells || "rounded"; d.accent = p.accent || "blue"; d.font = p.font || "standard"; d.text = p.textSize || "m";
+      if (p.reduceMotion) document.documentElement.classList.add("reduce-motion");
     } catch {}
   </script>
 </head>
@@ -31,6 +37,9 @@
     <div class="nav-side">
       <button class="icon-btn" id="btn-archive" aria-label="Arkiv">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="16" rx="3.5"/><path d="M3.5 9.5h17M8 2.5v4M16 2.5v4"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-wotd" aria-label="Dagens ord">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2l2.1 4.6 5 .5-3.8 3.4 1.1 4.9L12 14.1l-4.4 2.5 1.1-4.9L4.9 8.3l5-.5z"/><path d="M6 20.5h12"/></svg>
       </button>
       <button class="icon-btn wide-only" id="btn-words" aria-label="Ordlista">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg>
@@ -75,11 +84,12 @@
       </div>
 
       <div class="levelrow">
-        <div class="segmented" role="tablist" aria-label="Svårighetsgrad" id="difficulty">
+        <div class="segmented four" role="tablist" aria-label="Svårighetsgrad" id="difficulty">
           <span class="seg-thumb" aria-hidden="true"></span>
           <button data-level="easy" role="tab">Lätt</button>
           <button data-level="medium" role="tab">Medel</button>
           <button data-level="hard" role="tab">Svår</button>
+          <button data-level="expert" role="tab">Expert</button>
         </div>
         <div class="timer-wrap">
           <span class="timer" id="timer" aria-label="Tid">0:00</span>
@@ -117,7 +127,7 @@
       </section>
 
       <div class="board-area" id="board-area">
-        <div class="board" id="board" aria-label="Korsord"></div>
+        <div class="board" id="board" role="group" aria-label="Korsordets rutnät. Tryck på en ruta och skriv med tangentbordet; ledtråden visas i kortet under rutnätet."></div>
         <div class="paused" id="paused" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6v12M15 6v12"/></svg>
           <p>Pausat</p>
@@ -184,7 +194,7 @@
   </div>
 
   <!-- Flikrad på iPhone (på iPad sitter lägesväljaren i navigationsfältet). -->
-  <nav class="tabbar" id="tabbar" aria-label="Lägen">
+  <nav class="tabbar" id="tabbar" aria-label="Lägen" role="tablist">
     <button data-mode="cross" role="tab">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2" class="solid"/></svg>
       <span>Korsord</span>
@@ -382,7 +392,7 @@
         <div class="list-title">Textstorlek</div>
         <div class="text-size" id="text-picker" role="radiogroup" aria-label="Textstorlek">
           <span class="ts-a small" aria-hidden="true">A</span>
-          <div class="segmented" style="--n:4">
+          <div class="segmented four">
             <span class="seg-thumb" aria-hidden="true"></span>
             <button data-text="s" role="radio">Mindre</button>
             <button data-text="m" role="radio">Normal</button>
@@ -424,6 +434,9 @@
           <span id="about-version">Version 3.0</span>
         </div>
         <ul class="list set-list" id="about-list"></ul>
+        <ul class="list set-list">
+          <li><a class="row nav" href="https://github.com/Clementinose/hp-app-korsord/issues" target="_blank" rel="noopener noreferrer"><span class="lbl">Support och kontakt<small>Frågor, felrapporter och förslag</small></span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></a></li>
+        </ul>
         <p class="footnote">Alla frågor är egenskrivna övningsfrågor i högskoleprovets stil, inte frågor från riktiga prov. Nya korsord och omgångar kommer varje dag, och alla får samma uppgifter samma dag.</p>
         <p class="footnote">Dagsprov är ett fristående övningsverktyg och har ingen koppling till, och är inte godkänt av, Universitets- och högskolerådet (UHR).</p>
       </div>
@@ -457,6 +470,38 @@
     </div>
   </dialog>
 
+  <dialog id="wotd-dialog" class="sheet">
+    <div class="sheet-bar">
+      <span class="grabber" aria-hidden="true"></span>
+      <h2>Dagens ord</h2>
+      <button class="text-btn" data-close>Klar</button>
+    </div>
+    <div class="sheet-body">
+      <div class="wotd-date" id="wotd-date"></div>
+      <button class="wotd-card" id="wotd-card" aria-live="polite">
+        <span class="wotd-inner">
+          <span class="wotd-face front">
+            <span class="wotd-kicker">Vet du vad det betyder?</span>
+            <span class="wotd-word" id="wotd-word"></span>
+            <span class="wotd-hint">Tryck för att vända kortet</span>
+          </span>
+          <span class="wotd-face back">
+            <span class="wotd-small" id="wotd-word2"></span>
+            <span class="wotd-meaning" id="wotd-meaning"></span>
+            <span class="wotd-example" id="wotd-example"></span>
+          </span>
+        </span>
+      </button>
+      <div class="wotd-actions">
+        <button class="pill ghost" id="wotd-share"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5L12 3l4.5 4.5M5 12v7h14v-7"/></svg>Dela</button>
+        <button class="pill" id="wotd-practice">Öva fler ord</button>
+      </div>
+      <div class="list-title">Tidigare dagar</div>
+      <ul class="list wotd-history" id="wotd-history"></ul>
+      <p class="footnote">Ett nytt ord varje dag, samma för alla. Exempelmeningarna är egenskrivna.</p>
+    </div>
+  </dialog>
+
   <dialog id="words-dialog" class="sheet tall">
     <div class="sheet-bar">
       <span class="grabber" aria-hidden="true"></span>
@@ -467,7 +512,7 @@
       <div class="word-of-day" id="word-of-day"></div>
       <label class="search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
-        <input type="search" id="word-search" placeholder="Sök bland orden" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
+        <input type="search" id="word-search" aria-label="Sök bland orden" placeholder="Sök bland orden" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
       </label>
       <div class="word-count" id="word-count"></div>
       <div class="word-list" id="word-list"></div>
@@ -482,13 +527,15 @@
     </div>
     <div class="sheet-body">
       <ul class="list help">
-        <li><b>Nytt varje dag.</b> Tre korsord om dagen – Lätt, Medel och Svår. Alla får samma.</li>
+        <li><b>Nytt varje dag.</b> Fyra korsord om dagen – Lätt, Medel, Svår och Expert. Alla får samma.</li>
         <li><b>Som på provet.</b> Ledtrådarna är synonymer eller förklaringar, precis som i ORD-delen.</li>
         <li><b>Byt riktning.</b> Tryck på samma ruta igen för att växla mellan vågrätt och lodrätt.</li>
         <li><b>Skriv.</b> Tryck på en ruta så kommer tangentbordet upp. Med Magic Keyboard eller annat tangentbord skriver du direkt.</li>
         <li><b>Kortkommandon.</b> Piltangenter flyttar, Tab eller Enter går till nästa ord, mellanslag byter riktning och ⌘Z ångrar.</li>
         <li><b>Fem lägen.</b> <b>Korsord</b>, <b>Ord</b>, <b>Meningar</b>, <b>Engelska</b> och <b>Matte</b>. Ord är som ORD-delen: ett ord och fem betydelser (A–E). Meningar är som MEK-delen: välj det som passar bäst i luckorna.</li>
         <li><b>Engelska.</b> Som ELF-delen: välj ordet som betyder ungefär samma sak, eller det som passar bäst i meningen.</li>
+        <li><b>Fyra nivåer.</b> Lätt, Medel, Svår och Expert. På Expert kommer ovanliga ord, de svåraste meningarna och de klurigaste matteuppgifterna.</li>
+        <li><b>Dagens ord.</b> Tryck på stjärnan uppe till vänster för dagens ord med betydelse och exempelmening. En röd prick betyder att du inte har sett dagens ord än.</li>
         <li><b>Matte.</b> Nya uppgifter varje dag i stil med XYZ, KVA och NOG. Tryck på 💡 <b>Visa hur man tänker</b> för att se lösningen steg för steg (eller tryck H). Svarar du rätt inom 10 sekunder utan hjälp blir det ⚡ blixtsvar.</li>
         <li><b>Inställningar.</b> Under kugghjulet ställer du in utseende, textstorlek, ljud, haptik, hur fel visas och mycket mer. Där kan du också spara en säkerhetskopia av dina framsteg.</li>
         <li><b>Statistik.</b> Under diagramikonen ser du allt du gjort: aktivitet, din profil per del, matteområden, ord att repetera och förslag på vad du bör öva på.</li>
@@ -522,8 +569,51 @@
     </div>
   </dialog>
 
+  <!-- Visas bara om JavaScript är avstängt. -->
+  <noscript><div class="sys-banner static">Dagsprov behöver JavaScript. Slå på JavaScript i webbläsarens inställningar och ladda om sidan.</div></noscript>
+  <div class="sys-banner" id="compat-banner" hidden role="alert">Din webbläsare är för gammal för Dagsprov. Uppdatera till iOS/iPadOS 16.4 eller senare, eller använd en aktuell version av Safari, Chrome, Edge eller Firefox.</div>
+  <div class="sys-banner action" id="update-banner" hidden role="status"><span>Dagsprov har uppdaterats.</span><button id="update-reload">Ladda om</button></div>
+  <div class="sys-banner action" id="error-banner" hidden role="alert"><span>Något gick fel. Ladda om appen om den beter sig konstigt.</span><button id="error-reload">Ladda om</button></div>
+  <div class="crash" id="crash" hidden role="alertdialog" aria-labelledby="crash-title">
+    <div class="crash-card">
+      <div class="crash-icon" aria-hidden="true">🛠️</div>
+      <h2 id="crash-title">Appen kunde inte starta</h2>
+      <p>Försök att ladda om. Hjälper inte det kan du återställa appen – då raderas sparade framsteg och inställningar på den här enheten.</p>
+      <button class="pill" id="crash-reload">Ladda om</button>
+      <button class="pill ghost" id="crash-reset">Återställ appen</button>
+    </div>
+  </div>
+  <script>
+    // Kontroll av webbläsarstöd och skydd mot krascher vid start. Skrivet i äldre JavaScript
+    // så att det fungerar även där resten av appen inte gör det.
+    (function () {
+      var ok = window.CSS && CSS.supports && CSS.supports("color", "color-mix(in srgb, red, blue)") && CSS.supports("container-type", "inline-size");
+      if (!ok) document.getElementById("compat-banner").hidden = false;
+      window.__dagsprovReady = false;
+      var shown = false;
+      function onError() {
+        if (window.__dagsprovReady) {
+          if (!shown) { shown = true; document.getElementById("error-banner").hidden = false; }
+        } else {
+          document.getElementById("crash").hidden = false;
+        }
+      }
+      window.addEventListener("error", function (e) { if (e && e.target && e.target !== window) return; onError(); });
+      window.addEventListener("unhandledrejection", onError);
+      function reload() { location.reload(); }
+      document.getElementById("crash-reload").onclick = reload;
+      document.getElementById("error-reload").onclick = reload;
+      document.getElementById("update-reload").onclick = reload;
+      document.getElementById("crash-reset").onclick = function () {
+        if (!confirm("Återställa appen? Alla framsteg och inställningar på den här enheten raderas.")) return;
+        try { Object.keys(localStorage).forEach(function (k) { if (k.indexOf("hpk-") === 0) localStorage.removeItem(k); }); } catch (e) {}
+        reload();
+      };
+    })();
+  </script>
   <script src="js/words.js"></script>
   <script src="js/mek.js"></script>
+  <script src="js/wotd.js"></script>
   <script src="js/eng.js"></script>
   <script src="js/mat.js"></script>
   <script src="js/generator.js"></script>

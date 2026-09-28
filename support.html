@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Support – Dagsprov</title>
+  <meta name="description" content="Hjälp, vanliga frågor och kontakt för Dagsprov.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <style>
+    :root { color-scheme: light dark; --bg: #f2f2f7; --card: #fff; --text: #000; --muted: #6e6e73; --tint: #007aff; --sep: rgba(60,60,67,.18); }
+    @media (prefers-color-scheme: dark) { :root { --bg: #000; --card: #1c1c1e; --text: #fff; --muted: #98989f; --tint: #0a84ff; --sep: rgba(84,84,88,.6); } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif; }
+    main { max-width: 720px; margin: 0 auto; padding: max(24px, env(safe-area-inset-top)) 16px 48px; }
+    header { display: flex; align-items: center; gap: 14px; margin: 8px 0 20px; }
+    header img { width: 56px; height: 56px; border-radius: 13px; }
+    h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -.02em; }
+    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 26px 16px 8px; font-weight: 600; }
+    .card { background: var(--card); border-radius: 16px; overflow: hidden; }
+    details { padding: 14px 18px; border-top: .5px solid var(--sep); }
+    details:first-child { border-top: 0; }
+    summary { font-weight: 600; cursor: pointer; }
+    details p { margin: 8px 0 2px; color: var(--muted); }
+    .contact { padding: 16px 18px; }
+    .muted { color: var(--muted); font-size: 15px; }
+    a { color: var(--tint); }
+    .btn { display: inline-block; margin-top: 8px; padding: 10px 18px; border-radius: 999px; background: var(--tint); color: #fff; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+<main>
+  <header><img src="icon-180.png" alt=""><div><h1>Support</h1><div class="muted">Dagsprov – öva inför högskoleprovet varje dag</div></div></header>
+
+  <h2>Vanliga frågor</h2>
+  <div class="card">
+    <details><summary>Varför får alla samma uppgifter?</summary><p>Korsord, frågor och dagens ord räknas fram ur datumet. Därför får alla samma uppgifter samma dag – och i arkivet kan du spela tidigare dagar.</p></details>
+    <details><summary>Var sparas mina framsteg?</summary><p>Bara på din enhet. Vill du flytta dem till en annan enhet: välj Inställningar → Exportera säkerhetskopia och sedan Återställ från säkerhetskopia på den nya enheten.</p></details>
+    <details><summary>Fungerar appen utan internet?</summary><p>Ja. App Store-versionen har allt inbyggt, och webbversionen fungerar offline efter att den har öppnats en gång.</p></details>
+    <details><summary>Hur fungerar nivåerna?</summary><p>Lätt, Medel, Svår och Expert. På Expert kommer ovanliga ord, de svåraste meningarna och de klurigaste matteuppgifterna, inklusive fler KVA- och NOG-uppgifter.</p></details>
+    <details><summary>Är frågorna från riktiga högskoleprov?</summary><p>Nej. Alla ordförklaringar, meningar och uppgifter är egenskrivna eller skapas av appen. De följer provdelarnas upplägg men är inte hämtade från publicerade prov.</p></details>
+    <details><summary>Jag hittade ett fel i en fråga</summary><p>Tack! Skicka gärna ordet eller frågan och datumet via kontaktlänken nedan så rättas det.</p></details>
+    <details><summary>Hur raderar jag allt?</summary><p>Inställningar → Nollställ alla framsteg. Du kan också ta bort appen.</p></details>
+    <details><summary>Vilka enheter stöds?</summary><p>iPhone och iPad med iOS/iPadOS 16.4 eller senare, samt aktuella versioner av Safari, Chrome, Edge och Firefox på dator och Android.</p></details>
+  </div>
+
+  <h2>Kontakt</h2>
+  <div class="card contact">
+    <p>Frågor, felrapporter och förslag tas emot via projektets ärendelista på GitHub.</p>
+    <a class="btn" href="https://github.com/Clementinose/hp-app-korsord/issues" rel="noopener noreferrer">Kontakta oss</a>
+  </div>
+
+  <h2>Mer</h2>
+  <div class="card contact">
+    <p><a href="privacy.html">Integritetspolicy</a> · <a href="./">Öppna Dagsprov</a></p>
+    <p class="muted">Dagsprov är ett fristående övningsverktyg och har ingen koppling till Universitets- och högskolerådet (UHR). Apple, iPhone och iPad är varumärken som tillhör Apple Inc. © 2026 Clementinose.</p>
+  </div>
+</main>
+</body>
+</html>

@@ -5,6 +5,7 @@
     easy: { label: "Lätt", count: 8, minLen: 3, maxLen: 8, maxSize: 11 },
     medium: { label: "Medel", count: 12, minLen: 4, maxLen: 10, maxSize: 13 },
     hard: { label: "Svår", count: 16, minLen: 4, maxLen: 14, maxSize: 15 },
+    expert: { label: "Expert", count: 18, minLen: 5, maxLen: 15, maxSize: 15 },
   };
   const LEVEL_KEYS = Object.keys(LEVELS);
   const DIR_NAME = { across: "vågrätt", down: "lodrätt" };
@@ -117,11 +118,41 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
+  // Ordens svårighet 1–4. Expertord är markerade i ordlistan (4); övriga bedöms efter längd
+  // och om de är lånord med typiska ändelser (-era, -ism, -tet, -tion …), som oftast är svårare.
+  const FOREIGN = /(ERA|ISM|IST|TET|TION|SION|ÖS|ELL|ANT|ENT|ISK|ATIV|IV|ANS|ENS|ÄR|ARD|ATOR|ÖR)$/;
+  // Korta ord som ändå är ovanliga och svåra.
+  const HARD_SHORT = new Set(`
+    AKRIBI AMORF ANLETE ANNEX ANRIKA APROPÅ ARMOD ASKES ASKET AUGUR AVBÖN AVLAT AVMÄTT AVOG BIGOTT BITSK
+    BRAVAD BRAVUR BRYSK BURDUS BÄVAN BÖRD DOCERA DREGEL EFEMÄR ELEGI ELOGE EMFAS EMOTSE EMPIRI ENKLAV EPIGON
+    EPITET ESPRIT FADD FAGER FALANG FEBRIL FEJD FELBAR FERM FINESS FLÄRD FRUGAL FRÄNDE FROMMA FRÖJD GAGNA
+    GEMEN GISSEL GRAMSE GÄCKA GÄLD GÄNGSE HABIL HASARD HOVSAM HUTLÖS HYBRIS HÖVISK IDOG INFAM INERT KAPRIS
+    KAUSAL KAVAT KOKETT KONFYS KOPIÖS KRASS KRUX KUTYM KYSK LABIL LAPPRI LEGIO LISMA LOJ LUMPEN LÄGLIG MUNDÄN
+    NEJD NIDING NÄNNS NÄPST NÄSVIS ODÅGA PIETET PONERA POSTUM PREKÄR PUERIL PÅBUD REDBAR SAKRAL SCHISM SFÄR
+    SMÄDA SMÄLEK STINN STURSK SUBLIM TIRAD TRÄGEN UNISON VAKANS VEKLIG YMNIG ZENIT ÅLÄGGA ÄRBAR ÖMSINT OBSKYR
+  `.trim().split(/\s+/));
+  function wordTier(e) {
+    if (e[2]) return e[2];
+    if (HARD_SHORT.has(e[0])) return 3;
+    const L = e[0].length;
+    let t = L <= 6 ? 1 : L <= 9 ? 2 : 3;
+    if (L >= 7 && FOREIGN.test(e[0])) t = Math.min(3, t + 1);
+    return t;
+  }
+  const TIERS = HP_WORDS.map(wordTier);
+  // Vilka ord som får användas i korsorden på varje nivå.
+  const POOL_TIERS = { easy: [1, 2], medium: [1, 2, 3], hard: [2, 3], expert: [3, 4] };
+  const poolCache = {};
+  function wordPool(level) {
+    const ok = POOL_TIERS[level] || POOL_TIERS.medium;
+    return poolCache[level] || (poolCache[level] = HP_WORDS.filter((_, i) => ok.includes(TIERS[i])));
+  }
+
   function puzzleFor(date, level) {
     const id = puzzleId(date, level);
     if (!puzzleCache.has(id)) {
       const rng = mulberry32(hashString(`${SEED_VERSION}|${id}`));
-      puzzleCache.set(id, Crossword.generate(HP_WORDS, { ...LEVELS[level], rng, attempts: 40 }));
+      puzzleCache.set(id, Crossword.generate(wordPool(level), { ...LEVELS[level], rng, attempts: 40 }));
     }
     return puzzleCache.get(id);
   }
@@ -797,6 +828,33 @@
     save();
     renderHeader();
     setTimeout(showWinDialog, gaveUp ? 0 : 1300);
+    if (!gaveUp) { const d = state.date; setTimeout(() => maybeTrophy(d, "cross"), 1600); }
+  }
+
+  // Pokal när alla fyra nivåerna i ett läge är klara samma dag – visas en gång per dag och läge.
+  function allLevelsDone(date, kind) {
+    const all = progressAll();
+    return LEVEL_KEYS.every((l) => {
+      const p = all[kind === "cross" ? puzzleId(date, l) : mekId(date, l, kind)];
+      return p && p.done && !p.gaveUp;
+    });
+  }
+  function maybeTrophy(date, kind) {
+    const key = `${date}|${kind}`;
+    const got = prefs().trophies || {};
+    if (got[key] || !allLevelsDone(date, kind)) return;
+    setPref("trophies", { ...got, [key]: true });
+    const el = document.createElement("div");
+    el.className = "trophy";
+    el.setAttribute("role", "status");
+    el.innerHTML = `<div class="trophy-cup">🏆</div><b>Alla nivåer klara!</b><span>${MODE_NAMES[kind]} · ${longDate(date)}</span>`;
+    document.body.appendChild(el);
+    confetti(1.3);
+    sound("win");
+    haptic([20, 80, 20, 80, 40]);
+    el.addEventListener("click", () => el.remove());
+    setTimeout(() => el.classList.add("out"), 3200);
+    setTimeout(() => el.remove(), 3700);
   }
 
   const PARTY = ["#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#007aff", "#af52de", "#ff2d55", "#5ac8fa"];
@@ -1052,7 +1110,7 @@
     const st = computeStats();
     const empty = !st.answeredTotal && !st.crossDone;
     let html = `<div class="stat-grid">
-      <div class="stat hero-stat"><div class="v">🔥 ${st.streak}</div><div class="l">${st.streak === 1 ? "dag" : "dagar"} i rad<br><small>Längsta svit: ${st.bestStreak}</small></div></div>
+      <div class="stat hero-stat"><div class="v"><span class="flame${st.streak ? " lit" : ""}">🔥</span> <span class="num">${st.streak}</span></div><div class="l">${st.streak === 1 ? "dag" : "dagar"} i rad<br><small>Längsta svit: ${st.bestStreak}</small></div></div>
       <div class="stat"><div class="v">${st.days}</div><div class="l">Dagar spelade</div></div>
       <div class="stat"><div class="v">${st.answeredTotal + st.words}</div><div class="l">Ord och frågor</div></div>
       <div class="stat"><div class="v">${st.answeredTotal ? Math.round((st.rightTotal / st.answeredTotal) * 100) : 0}%</div><div class="l">Rätt totalt</div></div></div>`;
@@ -1104,7 +1162,8 @@
       haptic(10);
     }));
     if (!reduceMotion()) {
-      $("stats-body").querySelectorAll(".stat .v").forEach((el) => {
+      $("stats-body").querySelectorAll(".stat .v").forEach((box) => {
+        const el = box.querySelector(".num") || box;
         const m = el.textContent.match(/^(\D*)(\d+)(%?)$/);
         if (!m) return;
         const [, prefix, target, suffix] = m;
@@ -1242,10 +1301,17 @@
 
   // ---------- Ordlista med sökning och dagens ord ----------
   const normalize = (t) => t.toLowerCase();
-  function wordOfDay(date) {
-    const rng = mulberry32(hashString(`${SEED_VERSION}|dagens-ord|${date}`));
-    return HP_WORDS[Math.floor(rng() * HP_WORDS.length)];
+  // Dagens ord: en fast, blandad ordning genom listan med exempelmeningar, så att inget ord
+  // kommer tillbaka förrän alla har visats. Samma ord för alla samma dag.
+  let wotdOrder = null;
+  function wotdFor(date) {
+    if (!wotdOrder) wotdOrder = shuffled(HP_WOTD.map((_, i) => i), mulberry32(hashString(`${SEED_VERSION}|dagens-ord`)));
+    const day = Math.round((fromKey(date) - fromKey(FIRST_DAY)) / 864e5);
+    const [word, example] = HP_WOTD[wotdOrder[((day % wotdOrder.length) + wotdOrder.length) % wotdOrder.length]];
+    const clue = (wordClues().get(word) || "");
+    return { word, clue, example };
   }
+  const wordOfDay = (date) => { const w = wotdFor(date); return [w.word, w.clue]; };
   function renderWordList() {
     const q = normalize($("word-search").value.trim());
     const hl = (t) => {
@@ -1257,17 +1323,17 @@
     const hits = HP_WORDS.filter(([w, c]) => !q || w.toLowerCase().includes(q) || c.toLowerCase().includes(q));
     $("word-count").textContent = q ? `${hits.length} träffar` : `${HP_WORDS.length} ord`;
     let html = "", letter = "";
-    for (const [w, c] of hits.slice(0, 400)) {
+    for (const [w, c, t] of hits.slice(0, 400)) {
       if (w[0] !== letter) { letter = w[0]; html += `<div class="letter-head">${letter}</div>`; }
-      html += `<div class="w"><b>${hl(w.toLowerCase())}</b> <span>– ${hl(c)}</span></div>`;
+      html += `<div class="w"><b>${hl(w.toLowerCase())}</b>${t === 4 ? ' <i class="tag">Expert</i>' : ""} <span>– ${hl(c)}</span></div>`;
     }
     if (hits.length > 400) html += `<div class="empty">Visar 400 av ${hits.length}. Sök för att hitta fler.</div>`;
     $("word-list").innerHTML = html || `<div class="empty">Inga ord hittades.</div>`;
   }
   function showWords() {
     kbInput.blur();
-    const [w, c] = wordOfDay(cur.date || todayKey());
-    $("word-of-day").innerHTML = `<div class="wod-label">Dagens ord</div><div class="wod-word">${escapeHtml(w)}</div><div class="wod-clue">${escapeHtml(c)}</div>`;
+    const [w, c] = wordOfDay(todayKey());
+    $("word-of-day").innerHTML = `<div class="wod-label">Dagens ord · tryck för exempel</div><div class="wod-word">${escapeHtml(w)}</div><div class="wod-clue">${escapeHtml(c)}</div>`;
     $("word-search").value = "";
     renderWordList();
     $("words-dialog").showModal();
@@ -1286,8 +1352,15 @@
     if (isQuiz()) openMek(date, level, dir);
     else open(date, level, dir);
   }
+  let lastRenderedMode = null;
   function renderModeSwitch() {
     const m = mode();
+    // Liten studs på den nya fliken och en mjuk övergång i rubriken när läget byts.
+    if (lastRenderedMode && lastRenderedMode !== m) {
+      document.querySelectorAll(`#tabbar [data-mode="${m}"] svg`).forEach((s) => animate(s, "tab-pop", 500));
+      animate($("nav-title"), "title-swap", 400);
+    }
+    lastRenderedMode = m;
     if (SEEN_KEYS[m] && !prefs()[SEEN_KEYS[m]]) setPref(SEEN_KEYS[m], true);
     // Samma knappar finns i navigationsfältet (iPad) och i flikraden (iPhone).
     document.querySelectorAll("[data-mode]").forEach((b) => {
@@ -1333,8 +1406,8 @@
   // ---------- Frågeomgångar ----------
   // Alla frågelägen byggs som en lista frågor: { label, prompt(svar, rätt), options[], correct, explain, review }.
   // Omgången räknas fram ur datum och nivå, så bara svaren behöver sparas.
-  const MEK_SETS = { easy: { 1: 8 }, medium: { 1: 3, 2: 7 }, hard: { 2: 4, 3: 6 } };
-  const ENG_SETS = { easy: { vocab: 6, 1: 4 }, medium: { vocab: 5, 1: 2, 2: 3 }, hard: { vocab: 4, 2: 2, 3: 4 } };
+  const MEK_SETS = { easy: { 1: 8 }, medium: { 1: 3, 2: 7 }, hard: { 2: 4, 3: 6 }, expert: { 3: 10 } };
+  const ENG_SETS = { easy: { vocab: 6, 1: 4 }, medium: { vocab: 5, 1: 2, 2: 3 }, hard: { vocab: 4, 2: 2, 3: 4 }, expert: { vocab: 4, 3: 6 } };
   const MEK_LABELS = ["A", "B", "C", "D", "E"];
   const escapeHtml = (t) => t.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
 
@@ -1359,20 +1432,27 @@
     };
   }
 
-  // Ord: som ORD-delen – ett ord och fem betydelser. Svår nivå har felsvar från ord som liknar rätt ord.
+  // Ord: som ORD-delen – ett ord och fem betydelser. Nivån styr vilka ord som frågas (ordnivå 1–4)
+  // och hur lika felsvaren är: på Svår och Expert kommer felsvaren från ord som liknar rätt ord.
+  const ORD_TIERS = { easy: [1], medium: [2], hard: [3], expert: [4] };
+  const ORD_DISTRACT = { easy: [1, 2], medium: [1, 2, 3], hard: [2, 3, 4], expert: [3, 4] };
   function ordRound(rng, level) {
-    const lenOk = { easy: (L) => L <= 7, medium: (L) => L >= 6 && L <= 10, hard: (L) => L >= 8 }[level];
     const all = HP_WORDS.map((_, i) => i);
-    return shuffled(all.filter((i) => lenOk(HP_WORDS[i][0].length)), rng).slice(0, 10).map((id) => {
+    const ask = all.filter((i) => (ORD_TIERS[level] || ORD_TIERS.medium).includes(TIERS[i]));
+    const pool = all.filter((i) => (ORD_DISTRACT[level] || ORD_DISTRACT.medium).includes(TIERS[i]));
+    return shuffled(ask, rng).slice(0, 10).map((id) => {
       const [w, clue] = HP_WORDS[id];
-      let cand = all.filter((j) => j !== id && HP_WORDS[j][1] !== clue);
-      const near = level === "hard"
-        ? cand.filter((j) => HP_WORDS[j][0].slice(0, 2) === w.slice(0, 2) || HP_WORDS[j][0].length === w.length)
-        : level === "medium" ? cand.filter((j) => Math.abs(HP_WORDS[j][0].length - w.length) <= 1) : [];
+      let cand = pool.filter((j) => j !== id && HP_WORDS[j][1] !== clue);
+      const other = (j) => HP_WORDS[j][0];
+      const near = level === "expert"
+        ? cand.filter((j) => other(j).slice(0, 2) === w.slice(0, 2) || other(j).slice(-3) === w.slice(-3))
+        : level === "hard"
+          ? cand.filter((j) => other(j).slice(0, 2) === w.slice(0, 2) || other(j).length === w.length)
+          : level === "medium" ? cand.filter((j) => Math.abs(other(j).length - w.length) <= 1) : [];
       if (near.length >= 4) cand = near;
       const opts = shuffled([id, ...shuffled(cand, rng).slice(0, 4)], rng);
       return {
-        id, key: w, label: "Vad betyder ordet?", big: true,
+        id, key: w, label: level === "expert" ? "Expert · Vad betyder ordet?" : "Vad betyder ordet?", big: true,
         prompt: () => `<span class="ord-word">${escapeHtml(w.toLowerCase())}</span>`,
         options: opts.map((j) => escapeHtml(HP_WORDS[j][1])),
         correct: opts.indexOf(id),
@@ -1559,6 +1639,8 @@
     const right = k === mek.correct[i];
     renderMek();
     const btn = $("mek-options").querySelector(`[data-k="${k}"]`);
+    const rightBtn = $("mek-options").querySelector(`[data-k="${mek.correct[i]}"]`);
+    if (rightBtn) animate(rightBtn, "ring", 900);
     if (right) {
       combo++;
       haptic(12);
@@ -1608,6 +1690,7 @@
     mek.done = true;
     stopTimer();
     saveMek();
+    { const d = mek.date, k = mek.kind; setTimeout(() => maybeTrophy(d, k), 1800); }
     renderHeader();
     renderPause();
     showMekResult(true);
@@ -1676,6 +1759,70 @@
       ], { duration: 800 + Math.random() * 300, easing: "cubic-bezier(.2,.8,.3,1)", fill: "forwards" });
     }
   }
+
+  // ---------- Dagens ord (eget ark med vändbart kort) ----------
+  let wotdShown = null;
+  const exampleHtml = (s) => escapeHtml(s).replace(/\*([^*]+)\*/g, "<mark>$1</mark>");
+  function showWotdCard(date, anim) {
+    const w = wotdFor(date);
+    wotdShown = { ...w, date };
+    $("wotd-date").textContent = date === todayKey() ? longDate(date) : `${longDate(date)} · tidigare ord`;
+    $("wotd-word").textContent = w.word.toLowerCase();
+    $("wotd-word2").textContent = w.word.toLowerCase();
+    $("wotd-meaning").textContent = w.clue;
+    $("wotd-example").innerHTML = exampleHtml(w.example);
+    $("wotd-card").classList.remove("flipped");
+    $("wotd-card").setAttribute("aria-label", `Dagens ord: ${w.word.toLowerCase()}. Tryck för att visa betydelsen.`);
+    if (anim) animate($("wotd-card"), "deal", 700);
+    document.querySelectorAll("#wotd-history [data-date]").forEach((b) => b.classList.toggle("current", b.dataset.date === date));
+  }
+  function openWotd() {
+    const today = todayKey();
+    const days = Array.from({ length: 7 }, (_, i) => addDays(today, -1 - i)).filter((d) => d >= FIRST_DAY);
+    $("wotd-history").innerHTML = days.map((d, i) => {
+      const w = wotdFor(d);
+      const label = i === 0 ? "I går" : fromKey(d).toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "short" });
+      return `<li><button class="row" data-date="${d}" style="--i:${i}"><span class="lbl"><b>${escapeHtml(w.word.toLowerCase())}</b><small>${escapeHtml(label.charAt(0).toUpperCase() + label.slice(1))}</small></span><svg class="chev-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></li>`;
+    }).join("");
+    $("wotd-history").querySelectorAll("[data-date]").forEach((b) => b.addEventListener("click", () => {
+      showWotdCard(b.dataset.date, true);
+      $("wotd-dialog").querySelector(".sheet-body").scrollTo({ top: 0, behavior: reduceMotion() ? "auto" : "smooth" });
+      haptic(8);
+    }));
+    showWotdCard(today, true);
+    setPref("wotdSeen", today);
+    renderWotdBadge();
+    $("wotd-dialog").showModal();
+  }
+  function flipWotd() {
+    const card = $("wotd-card");
+    const flipped = card.classList.toggle("flipped");
+    card.setAttribute("aria-label", flipped ? `${wotdShown.word.toLowerCase()} betyder ${wotdShown.clue}. ${wotdShown.example.replace(/\*/g, "")}` : `Dagens ord: ${wotdShown.word.toLowerCase()}. Tryck för att visa betydelsen.`);
+    haptic(10);
+    if (flipped) { sound("ok"); setTimeout(() => sparkleAt(card), 250); }
+  }
+  function renderWotdBadge() {
+    $("btn-wotd").classList.toggle("has-badge", prefs().wotdSeen !== todayKey());
+  }
+  $("btn-wotd").addEventListener("click", openWotd);
+  $("word-of-day").addEventListener("click", () => { $("words-dialog").close(); openWotd(); });
+  renderWotdBadge();
+  $("wotd-card").addEventListener("click", flipWotd);
+  $("wotd-share").addEventListener("click", async () => {
+    if (!wotdShown) return;
+    const text = `Dagens ord i Dagsprov: ${wotdShown.word.toLowerCase()} – ${wotdShown.clue}. ”${wotdShown.example.replace(/\*/g, "")}”`;
+    try {
+      if (navigator.share) { await navigator.share({ title: "Dagens ord", text }); return; }
+      await navigator.clipboard.writeText(text);
+      toast("Dagens ord är kopierat");
+    } catch (e) {
+      if (!(e && e.name === "AbortError")) toast("Det gick inte att dela just nu");
+    }
+  });
+  $("wotd-practice").addEventListener("click", () => {
+    $("wotd-dialog").close();
+    if (mode() !== "ord") setMode("ord");
+  });
 
   // ---------- Tema ----------
   function applyTheme() {
@@ -2054,7 +2201,10 @@
     if (!f) return;
     let data;
     try { data = JSON.parse(await f.text()); } catch { data = null; }
-    if (!data || !["dagsprov", "hp-korsord"].includes(data.app) || typeof data.progress !== "object") { toast("Filen är ingen säkerhetskopia från Dagsprov"); return; }
+    if (!data || !["dagsprov", "hp-korsord"].includes(data.app) || !isPlainObject(data.progress)) { toast("Filen är ingen säkerhetskopia från Dagsprov"); return; }
+    // Ta bara med poster som ser ut som Dagsprovs egna, så att en ändrad fil inte kan ställa till det.
+    data.progress = Object.fromEntries(Object.entries(data.progress).filter(([k, v]) => /^\d{4}-\d{2}-\d{2}\|[a-z-]{2,20}$/.test(k) && isPlainObject(v)));
+    data.prefs = isPlainObject(data.prefs) ? Object.fromEntries(Object.entries(data.prefs).filter(([k, v]) => /^[a-zA-Z]{1,24}$/.test(k) && ["string", "number", "boolean"].includes(typeof v) || (k === "trophies" && isPlainObject(v)))) : null;
     const n = Object.keys(data.progress).length;
     if (!(await confirmBox("Återställa framsteg?", `Säkerhetskopian innehåller ${n} omgångar. Dina nuvarande framsteg på den här enheten ersätts.`, "Återställ"))) return;
     store(PROGRESS_KEY, data.progress);
@@ -2110,6 +2260,8 @@
     bar.addEventListener("pointercancel", end);
   });
 
+  function isPlainObject(v) { return !!v && typeof v === "object" && !Array.isArray(v); }
+
   // ---------- Ljudeffekter (Web Audio, inga ljudfiler) ----------
   const soundOn = () => prefs().sound !== false;
   let audioCtx = null;
@@ -2157,12 +2309,14 @@
   window.addEventListener("pagehide", () => { save(); saveMek(); });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) { save(); saveMek(); }
-    else if (cur.date) renderHeader(); // "Idag"/"Igår" stämmer även om appen legat öppen över midnatt
+    else { if (cur.date) renderHeader(); renderWotdBadge(); } // "Idag"/"Igår" och dagens ord stämmer även efter midnatt
   });
 
   // ---------- Tips om hemskärmen (bara i Safari på iPhone/iPad, en gång) ----------
   const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const standalone = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+  // I App Store-versionen (Capacitor) körs appen redan som en riktig app – då ska inget hemskärmstips visas.
+  const isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const standalone = isNativeApp || navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
   function maybeShowInstallHint(delay) {
     if (!isIOS || standalone || prefs().installHint || window.top !== window) return;
     setTimeout(() => { if (!document.querySelector("dialog[open]")) $("install-hint").hidden = false; }, delay);
@@ -2173,8 +2327,10 @@
   window.addEventListener("hashchange", () => {
     const t = fromHash();
     if (!t) return;
-    if (t.mode && t.mode !== mode()) setPref("mode", t.mode);
+    const modeChanged = !!t.mode && t.mode !== mode();
+    if (modeChanged) setPref("mode", t.mode);
     if (t.date !== cur.date || t.level !== cur.level || t.mode) openCurrent(t.date, t.level);
+    if (modeChanged) applyMode(true);
   });
 
   function fromHash() {
@@ -2195,7 +2351,18 @@
   syncViewport();
   if (firstVisit) $("help-dialog").showModal();
 
+  // Offline och uppdateringar: när en ny version har installerats i bakgrunden visas en
+  // diskret banner med "Ladda om" (inte första gången appen installeras).
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register("sw.js").then((reg) => {
+      const check = () => reg.update().catch(() => {});
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
+      setInterval(check, 60 * 60 * 1000);
+    }).catch(() => {});
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (hadController) $("update-banner").hidden = false;
+    });
   }
+  window.__dagsprovReady = true;
 })();
