@@ -744,6 +744,9 @@ body.mode-mek .levelrow { max-width: none; }
 :root[data-accent="pink"] { --accent-l: #ff2d55; --accent-d: #ff375f; }
 :root[data-accent="orange"] { --accent-l: #f57c00; --accent-d: #ff9f0a; }
 :root[data-accent="teal"] { --accent-l: #0a9bb5; --accent-d: #40c8e0; }
+:root[data-accent="gold"] { --accent-l: #b8860b; --accent-d: #e6b422; }
+:root[data-accent="mint"] { --accent-l: #0f9d76; --accent-d: #3ddc97; }
+:root[data-accent="graphite"] { --accent-l: #4a4a52; --accent-d: #a1a1aa; }
 
 /* ---------- Rutstilar ---------- */
 /* Rundad, Bubblor och Mjuk: fristående brickor utan svarta rutor, som svävar på bakgrunden. */
@@ -860,6 +863,12 @@ body.compact .cc-text { padding: 6px 2px; }
 .swatch-row [data-accent="pink"] { --c: #ff2d55; }
 .swatch-row [data-accent="orange"] { --c: #f57c00; }
 .swatch-row [data-accent="teal"] { --c: #0a9bb5; }
+.swatch-row [data-accent="gold"] { --c: #d4a017; }
+.swatch-row [data-accent="mint"] { --c: #0f9d76; }
+.swatch-row [data-accent="graphite"] { --c: #4a4a52; }
+.swatch-row .plus-only { position: relative; }
+.swatch-row .plus-only::after { content: "★"; position: absolute; top: 2px; left: calc(50% + 8px); width: 16px; height: 16px; border-radius: 8px; font-size: 9px; line-height: 16px; text-align: center; color: #fff; background: linear-gradient(135deg, #ffcc00, #ff9500); box-shadow: 0 0 0 2px var(--bg-elev); }
+html.has-plus .swatch-row .plus-only::after { display: none; }
 .font-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .font-row b { font-size: 22px; color: var(--label); line-height: 1.1; }
 .font-row [data-font="rounded"] b { font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif; }
@@ -1770,3 +1779,77 @@ dialog.reward[open] { animation: reward-in .45s cubic-bezier(.2, 1.3, .4, 1); }
 /* Svitbannern ligger högst upp, under navigationsfältet, så att den inte täcker verktygen. */
 .sys-banner.streak { bottom: auto; top: calc(56px + env(safe-area-inset-top)); font-size: 15px; font-weight: 600; padding: 10px 10px 10px 14px; gap: 10px; }
 .sys-banner.streak button#streak-rescue { padding: 8px 14px; }
+
+/* ---------- Dagsprov Plus ---------- */
+.plus-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; margin: 4px 0 18px; padding: 14px 14px 14px 12px;
+  border-radius: 16px; color: #fff; position: relative; overflow: hidden;
+  background: linear-gradient(135deg, #ff9500, #ff2d55 55%, #af52de);
+  box-shadow: 0 10px 26px rgba(255, 45, 85, .25);
+}
+.plus-row::before { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, .28) 50%, transparent 70%); transform: translateX(-100%); animation: plus-shine 4.5s ease-in-out infinite 1s; }
+@keyframes plus-shine { 0%, 60% { transform: translateX(-100%); } 85%, 100% { transform: translateX(100%); } }
+.plus-row .chev-r { width: 14px; height: 14px; flex: none; fill: none; stroke: #fff; stroke-width: 2.6; opacity: .85; position: relative; }
+.plus-row > * { position: relative; }
+.plus-crown { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: rgba(255, 255, 255, .22); }
+.plus-row-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.plus-row-t b { font-size: 17px; }
+.plus-row-t span { font-size: 13px; opacity: .9; }
+.plus-row.active { background: linear-gradient(135deg, #34c759, #30b0c7); box-shadow: 0 10px 26px rgba(52, 199, 89, .25); }
+
+.plus-sheet .sheet-body { gap: 14px; align-items: stretch; }
+.plus-hero { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 4px; }
+.plus-hero h2 { margin: 6px 0 0; font-size: 28px; letter-spacing: -.02em; }
+.plus-hero p { margin: 0; color: var(--label-2); max-width: 320px; }
+.plus-badge {
+  width: 84px; height: 84px; border-radius: 26px; display: grid; place-items: center; color: #fff; font-size: 44px;
+  background: linear-gradient(135deg, #ffcc00, #ff9500 40%, #ff2d55 75%, #af52de);
+  box-shadow: 0 16px 40px rgba(255, 149, 0, .35); animation: plus-float 3.2s ease-in-out infinite;
+}
+.plus-badge span { animation: plus-spin 6s cubic-bezier(.5, 0, .5, 1) infinite; display: inline-block; }
+@keyframes plus-float { 50% { transform: translateY(-6px) rotate(-3deg); } }
+@keyframes plus-spin { 0%, 80% { transform: none; } 90% { transform: rotateY(180deg) scale(1.1); } 100% { transform: rotateY(360deg); } }
+.plus-feats { list-style: none; margin: 0; padding: 4px 0; display: flex; flex-direction: column; gap: 12px; }
+.plus-feats li { display: flex; gap: 12px; align-items: flex-start; animation: rise .5s cubic-bezier(.2, .9, .3, 1) both; }
+.plus-feats li:nth-child(2) { animation-delay: .05s; } .plus-feats li:nth-child(3) { animation-delay: .1s; } .plus-feats li:nth-child(4) { animation-delay: .15s; } .plus-feats li:nth-child(5) { animation-delay: .2s; }
+.plus-feats i { width: 34px; height: 34px; flex: none; border-radius: 10px; display: grid; place-items: center; font-style: normal; font-size: 17px; color: #fff; background: var(--c); }
+.plus-feats span { display: flex; flex-direction: column; font-size: 14px; color: var(--label-2); line-height: 1.35; }
+.plus-feats b { color: var(--label); font-size: 16px; }
+.plus-feats li.focus { background: color-mix(in srgb, var(--tint) 10%, transparent); border-radius: 14px; margin: -6px; padding: 6px; }
+.plus-free-note { margin: 0; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4; color: var(--label-2); background: var(--bg-elev); }
+.plus-plans { display: flex; flex-direction: column; gap: 8px; }
+.plan {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 14px; border-radius: 16px;
+  background: var(--bg-elev); box-shadow: inset 0 0 0 2px transparent; transition: box-shadow .2s ease, transform .2s ease; position: relative;
+}
+.plan:active { transform: scale(.98); }
+.plan[aria-checked="true"] { box-shadow: inset 0 0 0 2px var(--tint); }
+.plan .radio { width: 22px; height: 22px; flex: none; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--fill-2); transition: box-shadow .2s ease; }
+.plan[aria-checked="true"] .radio { box-shadow: inset 0 0 0 7px var(--tint); }
+.plan-t { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.plan-t b { font-size: 16px; }
+.plan-t small { font-size: 13px; color: var(--label-2); }
+.plan-p { text-align: right; display: flex; flex-direction: column; }
+.plan-p b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.plan-p small { font-size: 12px; color: var(--label-2); }
+.plan-badge { position: absolute; top: -9px; right: 14px; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; color: #fff; background: linear-gradient(135deg, #ff9500, #ff2d55); }
+.pill.plus-cta { width: 100%; margin: 0; font-size: 17px; color: #fff; background: linear-gradient(135deg, #ff9500, #ff2d55 60%, #af52de); box-shadow: 0 10px 26px rgba(255, 45, 85, .28); }
+.pill.plus-cta:disabled { opacity: .5; box-shadow: none; }
+.pill.plus-trial { width: 100%; margin: 0; }
+.plus-status { margin: 0; text-align: center; font-weight: 700; color: #34c759; }
+.plus-links { display: flex; justify-content: center; gap: 18px; }
+.plus-legal { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--label-3, var(--label-2)); text-align: center; }
+.plus-legal:empty { display: none; }
+.plus-legal a { color: inherit; }
+.plus-link { margin-top: 2px; font-size: 14px; font-weight: 700; color: #ff9500; padding: 6px 10px; }
+.plus-link[hidden] { display: none; }
+.cal-card button.day.locked span:first-child { opacity: .45; }
+.cal-card button.day.locked .dots::after { content: "🔒"; font-size: 9px; }
+.cal-card button.day.locked .dots i { display: none; }
+.plus-burst { background: linear-gradient(135deg, #ff9500, #ff2d55 60%, #af52de) !important; box-shadow: 0 14px 36px rgba(255, 45, 85, .4) !important; }
+@media (prefers-reduced-motion: reduce) { .plus-row::before, .plus-badge, .plus-badge span { animation: none; } }
+html.reduce-motion .plus-row::before, html.reduce-motion .plus-badge, html.reduce-motion .plus-badge span { animation: none; }
+html.no-plus .swatch-row .plus-only { display: none; }
+.pill.plus-trial, .pill.ad { height: auto; min-height: 50px; padding-top: 10px; padding-bottom: 10px; }
+.pill.plus-trial > span:last-child { flex: 1; }
+.pill[hidden], .plus-link[hidden] { display: none !important; }

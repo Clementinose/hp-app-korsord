@@ -1213,7 +1213,7 @@
         const cls = p && p.done && !p.gaveUp ? "solved" : started ? "started" : "";
         return `<i class="dot ${l} ${cls}"></i>`;
       }).join("");
-      const cls = ["day", k === today ? "today" : "", k === cur.date ? "current" : ""].join(" ");
+      const cls = ["day", k === today ? "today" : "", k === cur.date ? "current" : "", enabled && dayLocked(k) ? "locked" : ""].join(" ");
       html += `<button class="${cls}" data-date="${k}" ${enabled ? "" : "disabled"}><span>${day}</span><span class="dots">${enabled ? dots : ""}</span></button>`;
     }
     const cal = $("calendar");
@@ -1360,6 +1360,11 @@
   const MODE_NAMES = { cross: "Korsord", ord: "Ord", mek: "Meningar", eng: "Engelska", mat: "Matte" };
   const SEEN_KEYS = { ord: "seenOrd", mek: "seenMek", eng: "seenEng", mat: "seenMat" };
   function openCurrent(date, level, dir) {
+    // Äldre arkivdagar ingår i Plus (eller låses upp med en film). Dagar man redan spelat är alltid öppna.
+    if (dayLocked(date)) {
+      unlockDay(date).then((ok) => { if (ok) openCurrent(date, level, dir); else setHash(); });
+      return;
+    }
     if (isQuiz()) openMek(date, level, dir);
     else open(date, level, dir);
   }
@@ -1624,13 +1629,21 @@
       `<li class="${animLast && (k === shown - 1 || animLast === "all") ? "in" : ""}${k === n - 1 ? " final" : ""}" style="--i:${animLast === "all" ? k : 0}"><span class="step-n">${k + 1}</span><span class="step-t">${s}</span></li>`).join("");
     const btn = $("mek-think-btn");
     btn.hidden = shown >= n;
-    $("mek-think-label").textContent = shown === 0 ? (answered ? "Visa lösningen steg för steg" : "Visa hur man tänker") : answered ? "Visa resten av lösningen" : `Nästa steg (${shown + 1}/${n})`;
+    const paid = !answered && shown === 0 && !mek.helped[mek.idx] && monetized() && !isPlus();
+    $("mek-think-label").textContent = shown === 0 ? (answered ? "Visa lösningen steg för steg" : paid ? "Ledtråd: visa hur man tänker · ♥" : "Visa hur man tänker") : answered ? "Visa resten av lösningen" : `Nästa steg (${shown + 1}/${n})`;
     box.classList.toggle("open", shown > 0);
   }
-  function showStep() {
+  async function showStep() {
     const q = mek.qs[mek.idx];
     if (!q || !q.steps || paused) return;
     const answered = mek.answers[mek.idx] !== null;
+    // Hela lösningen efter svaret är alltid gratis. Före svaret är stegen en ledtråd och kostar en
+    // livlina (en gång per fråga) – med Plus ingår det.
+    if (!answered && mek.shown === 0 && !mek.helped[mek.idx] && monetized()) {
+      const i = mek.idx, kind = mek.kind, date = mek.date;
+      if (!(await offerLifeline("steps"))) return;
+      if (!mek || mek.idx !== i || mek.kind !== kind || mek.date !== date || mek.answers[i] !== null) return;
+    }
     if (!answered && !mek.helped[mek.idx]) { mek.helped[mek.idx] = true; saveMek(); }
     // Efter svaret visas alla steg på en gång (med animation), före svaret ett i taget.
     const all = answered && mek.shown === 0;
@@ -1806,35 +1819,54 @@
 
   // ---------- Livlinor och frivillig reklam ----------
   // Alla får 3 gratis livlinor per dag. I App Store- och Google Play-versionen kan man dessutom
-  // välja att titta på en kort reklamfilm för en extra livlina. Reklam visas aldrig automatiskt.
+  // välja att titta på en kort reklamfilm – varje film ger 2 livlinor (en används direkt, en sparas
+  // till senare i dag). Reklam visas aldrig automatiskt, och med Dagsprov Plus är livlinorna obegränsade.
   // Appskalet (Expo) lägger in window.DagsprovNative.showRewarded() som visar en riktig film och
   // svarar true om filmen har setts klart. I förhandsvisningen (eller med ?reklamdemo=1) visas en exempelfilm.
   const FREE_LIFELINES = 3;
+  const AD_LIFELINES = 2;      // livlinor per film
+  const MAX_ADS_PER_DAY = 10;  // tak, så att ingen fastnar i filmer
   const LIFELINES = {
     retry: { icon: "↺", color: "#ff9500", title: "Andra chans", text: "Ta bort ditt felsvar och försök igen. Frågan räknas som vanligt om du svarar rätt." },
     half: { icon: "✂️", color: "#af52de", title: "50/50", text: "Alla felaktiga alternativ utom ett försvinner – kvar blir rätt svar och ett fel." },
     hint: { icon: "💡", color: "#ffcc00", title: "Extra tips", text: "Du har använt korsordets gratis tips. Få ett tips till." },
     streak: { icon: "🔥", color: "#ff3b30", title: "Rädda sviten", text: "Du missade i går. Rädda sviten så räknas i går som en övningsdag." },
     bonus: { icon: "🎁", color: "#34c759", title: "Bonusomgång", text: "Tio nya frågor på samma nivå – perfekt när du vill öva mer." },
+    steps: { icon: "✎", color: "#30b0c7", title: "Ledtråd steg för steg", text: "Se hur man tänker innan du svarar. Efter ditt svar visas hela lösningen alltid gratis." },
   };
-  function lifelinesLeft() {
+  function lifelineState() {
     const p = prefs().lifelines;
-    return p && p.date === todayKey() ? Math.max(0, FREE_LIFELINES - (p.used || 0)) : FREE_LIFELINES;
+    return p && p.date === todayKey() ? { used: p.used || 0, extra: p.extra || 0 } : { used: 0, extra: 0 };
+  }
+  const lifelineCap = () => FREE_LIFELINES + lifelineState().extra;
+  function lifelinesLeft() {
+    const s = lifelineState();
+    return Math.max(0, FREE_LIFELINES + s.extra - s.used);
   }
   function spendFreeLifeline() {
-    const left = lifelinesLeft();
-    if (!left) return false;
-    setPref("lifelines", { date: todayKey(), used: FREE_LIFELINES - left + 1 });
+    if (!lifelinesLeft()) return false;
+    const s = lifelineState();
+    setPref("lifelines", { date: todayKey(), used: s.used + 1, extra: s.extra });
     return true;
   }
+  function addLifelines(n) {
+    const s = lifelineState();
+    setPref("lifelines", { date: todayKey(), used: s.used, extra: s.extra + n });
+  }
+  const adsToday = () => { const a = prefs().adsToday; return a && a.date === todayKey() ? a.n : 0; };
   const nativeAds = () => !!(window.DagsprovNative && typeof window.DagsprovNative.showRewarded === "function");
   const demoAds = () => !nativeAds() && (window.top !== window || /[?&]reklamdemo=1/.test(location.search));
-  const adsAvailable = () => nativeAds() || demoAds();
+  const adsAvailable = () => (nativeAds() || demoAds()) && adsToday() < MAX_ADS_PER_DAY;
   async function showRewardedAd() {
+    let ok = false;
     if (nativeAds()) {
-      try { return !!(await window.DagsprovNative.showRewarded()); } catch { return false; }
+      try { ok = !!(await window.DagsprovNative.showRewarded()); } catch { ok = false; }
+    } else if (demoAds()) ok = await demoAd();
+    if (ok) {
+      setPref("adsWatched", (prefs().adsWatched || 0) + 1);
+      setPref("adsToday", { date: todayKey(), n: adsToday() + 1 });
     }
-    return demoAds() ? demoAd() : false;
+    return ok;
   }
   // Exempelfilm: 5 sekunder med nedräkning. Stänger man tidigare ges ingen belöning.
   function demoAd() {
@@ -1860,12 +1892,14 @@
     });
   }
   function renderLives(box, left) {
-    box.innerHTML = Array.from({ length: FREE_LIFELINES }, (_, i) => `<i class="${i < left ? "on" : ""}" style="--i:${i}">♥</i>`).join("");
+    box.innerHTML = Array.from({ length: Math.max(FREE_LIFELINES, left) }, (_, i) => `<i class="${i < left ? "on" : ""}" style="--i:${i}">♥</i>`).join("");
   }
-  // Frågar om en livlina ska användas. Svarar true om användaren fick den (gratis eller via film).
+  // Frågar om en livlina ska användas. Svarar true om användaren fick den (gratis, via film eller Plus).
   let rewardResolve = null;
   function offerLifeline(kind) {
-    const ll = LIFELINES[kind], left = lifelinesLeft();
+    // Med Plus är livlinorna obegränsade – inget ark behövs.
+    if (isPlus()) { plusBurst(LIFELINES[kind].title); return Promise.resolve(true); }
+    const ll = LIFELINES[kind], left = lifelinesLeft(), ads = adsAvailable();
     $("reward-icon").textContent = ll.icon;
     $("reward-icon").style.setProperty("--c", ll.color);
     $("reward-title").textContent = ll.title;
@@ -1873,29 +1907,32 @@
     renderLives($("reward-lives"), left);
     const free = $("reward-free"), ad = $("reward-ad");
     free.hidden = !left;
-    free.textContent = left ? `Använd gratis livlina (${left} kvar)` : "";
-    ad.hidden = !adsAvailable();
+    free.textContent = left ? `Använd livlina (${left} kvar i dag)` : "";
+    ad.hidden = !ads;
     ad.classList.toggle("primary", !left);
-    $("reward-note").textContent = !left && !adsAvailable()
-      ? "Dagens gratis livlinor är slut. Nya kommer i morgon."
-      : !left ? "Dagens gratis livlinor är slut – men du kan titta på en kort film för en till." : "";
+    $("reward-ad-t").innerHTML = `Titta på en kort film · +${AD_LIFELINES} livlinor<small>En används nu, en sparas till senare i dag</small>`;
+    $("reward-note").textContent = !left && !ads
+      ? "Dagens livlinor är slut. Nya kommer i morgon."
+      : !left ? "Dagens gratis livlinor är slut." : "";
+    $("reward-plus").hidden = !plusAvailable();
     kbInput.blur();
     $("reward-dialog").showModal();
     animate($("reward-icon"), "bounce", 900);
     haptic(8);
     return new Promise((resolve) => { rewardResolve = resolve; });
   }
-  function finishReward(ok) {
+  function finishReward(ok, msg) {
     const done = rewardResolve;
     rewardResolve = null;
     if ($("reward-dialog").open) $("reward-dialog").close();
-    if (ok) { sound("ok"); haptic([12, 40, 12]); rewardBurst(); }
+    if (ok) { sound("ok"); haptic([12, 40, 12]); rewardBurst(msg); }
+    if (mek && !$("mek").hidden) renderLifelineBar();
     if (done) done(ok);
   }
-  function rewardBurst() {
+  function rewardBurst(msg, cls) {
     const el = document.createElement("div");
-    el.className = "reward-burst";
-    el.textContent = "✓ Livlina aktiverad";
+    el.className = "reward-burst" + (cls ? " " + cls : "");
+    el.textContent = msg || "✓ Livlina aktiverad";
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 1600);
   }
@@ -1903,13 +1940,231 @@
   $("reward-ad").addEventListener("click", async () => {
     $("reward-dialog").close();
     const ok = await showRewardedAd();
-    if (ok) setPref("adsWatched", (prefs().adsWatched || 0) + 1);
+    if (ok) { addLifelines(AD_LIFELINES); spendFreeLifeline(); }
     else toast("Filmen avbröts – ingen livlina den här gången");
-    finishReward(ok);
+    finishReward(ok, ok ? `✓ +${AD_LIFELINES} livlinor · 1 sparad` : "");
   });
   $("reward-cancel").addEventListener("click", () => finishReward(false));
+  // Plus från belöningsarket: köper man Plus får man livlinan direkt.
+  $("reward-plus").addEventListener("click", async () => {
+    $("reward-dialog").close();
+    const got = await openPlus("lifelines");
+    finishReward(got, got ? "★ Plus är aktiverat" : "");
+  });
   $("ad-privacy").addEventListener("click", () => { if (window.DagsprovNative && window.DagsprovNative.privacyOptions) window.DagsprovNative.privacyOptions(); });
-  $("reward-dialog").addEventListener("cancel", () => finishReward(false));
+  $("reward-dialog").addEventListener("cancel", (e) => { if (rewardResolve) finishReward(false); else e.preventDefault(); });
+
+  // ---------- Dagsprov Plus ----------
+  // Frivilligt köp via App Store / Google Play (RevenueCat i appskalet). Allt som behövs för att lära sig
+  // – dagens övningar, förklaringar och hela lösningen efter svaret – är alltid gratis. Plus ger
+  // obegränsade livlinor, hela arkivet, ledtrådar före svaret, inga filmer och extra färgteman.
+  //
+  // Bryggan i appskalet: DagsprovNative.plus = { offerings(), purchase(id), restore(), manage() } och
+  // window.__dagsprovPlus(active) när köpstatusen ändras. I förhandsvisningen går köpen att prova på
+  // låtsas. På den vanliga webben finns inga köp – där visas att Plus finns i appen.
+  const PLUS_PLANS = [
+    { id: "annual", title: "12 månader", price: "199 kr", sub: "16,58 kr/mån", badge: "Spara 53 %", trial: "7 dagar gratis, sedan 199 kr/år" },
+    { id: "monthly", title: "1 månad", price: "35 kr", sub: "per månad" },
+    { id: "lifetime", title: "För alltid", price: "399 kr", sub: "engångsköp" },
+  ];
+  const FREE_ARCHIVE_DAYS = 7;
+  const TRIAL_HOURS = 24;
+  const plusBridge = () => (window.DagsprovNative && window.DagsprovNative.plus) || null;
+  const demoPlus = () => !plusBridge() && demoAds();
+  const plusAvailable = () => !!plusBridge() || demoPlus();
+  function plusTrialLeft() {
+    const until = prefs().plusTrial || 0;
+    return Math.max(0, until - Date.now());
+  }
+  function isPlus() {
+    const p = prefs();
+    if (plusTrialLeft() > 0) return true;
+    if (plusBridge()) return p.plusNative === true;
+    return demoPlus() && p.plusDemo === true;
+  }
+  let plusPlan = "annual", plusResolve = null, plusFocus = null;
+  let storePlans = null; // planerna som butiken faktiskt erbjuder (null = inte hämtade än)
+  function mergeOfferings(list) {
+    if (!Array.isArray(list) || !list.length) return;
+    storePlans = new Set(list.map((o) => o && o.id));
+    if (!storePlans.has(plusPlan)) plusPlan = PLUS_PLANS.find((x) => storePlans.has(x.id))?.id || plusPlan;
+    for (const o of list) {
+      const plan = PLUS_PLANS.find((x) => o && x.id === o.id);
+      if (!plan) continue;
+      for (const k of ["price", "sub", "trial", "badge"]) if (typeof o[k] === "string") plan[k] = o[k];
+      plan.native = true;
+    }
+  }
+  function renderPlus() {
+    const plus = isPlus(), trial = plusTrialLeft(), owned = plus && !trial;
+    const bridge = plusBridge();
+    $("plus-sub").textContent = owned ? "Tack för att du stöttar Dagsprov! Allt i Plus är upplåst."
+      : trial ? `Du provar Plus – ${Math.ceil(trial / 36e5)} h kvar.`
+      : "Öva utan gränser – och stöd en app utan spårning.";
+    document.querySelectorAll("#plus-feats li").forEach((li) => li.classList.toggle("focus", li.dataset.f === plusFocus));
+    $("plus-plans").hidden = owned;
+    $("plus-plans").innerHTML = PLUS_PLANS.filter((pl) => !storePlans || storePlans.has(pl.id)).map((pl) => `<button class="plan" role="radio" data-plan="${pl.id}" aria-checked="${pl.id === plusPlan}">
+      ${pl.badge ? `<span class="plan-badge">${pl.badge}</span>` : ""}<span class="radio"></span>
+      <span class="plan-t"><b>${pl.title}</b><small>${pl.trial || (pl.id === "lifetime" ? "Betala en gång, behåll för alltid" : "Förnyas varje månad")}</small></span>
+      <span class="plan-p"><b>${pl.price}</b><small>${pl.sub}</small></span></button>`).join("");
+    $("plus-plans").querySelectorAll(".plan").forEach((b) => b.addEventListener("click", () => { plusPlan = b.dataset.plan; haptic(6); renderPlus(); }));
+    const plan = PLUS_PLANS.find((x) => x.id === plusPlan);
+    const buy = $("plus-buy");
+    buy.hidden = owned;
+    buy.disabled = !plusAvailable();
+    buy.textContent = !plusAvailable() ? "Plus finns i appen för iPhone och Android"
+      : plan.trial ? `Starta ${plan.trial.split(" gratis")[0]} gratis` : plan.id === "lifetime" ? `Köp för ${plan.price}` : `Fortsätt – ${plan.price}/mån`;
+    $("plus-status").hidden = !owned;
+    $("plus-status").textContent = owned ? "✓ Du har Dagsprov Plus" + (demoPlus() ? " (förhandsvisning)" : "") : "";
+    const canTrial = !plus && adsAvailable() && Date.now() - (prefs().plusTrialAt || 0) > 7 * 864e5;
+    $("plus-trial").hidden = !canTrial;
+    $("plus-restore").hidden = !plusAvailable() || owned;
+    $("plus-manage").hidden = !owned || !(bridge && bridge.manage) && !demoPlus();
+    $("plus-manage").textContent = demoPlus() ? "Avsluta Plus (förhandsvisning)" : "Hantera abonnemang";
+    const store = window.DagsprovNative && window.DagsprovNative.platform === "android" ? "Google Play" : "App Store";
+    $("plus-legal").textContent = owned || !plusAvailable() ? ""
+      : plan.id === "lifetime" ? `Engångsköp via ${store}. Inget abonnemang.`
+      : `${plan.trial ? "Efter provperioden förnyas" : "Förnyas"} abonnemanget automatiskt för ${plan.price} per ${plan.id === "annual" ? "år" : "månad"} tills du säger upp det. ` +
+        `Betalningen dras från ditt ${store}-konto. Säg upp när som helst, senast 24 timmar före nästa period, i kontoinställningarna i ${store}.` +
+        (demoPlus() ? " Förhandsvisning: inga riktiga köp görs här." : "");
+  }
+  // Öppnar Plus-arket. Svarar true om användaren har Plus när arket stängs.
+  function openPlus(focus) {
+    plusFocus = focus || null;
+    renderPlus();
+    kbInput.blur();
+    const dlg = $("plus-dialog");
+    if (!dlg.open) dlg.showModal();
+    dlg.querySelector(".sheet-body").scrollTop = 0;
+    const f = focus && dlg.querySelector(`#plus-feats [data-f="${focus}"]`);
+    if (f) animate(f, "pulse", 900);
+    haptic(8);
+    if (plusBridge() && plusBridge().offerings) {
+      Promise.resolve(plusBridge().offerings()).then((list) => { mergeOfferings(list); if (dlg.open) renderPlus(); }).catch(() => {});
+    }
+    return new Promise((resolve) => { plusResolve = resolve; });
+  }
+  $("plus-dialog").addEventListener("close", () => {
+    const done = plusResolve;
+    plusResolve = null;
+    if (done) done(isPlus());
+  });
+  function plusChanged(celebrate) {
+    document.documentElement.classList.toggle("has-plus", isPlus());
+    document.documentElement.classList.toggle("no-plus", !plusAvailable() && !isPlus());
+    // Utan Plus återgår en Plus-färg till standard.
+    if (!isPlus() && ["gold", "mint", "graphite"].includes(prefs().accent)) { setPref("accent", "blue"); applyStyle(); }
+    if ($("plus-dialog").open) renderPlus();
+    if ($("settings-dialog").open) renderSettings();
+    if (mek && !mek.done && !$("mek").hidden) renderLifelineBar();
+    if (celebrate) {
+      sound("win"); haptic([12, 40, 12, 40, 20]);
+      rewardBurst("★ Välkommen till Plus!", "plus-burst");
+      if (typeof confetti === "function" && !reduceMotion()) confetti();
+    }
+  }
+  // Appskalet anropar denna när köpstatusen hämtats eller ändrats.
+  window.__dagsprovPlus = (active) => {
+    const was = isPlus();
+    setPref("plusNative", !!active);
+    plusChanged(!was && isPlus() && $("plus-dialog").open);
+  };
+  if (window.DagsprovNative && typeof window.DagsprovNative.plusActive === "boolean") setPref("plusNative", window.DagsprovNative.plusActive);
+  $("plus-buy").addEventListener("click", async () => {
+    const btn = $("plus-buy");
+    if (btn.disabled) return;
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = "Ett ögonblick …";
+    let ok = false;
+    try {
+      if (plusBridge()) ok = !!(await plusBridge().purchase(plusPlan));
+      else if (demoPlus()) {
+        const pl = PLUS_PLANS.find((x) => x.id === plusPlan);
+        ok = await confirmBox("Förhandsvisning", `I appen öppnas App Stores eller Google Plays köpruta här (${pl.trial || pl.price + " " + pl.sub}). Vill du prova Plus på låtsas?`, "Prova Plus");
+      }
+    } catch { ok = false; }
+    btn.disabled = false;
+    btn.textContent = label;
+    if (!ok) return;
+    if (demoPlus()) setPref("plusDemo", true);
+    else setPref("plusNative", true);
+    plusChanged(true);
+  });
+  $("plus-restore").addEventListener("click", async () => {
+    let ok = false;
+    try { if (plusBridge()) ok = !!(await plusBridge().restore()); } catch { ok = false; }
+    if (ok) { setPref("plusNative", true); plusChanged(true); }
+    else toast(plusBridge() ? "Hittade inget tidigare köp på det här kontot" : "Inga köp att återställa i förhandsvisningen");
+  });
+  $("plus-manage").addEventListener("click", () => {
+    if (demoPlus()) { setPref("plusDemo", false); setPref("plusTrial", 0); plusChanged(false); toast("Plus är avslutat i förhandsvisningen"); return; }
+    try { plusBridge().manage(); } catch { /* inget att göra */ }
+  });
+  // Provdag: en film ger 24 timmar Plus, en gång i veckan. Så ser man vad Plus är värt.
+  $("plus-trial").addEventListener("click", async () => {
+    const dlg = $("plus-dialog");
+    dlg.close();
+    const ok = await showRewardedAd();
+    if (!ok) { toast("Filmen avbröts – prova igen när du vill"); return; }
+    setPref("plusTrial", Date.now() + TRIAL_HOURS * 36e5);
+    setPref("plusTrialAt", Date.now());
+    plusChanged(true);
+    toast(`★ Plus i ${TRIAL_HOURS} timmar – mycket nöje!`);
+  });
+  function plusBurst(what) {
+    haptic(10);
+    rewardBurst(`★ ${what}`, "plus-burst");
+  }
+
+  // --- Arkivet: de senaste 7 dagarna är gratis, äldre dagar ingår i Plus ---
+  // En enskild dag kan också låsas upp med en film. Dagar man redan har spelat är alltid öppna.
+  function dayStarted(date) {
+    const all = progressAll();
+    return Object.keys(all).some((k) => k.startsWith(date + "|"));
+  }
+  // På den vanliga webben finns varken köp eller reklam – där är arkivet och ledtrådarna helt fria.
+  const monetized = () => plusAvailable() || adsAvailable();
+  function dayLocked(date) {
+    if (!monetized() || isPlus() || date >= addDays(todayKey(), -FREE_ARCHIVE_DAYS)) return false;
+    if ((prefs().unlockedDays || []).includes(date)) return false;
+    return !dayStarted(date);
+  }
+  let dayResolve = null;
+  function offerDay(date) {
+    $("day-title").textContent = longDate(date);
+    $("day-ad").hidden = !adsAvailable();
+    $("day-plus").hidden = !plusAvailable();
+    $("day-note").textContent = plusAvailable() ? "" : "Äldre dagar ingår i Dagsprov Plus i appen för iPhone och Android.";
+    $("day-dialog").showModal();
+    animate($("day-dialog").querySelector(".reward-icon"), "bounce", 900);
+    return new Promise((resolve) => { dayResolve = resolve; });
+  }
+  function finishDay(ok) {
+    const done = dayResolve;
+    dayResolve = null;
+    if ($("day-dialog").open) $("day-dialog").close();
+    if (done) done(ok);
+  }
+  $("day-ad").addEventListener("click", async () => {
+    $("day-dialog").close();
+    const ok = await showRewardedAd();
+    if (!ok) { toast("Filmen avbröts – dagen är fortfarande låst"); return finishDay(false); }
+    finishDay(true);
+  });
+  $("day-plus").addEventListener("click", async () => {
+    $("day-dialog").close();
+    finishDay(await openPlus("archive"));
+  });
+  $("day-cancel").addEventListener("click", () => finishDay(false));
+  $("day-dialog").addEventListener("cancel", () => finishDay(false));
+  async function unlockDay(date) {
+    if (!dayLocked(date)) return true;
+    const ok = await offerDay(date);
+    if (ok && !isPlus()) setPref("unlockedDays", [...(prefs().unlockedDays || []), date].slice(-60));
+    if (ok) rewardBurst("🔓 Dagen är upplåst");
+    return ok;
+  }
 
   // --- Andra chans och 50/50 i frågelägena ---
   async function useRetry() {
@@ -1944,7 +2199,7 @@
     const i = mek.idx, answered = mek.answers[i] !== null;
     $("lifeline-bar").hidden = mek.done;
     $("ll-half").disabled = answered || !!mek.halved[i];
-    $("ll-left").textContent = `♥ ${lifelinesLeft()} kvar i dag`;
+    $("ll-left").textContent = isPlus() ? "★ Plus · ∞" : `♥ ${lifelinesLeft()} kvar i dag`;
   }
   $("ll-half").addEventListener("click", useHalf);
 
@@ -2091,7 +2346,8 @@
     m.innerHTML = ["s", "w", "w", "b", "", "b", "", "", "b"].map((c) => `<i class="${c}"></i>`).join("");
   });
   for (const [key, picker] of [["cells", "cell-picker"], ["accent", "accent-picker"], ["font", "font-picker"]]) {
-    document.querySelectorAll(`#${picker} button`).forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll(`#${picker} button`).forEach((b) => b.addEventListener("click", async () => {
+      if (b.classList.contains("plus-only") && !isPlus() && !(await openPlus("accent"))) return;
       setPref(key, b.dataset[key]);
       applyStyle();
       renderStylePickers();
@@ -2286,7 +2542,7 @@
   const APP_VERSION = "3.0";
   const CHECK_NAMES = { off: "Av", word: "Per ord", letter: "Direkt" };
   const THEME_NAMES = { auto: "Auto", light: "Ljust", dark: "Mörkt" };
-  const ACCENT_NAMES = { blue: "Blå", indigo: "Indigo", purple: "Lila", pink: "Rosa", orange: "Orange", teal: "Turkos" };
+  const ACCENT_NAMES = { blue: "Blå", indigo: "Indigo", purple: "Lila", pink: "Rosa", orange: "Orange", teal: "Turkos", gold: "Guld", mint: "Mint", graphite: "Grafit" };
   const TEXT_KEYS = ["s", "m", "l", "xl"];
   const setStack = [];
 
@@ -2304,9 +2560,14 @@
     $("val-check").textContent = CHECK_NAMES[checkMode()];
     $("val-bolt").textContent = boltSeconds() ? boltSeconds() + " s" : "Av";
     $("ad-privacy-row").hidden = !(window.DagsprovNative && window.DagsprovNative.privacyOptions);
-    $("val-lifelines").textContent = `${"♥".repeat(lifelinesLeft())}${"♡".repeat(FREE_LIFELINES - lifelinesLeft())}  ${lifelinesLeft()} av ${FREE_LIFELINES}`;
-    $("lifeline-note").textContent = `Varje dag får du ${FREE_LIFELINES} gratis livlinor: andra chans, 50/50, extra tips i korsordet, bonusomgångar och att rädda en bruten svit.` +
-      (adsAvailable() ? " Är de slut kan du titta på en kort reklamfilm för en till – helt frivilligt. Reklam visas aldrig av sig själv." : "");
+    const plus = isPlus(), left = lifelinesLeft(), trial = plusTrialLeft();
+    $("val-lifelines").textContent = plus ? "∞ Obegränsat" : `${"♥".repeat(Math.min(left, 9))}${"♡".repeat(Math.max(0, lifelineCap() - left))}  ${left} kvar`;
+    $("lifeline-note").textContent = plus ? "Med Plus är livlinorna obegränsade – andra chans, 50/50, tips, ledtrådar före svaret, bonusomgångar och att rädda sviten."
+      : `Varje dag får du ${FREE_LIFELINES} gratis livlinor: andra chans, 50/50, extra tips, ledtrådar före svaret, bonusomgångar och att rädda en bruten svit.` +
+        (adsAvailable() ? ` Är de slut kan du titta på en kort film för ${AD_LIFELINES} till – helt frivilligt. Reklam visas aldrig av sig själv.` : "");
+    $("set-plus").classList.toggle("active", plus);
+    $("val-plus").textContent = trial ? `Provperiod – ${Math.ceil(trial / 36e5)} h kvar` : plus ? "Aktivt – tack för ditt stöd!" : "Obegränsade livlinor, hela arkivet och mer";
+    $("set-plus").hidden = !plus && !plusAvailable() && !demoPlus();
     const st = computeStats();
     $("set-hero-sub").textContent = st.days
       ? `🔥 ${st.streak} ${st.streak === 1 ? "dag" : "dagar"} i rad · ${st.answeredTotal + st.words} ord och frågor`
@@ -2372,6 +2633,7 @@
     if (page) pushSet(page);
   }
   $("btn-settings").addEventListener("click", () => openSettings());
+  $("set-plus").addEventListener("click", () => openPlus());
   $("set-back").addEventListener("click", popSet);
   document.querySelectorAll("[data-push]").forEach((b) => b.addEventListener("click", () => pushSet(b.dataset.push)));
   // Svep från vänsterkanten för att gå tillbaka, som i iOS.
@@ -2603,9 +2865,11 @@
 
   // ---------- Start ----------
   applyTheme();
+  plusChanged(false);
   applyStyle();
   const firstVisit = !load(PREFS_KEY);
-  const startAt = fromHash() || { date: todayKey(), level: LEVELS[prefs().level] ? prefs().level : "medium" };
+  let startAt = fromHash() || { date: todayKey(), level: LEVELS[prefs().level] ? prefs().level : "medium" };
+  if (dayLocked(startAt.date)) startAt = { ...startAt, date: todayKey() }; // låsta arkivdagar öppnas via arkivet
   if (startAt.mode) setPref("mode", startAt.mode);
   open(startAt.date, startAt.level); // korsordet finns alltid i bakgrunden
   if (isQuiz()) openMek(startAt.date, startAt.level);

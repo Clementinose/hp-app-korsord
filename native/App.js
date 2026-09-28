@@ -1,10 +1,11 @@
 // Dagsprov som app för iOS och Android.
 // Själva appen är webbappen i repots rot, inbyggd som en html-sträng (web/app-html.js).
 // Det här skalet lägger till det som bara en riktig app kan: belöningsreklam via AdMob med
-// Googles samtyckesdialog (UMP), riktig haptik och att externa länkar öppnas i webbläsaren.
+// Googles samtyckesdialog (UMP), köp av Dagsprov Plus via RevenueCat (App Store / Google Play),
+// riktig haptik och att externa länkar öppnas i webbläsaren.
 //
 // Reklam visas ALDRIG av sig själv. Webbappen anropar window.DagsprovNative.showRewarded()
-// bara när användaren själv trycker på "Titta på en kort film" för att få en livlina.
+// bara när användaren själv trycker på "Titta på en kort film". Med Plus visas ingen reklam alls.
 import { useCallback, useEffect, useRef } from "react";
 import { Linking, Platform, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -18,6 +19,7 @@ import mobileAds, {
   RewardedAdEventType,
   TestIds,
 } from "react-native-google-mobile-ads";
+import Purchases from "react-native-purchases";
 import APP_HTML from "./web/app-html";
 
 // Byt till dina egna annonsenheter från AdMob innan appen publiceras.
@@ -28,6 +30,11 @@ const REWARDED_UNIT = __DEV__
       ios: "ca-app-pub-XXXXXXXXXXXXXXXX/IIIIIIIIII",
       android: "ca-app-pub-XXXXXXXXXXXXXXXX/AAAAAAAAAA",
     });
+
+// RevenueCat: dina publika SDK-nycklar (Project settings → API keys) och namnet på rättigheten
+// ("entitlement") som alla Plus-produkter ger. Se README.md.
+const REVENUECAT_KEY = Platform.select({ ios: "appl_XXXXXXXXXXXXXXXXXXXXXXXXXXX", android: "goog_XXXXXXXXXXXXXXXXXXXXXXXXXXX" });
+const ENTITLEMENT = "plus";
 
 // Brygga mellan webbappen och appskalet. Körs innan webbappens egen kod.
 const BRIDGE = `
@@ -47,11 +54,26 @@ const BRIDGE = `
       },
       haptic: function (style) {
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: "haptic", style: style || "light" }));
+      },
+      plus: {
+        offerings: function () { return call("offerings"); },
+        purchase: function (plan) { return call("purchase", { plan: plan }); },
+        restore: function () { return call("restore"); },
+        manage: function () { window.ReactNativeWebView.postMessage(JSON.stringify({ type: "manage" })); }
       }
     };
+    function call(type, extra) {
+      return new Promise(function (resolve) {
+        var id = String(Date.now()) + Math.random();
+        callbacks[id] = resolve;
+        var msg = extra || {};
+        msg.type = type; msg.id = id;
+        window.ReactNativeWebView.postMessage(JSON.stringify(msg));
+      });
+    }
     window.__dagsprovAdResult = function (id, ok) {
       var cb = callbacks[id];
-      if (cb) { delete callbacks[id]; cb(!!ok); }
+      if (cb) { delete callbacks[id]; cb(ok); }
     };
   })();
   true;
@@ -101,6 +123,64 @@ function showRewarded() {
   });
 }
 
+// ---------- Dagsprov Plus (RevenueCat) ----------
+let plusReady = false;
+const isPlusActive = (info) => !!(info && info.entitlements && info.entitlements.active[ENTITLEMENT]);
+async function preparePlus(onChange) {
+  try {
+    Purchases.configure({ apiKey: REVENUECAT_KEY });
+    plusReady = true;
+    Purchases.addCustomerInfoUpdateListener((info) => onChange(isPlusActive(info)));
+    onChange(isPlusActive(await Purchases.getCustomerInfo()));
+  } catch {
+    plusReady = false;
+  }
+}
+const PLAN_TYPES = { annual: "ANNUAL", monthly: "MONTHLY", lifetime: "LIFETIME" };
+async function currentPackages() {
+  const offerings = await Purchases.getOfferings();
+  return (offerings.current && offerings.current.availablePackages) || [];
+}
+// Priser i användarens egen valuta, direkt från App Store / Google Play.
+async function plusOfferings() {
+  if (!plusReady) return [];
+  const pkgs = await currentPackages();
+  const byType = (t) => pkgs.find((p) => p.packageType === t);
+  const annual = byType("ANNUAL"), monthly = byType("MONTHLY"), lifetime = byType("LIFETIME");
+  const out = [];
+  if (annual) {
+    const intro = annual.product.introPrice;
+    const saving = monthly ? Math.round((1 - annual.product.price / (monthly.product.price * 12)) * 100) : 0;
+    out.push({
+      id: "annual",
+      price: annual.product.priceString,
+      sub: annual.product.pricePerMonthString ? `${annual.product.pricePerMonthString}/mån` : "per år",
+      badge: saving >= 10 ? `Spara ${saving} %` : "Mest värde",
+      trial: intro && intro.price === 0
+        ? `${intro.periodNumberOfUnits} ${{ DAY: "dagar", WEEK: "veckor", MONTH: "månader" }[intro.periodUnit] || "dagar"} gratis, sedan ${annual.product.priceString}/år`
+        : "",
+    });
+  }
+  if (monthly) out.push({ id: "monthly", price: monthly.product.priceString, sub: "per månad" });
+  if (lifetime) out.push({ id: "lifetime", price: lifetime.product.priceString, sub: "engångsköp" });
+  return out;
+}
+async function purchasePlus(plan) {
+  if (!plusReady) return false;
+  const pkg = (await currentPackages()).find((p) => p.packageType === PLAN_TYPES[plan]);
+  if (!pkg) return false;
+  try {
+    const { customerInfo } = await Purchases.purchasePackage(pkg);
+    return isPlusActive(customerInfo);
+  } catch {
+    return false; // avbrutet av användaren eller misslyckat köp
+  }
+}
+async function restorePlus() {
+  if (!plusReady) return false;
+  try { return isPlusActive(await Purchases.restorePurchases()); } catch { return false; }
+}
+
 const HAPTIC = {
   light: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
   medium: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium),
@@ -111,14 +191,39 @@ const HAPTIC = {
 export default function App() {
   const web = useRef(null);
 
-  useEffect(() => { prepareAds(); }, []);
+  const plusActive = useRef(null);
+
+  // Skickar köpstatusen till webbappen (vid start och när den ändras, t.ex. vid förnyelse).
+  const sendPlus = useCallback((active) => {
+    plusActive.current = active;
+    web.current?.injectJavaScript(`window.DagsprovNative && (window.DagsprovNative.plusActive = ${active}); window.__dagsprovPlus && window.__dagsprovPlus(${active}); true;`);
+  }, []);
+
+  useEffect(() => { preparePlus(sendPlus); prepareAds(); }, [sendPlus]);
+
+  const reply = (id, value) =>
+    web.current?.injectJavaScript(`window.__dagsprovAdResult(${JSON.stringify(id)}, ${JSON.stringify(value)}); true;`);
 
   const onMessage = useCallback(async (event) => {
     let msg;
     try { msg = JSON.parse(event.nativeEvent.data); } catch { return; }
     if (msg.type === "rewarded") {
-      const ok = await showRewarded();
-      web.current?.injectJavaScript(`window.__dagsprovAdResult(${JSON.stringify(msg.id)}, ${ok}); true;`);
+      // Med Plus visas aldrig reklam.
+      reply(msg.id, plusActive.current ? false : await showRewarded());
+    } else if (msg.type === "offerings") {
+      reply(msg.id, await plusOfferings().catch(() => []));
+    } else if (msg.type === "purchase") {
+      const ok = await purchasePlus(msg.plan);
+      if (ok) sendPlus(true);
+      reply(msg.id, ok);
+    } else if (msg.type === "restore") {
+      const ok = await restorePlus();
+      if (ok) sendPlus(true);
+      reply(msg.id, ok);
+    } else if (msg.type === "manage") {
+      Purchases.showManageSubscriptions().catch(() => Linking.openURL(Platform.OS === "ios"
+        ? "https://apps.apple.com/account/subscriptions"
+        : "https://play.google.com/store/account/subscriptions"));
     } else if (msg.type === "privacyOptions") {
       // Googles dialog där användaren kan ändra sitt samtycke till reklam.
       AdsConsent.showPrivacyOptionsForm().catch(() => {});
@@ -143,6 +248,8 @@ export default function App() {
         originWhitelist={["*"]}
         injectedJavaScriptBeforeContentLoaded={BRIDGE}
         onMessage={onMessage}
+        // När sidan har laddats: skicka köpstatusen (den kan ha hämtats innan webbappen var redo).
+        onLoadEnd={() => { if (plusActive.current !== null) sendPlus(plusActive.current); }}
         onShouldStartLoadWithRequest={onShouldStartLoad}
         javaScriptEnabled
         domStorageEnabled
